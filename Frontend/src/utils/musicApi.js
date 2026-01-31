@@ -1,6 +1,8 @@
 const LASTFM_API_KEY = import.meta.env.VITE_LASTFM_API_KEY;
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 const LASTFM_BASE_URL = `${BASE_URL}/api/lastfm`;
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
+
 
 class MusicApiService {
   // Example: fallback search
