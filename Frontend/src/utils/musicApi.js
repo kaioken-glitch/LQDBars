@@ -1,7 +1,8 @@
 // Music API utilities - Last.fm integration
 // Get your free API key at: https://www.last.fm/api/account/create
 const LASTFM_API_KEY = import.meta.env.VITE_LASTFM_API_KEY;
-const LASTFM_BASE_URL = import.meta.env.VITE_LASTFM_BASE_URL;
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+const LASTFM_BASE_URL = `${BASE_URL}/api/lastfm`;
 
 
 class MusicApiService {
