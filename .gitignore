@@ -1,0 +1,21 @@
+# Docs & setup
+MUSIC_API_SETUP.md
+.env
+setup-youtube-converter.ps1  
+setup-youtube-converter.sh
+start-all.bat
+start-all.ps1
+STARTUP-GUIDE.md
+test-api.html
+
+# Node modules
+Frontend/node_modules/
+Backend/node_modules/
+
+# Ignore all audio/video files in Frontend/audio
+Frontend/audio/*.mp3
+Frontend/audio/*.mp4
+
+# Optional: Ignore other generated files or temp files
+*.log
+.DS_Store
