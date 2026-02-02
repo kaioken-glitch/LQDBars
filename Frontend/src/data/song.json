@@ -1,0 +1,190 @@
+{
+  "songs": [
+    {
+      "id": "song_001",
+      "name": "Blinding Lights",
+      "artist": "The Weeknd",
+      "album": "After Hours",
+      "genre": "Pop",
+      "year": 2020,
+      "duration": "3:20",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36",
+      "streamUrl": "https://www.youtube.com/watch?v=4NRXx6U8ABQ",
+      "source": "youtube",
+      "youtubeId": "4NRXx6U8ABQ",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_002",
+      "name": "good 4 u",
+      "artist": "Olivia Rodrigo",
+      "album": "SOUR",
+      "genre": "Pop Rock",
+      "year": 2021,
+      "duration": "2:58",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a",
+      "streamUrl": "https://www.youtube.com/watch?v=gNi_6U5Pm_o",
+      "source": "youtube",
+      "youtubeId": "gNi_6U5Pm_o",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_003",
+      "name": "Stay",
+      "artist": "The Kid LAROI, Justin Bieber",
+      "album": "F*ck Love 3",
+      "genre": "Pop",
+      "year": 2021,
+      "duration": "2:21",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273e6f407c7f3a0ec98845e4431",
+      "streamUrl": "https://www.youtube.com/watch?v=kTJczUoc26U",
+      "source": "youtube",
+      "youtubeId": "kTJczUoc26U",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_004",
+      "name": "Levitating",
+      "artist": "Dua Lipa",
+      "album": "Future Nostalgia",
+      "genre": "Disco Pop",
+      "year": 2020,
+      "duration": "3:23",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2739f0c976b0b1630c4c37c6f6e",
+      "streamUrl": "https://www.youtube.com/watch?v=TUVcZfQe-Kw",
+      "source": "youtube",
+      "youtubeId": "TUVcZfQe-Kw",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_005",
+      "name": "Anti-Hero",
+      "artist": "Taylor Swift",
+      "album": "Midnights",
+      "genre": "Pop",
+      "year": 2022,
+      "duration": "3:20",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273bb54dde68cd23e2a268ae0f5",
+      "streamUrl": "https://www.youtube.com/watch?v=b1kbLwvqugk",
+      "source": "youtube",
+      "youtubeId": "b1kbLwvqugk",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_006",
+      "name": "As It Was",
+      "artist": "Harry Styles",
+      "album": "Harry's House",
+      "genre": "Pop",
+      "year": 2022,
+      "duration": "2:47",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2732e8ed79e177ff6011076f5f0",
+      "streamUrl": "https://www.youtube.com/watch?v=H5v3kku4y6Q",
+      "source": "youtube",
+      "youtubeId": "H5v3kku4y6Q",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_007",
+      "name": "Flowers",
+      "artist": "Miley Cyrus",
+      "album": "Endless Summer Vacation",
+      "genre": "Pop",
+      "year": 2023,
+      "duration": "3:20",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273f58f1bb72b3de10ca05d8fb2",
+      "streamUrl": "https://www.youtube.com/watch?v=G7KNmW9a75Y",
+      "source": "youtube",
+      "youtubeId": "G7KNmW9a75Y",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_008",
+      "name": "Unholy",
+      "artist": "Sam Smith, Kim Petras",
+      "album": "Unholy",
+      "genre": "Pop",
+      "year": 2022,
+      "duration": "2:36",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273b0dd6a5cd1dec96c4119c262",
+      "streamUrl": "https://www.youtube.com/watch?v=Uq9gPaIzbe8",
+      "source": "youtube",
+      "youtubeId": "Uq9gPaIzbe8",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_009",
+      "name": "Heat Waves",
+      "artist": "Glass Animals",
+      "album": "Dreamland",
+      "genre": "Indie Pop",
+      "year": 2020,
+      "duration": "3:58",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273b49c2b7e9647ac23bf479f19",
+      "streamUrl": "https://www.youtube.com/watch?v=mRD0-GxqHVo",
+      "source": "youtube",
+      "youtubeId": "mRD0-GxqHVo",
+      "favorite": false,
+      "liked": false
+    },
+    {
+      "id": "song_010",
+      "name": "Sunflower",
+      "artist": "Post Malone, Swae Lee",
+      "album": "Spider-Man Soundtrack",
+      "genre": "Hip-Hop",
+      "year": 2018,
+      "duration": "2:38",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2732acf1d5e3c6d4d1d6b5b1b6e",
+      "streamUrl": "https://www.youtube.com/watch?v=ApXoWvfEYVU",
+      "source": "youtube",
+      "youtubeId": "ApXoWvfEYVU",
+      "favorite": false,
+      "liked": false
+    }
+  ],
+  "playlists": [
+    {
+      "id": "playlist_trending",
+      "name": "Trending Hits",
+      "description": "Top trending songs",
+      "cover": "https://i.scdn.co/image/ab67706f000000027b2e7ee752dc222ff2fd466f",
+      "songs": ["song_001", "song_005", "song_007"],
+      "type": "trending"
+    },
+    {
+      "id": "playlist_chill",
+      "name": "Chill Vibes",
+      "description": "Relaxing music",
+      "cover": "https://i.scdn.co/image/ab67706f00000002d5e8e5e8e5e8e5e8e5e8e5e8",
+      "songs": ["song_004", "song_009"],
+      "type": "mood"
+    }
+  ],
+  "albums": [
+    {
+      "id": "album_001",
+      "name": "After Hours",
+      "artist": "The Weeknd",
+      "year": 2020,
+      "cover": "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36",
+      "songs": ["song_001"]
+    },
+    {
+      "id": "album_002",
+      "name": "SOUR",
+      "artist": "Olivia Rodrigo",
+      "year": 2021,
+      "cover": "https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a",
+      "songs": ["song_002"]
+    }
+  ]
+}

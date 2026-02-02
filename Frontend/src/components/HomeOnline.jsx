@@ -5,18 +5,16 @@ import { faCircleArrowDown } from '@fortawesome/free-solid-svg-icons';
 import { fetchSongs, patchSong as apiPatchSong } from '../services/api';
 import { usePlayer } from '../context/PlayerContext';
 import SongTile from './SongTile';
+import PlayerControls from './PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 
 export default function HomeOnline() {
-  // Search state
   const [showInput, setShowInput] = useState(false);
   const [query, setQuery] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const [results, setResults] = useState([]);
   const [youtubeResults, setYoutubeResults] = useState([]);
   const [isSearchingYoutube, setIsSearchingYoutube] = useState(false);
-
-  // UI state
   const [showGenres, setShowGenres] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
   const [activeFilter, setActiveFilter] = useState('Albums');
@@ -24,17 +22,9 @@ export default function HomeOnline() {
   const [showDetailView, setShowDetailView] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [mockSongStates, setMockSongStates] = useState({});
-
-  // Data state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Playback state
-  const [shuffle, setShuffle] = useState(false);
-  const [shuffledOrder, setShuffledOrder] = useState([]);
-  const [repeatMode, setRepeatMode] = useState('off');
-
-  // Get context from PlayerContext
   const {
     songs,
     setPlayerSongs,
@@ -50,7 +40,6 @@ export default function HomeOnline() {
     downloadedSongs
   } = usePlayer();
 
-  // Mock data with useMemo for performance
   const playlists = useMemo(() => [
     {
       id: 'trending-hip-hop',
@@ -146,27 +135,9 @@ export default function HomeOnline() {
     }
   ], []);
 
-  // Effects and handlers remain the same...
   useEffect(() => {
     if (volume === 1) setVolume(0.2);
   }, []);
-
-  useEffect(() => {
-    if (shuffle && songs.length > 1) {
-      const indices = songs.map((_, i) => i);
-      for (let i = indices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [indices[i], indices[j]] = [indices[j], indices[i]];
-      }
-      const currentIdx = indices.indexOf(currentIndex);
-      if (currentIdx > 0) {
-        [indices[0], indices[currentIdx]] = [indices[currentIdx], indices[0]];
-      }
-      setShuffledOrder(indices);
-    } else {
-      setShuffledOrder([]);
-    }
-  }, [shuffle, songs.length, currentIndex]);
 
   useEffect(() => {
     if (songs.length === 0) {
@@ -318,7 +289,7 @@ export default function HomeOnline() {
       key={item.id} 
       className="group relative bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl 
       rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer 
-      border border-white/10 hover:border-emerald-400/30 hover:scale-[1.02] overflow-hidden"
+      border border-white/10 hover:border-emerald-400/30 hover:scale-[1.02] overflow-hidden flex flex-col"
     >
       <div className="relative aspect-[3/2] bg-gradient-to-br from-emerald-500/40 to-teal-600/40">
         <img 
@@ -333,13 +304,27 @@ export default function HomeOnline() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent 
         opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
-      <div className="p-4">
-        <h3 className="text-white font-bold text-sm mb-1 truncate">{item.name}</h3>
-        <p className="text-white/60 text-xs truncate mb-3">{item.artist || item.description}</p>
+      <div className="p-3 md:p-4 flex-1 flex flex-col justify-between">
+        <div>
+          <h3 className="text-white font-bold text-xs md:text-sm mb-1 truncate">{item.name}</h3>
+          <p className="text-white/60 text-[10px] md:text-xs truncate mb-2">{item.artist || item.description}</p>
+          
+          {/* Desktop: Show extra info */}
+          <div className="hidden md:block text-[10px] space-y-1 mb-2">
+            <div className="text-white/50 flex items-center gap-1">
+              <span>⭐ 4.8</span>
+              <span className="text-white/40">• 2.3K streams</span>
+            </div>
+            {item.description && (
+              <p className="text-white/40 text-[9px] line-clamp-2">{item.description}</p>
+            )}
+          </div>
+        </div>
+        
         <button 
           className="w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-r 
           from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
-          transition-all shadow-lg hover:shadow-emerald-500/50 ml-auto transform hover:scale-110"
+          transition-all shadow-lg hover:shadow-emerald-500/50 ml-auto transform hover:scale-110 flex-shrink-0"
           onClick={onPlay}
         >
           <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
@@ -351,7 +336,7 @@ export default function HomeOnline() {
   ), []);
 
   return (
-    <div className="homeOnline w-full h-full flex flex-col pb-20">
+    <div className="homeOnline w-full h-full flex flex-col pb-24 md:pb-28">
       {loading && songs.length === 0 && (
         <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50">
           <div className="text-center">
@@ -364,10 +349,10 @@ export default function HomeOnline() {
       
       {!showDetailView ? (
         <>
-          {/* Header */}
-          <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 lg:px-8 pt-6 pb-4">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          {/* Header - Tighter spacing */}
+          <div className="w-full px-4 md:px-8 lg:px-12 pt-4 md:pt-6 pb-2 md:pb-3">
+            <div className="flex flex-col gap-2 md:gap-3">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-3">
                 {/* Search */}
                 <div className="relative flex items-center w-full md:w-auto">
                   <button
@@ -392,7 +377,7 @@ export default function HomeOnline() {
                   
                   {showInput && (results.length > 0 || youtubeResults.length > 0 || isSearchingYoutube) && (
                     <div className="absolute left-0 top-14 w-full max-w-[380px] bg-gradient-to-b from-emerald-600/95 
-                    to-emerald-700/95 backdrop-blur-xl rounded-2xl shadow-2xl z-50 border border-white/10 
+                    to-emerald-700/95 backdrop-blur-xl rounded-2xl shadow-2xl z-40 border border-white/10 
                     max-h-[500px] overflow-y-auto">
                       {results.length > 0 && (
                         <>
@@ -464,7 +449,7 @@ export default function HomeOnline() {
 
                 {/* Filter Tabs */}
                 <div className="relative flex items-center gap-1 bg-white/10 rounded-full px-1.5 py-1.5 
-                border border-white/20 backdrop-blur-xl shadow-lg w-full md:w-auto ml-auto">
+                  border border-white/20 backdrop-blur-xl shadow-lg w-auto">
                   <div
                     className="absolute top-1.5 h-[34px] rounded-full bg-gradient-to-r from-emerald-500 
                     to-emerald-600 shadow-lg transition-all duration-300"
@@ -487,118 +472,119 @@ export default function HomeOnline() {
                   >
                     Songs
                   </button>
-                  
-                  <div className="relative z-10">
-                    <button
-                      className="px-4 py-2 rounded-full text-sm font-medium text-white bg-white/10 
-                      border border-white/20 flex items-center gap-2 hover:bg-white/20 transition-all ml-2"
-                      onClick={e => {
-                        e.preventDefault();
-                        setShowGenres(g => !g);
-                      }}
-                    >
-                      {selectedGenre || 'Genres'}
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {showGenres && (
-                      <div className="absolute right-0 top-12 min-w-[140px] bg-gradient-to-b from-emerald-600 
-                      to-emerald-700 rounded-2xl shadow-2xl z-50 backdrop-blur-xl border border-white/10 py-2">
-                        {['Pop','Rock','Hip-Hop','Jazz','Electronic','Classical'].map(genre => (
-                          <div
-                            key={genre}
-                            className="px-4 py-2.5 text-sm font-medium text-white cursor-pointer 
-                            hover:bg-white/20 transition-all"
-                            onClick={() => {
-                              setSelectedGenre(genre);
-                              setShowGenres(false);
-                            }}
-                          >
-                            {genre}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                </div>
+
+                {/* Genres - OUTSIDE filter tabs */}
+                <div className="relative z-50 ml-auto mr-[40px]">
+                  <button
+                    className="px-4 py-2 rounded-full text-sm font-medium text-white bg-white/10 
+                    border border-white/20 flex items-center gap-2 hover:bg-white/20 transition-all"
+                    onClick={e => {
+                      e.preventDefault();
+                      setShowGenres(g => !g);
+                    }}
+                  >
+                    {selectedGenre || 'Genres'}
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showGenres && (
+                    <div className="absolute right-0 top-12 min-w-[140px] bg-gradient-to-b from-emerald-600 
+                    to-emerald-700 rounded-2xl shadow-2xl z-50 backdrop-blur-xl border border-white/10 py-2">
+                      {['Pop','Rock','Hip-Hop','Jazz','Electronic','Classical'].map(genre => (
+                        <div
+                          key={genre}
+                          className="px-4 py-2.5 text-sm font-medium text-white cursor-pointer 
+                          hover:bg-white/20 transition-all"
+                          onClick={() => {
+                            setSelectedGenre(genre);
+                            setShowGenres(false);
+                          }}
+                        >
+                          {genre}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-4">
-                <h1 className="text-white text-4xl md:text-5xl font-bold tracking-tight">Discover</h1>
-                <p className="text-white/60 text-sm md:text-base mt-2">Stream millions of songs • Explore new music</p>
+              <div>
+                <h1 className="text-white text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">Discover</h1>
+                <p className="text-white/60 text-xs md:text-sm mt-1">Stream millions of songs • Explore new music</p>
               </div>
             </div>
           </div>
 
-          {/* Content */}
-          <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
+          {/* Content - Optimized spacing */}
+          <div className="w-full flex-1 overflow-y-auto px-4 md:px-8 lg:px-12">
             
             {/* Suggestions */}
-            <section className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white text-2xl font-bold flex items-center gap-2">
-                  <span className="w-1 h-7 bg-emerald-500 rounded-full"></span>
+            <section className="mb-6 md:mb-8">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <h2 className="text-white text-lg md:text-xl font-bold flex items-center gap-2">
+                  <span className="w-1 h-5 md:h-6 bg-emerald-500 rounded-full"></span>
                   Music Suggestions
                 </h2>
-                <span className="text-emerald-400 text-sm font-medium">Streaming</span>
+                <span className="text-emerald-400 text-[10px] md:text-xs font-medium">Streaming</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {suggestions.map(song => renderCard(song, 'suggestion', () => playStreamingSong(song)))}
               </div>
             </section>
 
             {/* Playlists */}
-            <section className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white text-2xl font-bold flex items-center gap-2">
-                  <span className="w-1 h-7 bg-emerald-500 rounded-full"></span>
+            <section className="mb-6 md:mb-8">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <h2 className="text-white text-lg md:text-xl font-bold flex items-center gap-2">
+                  <span className="w-1 h-5 md:h-6 bg-emerald-500 rounded-full"></span>
                   Playlists
                 </h2>
-                <span className="text-emerald-400 text-sm font-medium">Streaming</span>
+                <span className="text-emerald-400 text-[10px] md:text-xs font-medium">Streaming</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {playlists.map(playlist => renderCard(playlist, 'playlist', () => playOnlineItem(playlist)))}
               </div>
             </section>
 
             {/* Albums */}
-            <section className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white text-2xl font-bold flex items-center gap-2">
-                  <span className="w-1 h-7 bg-emerald-500 rounded-full"></span>
+            <section className="mb-6 md:mb-8">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <h2 className="text-white text-lg md:text-xl font-bold flex items-center gap-2">
+                  <span className="w-1 h-5 md:h-6 bg-emerald-500 rounded-full"></span>
                   Albums
                 </h2>
-                <span className="text-emerald-400 text-sm font-medium">Streaming</span>
+                <span className="text-emerald-400 text-[10px] md:text-xs font-medium">Streaming</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {albums.map(album => renderCard(album, 'album', () => playOnlineItem(album)))}
               </div>
             </section>
 
             {/* New Releases */}
-            <section className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white text-2xl font-bold flex items-center gap-2">
-                  <span className="w-1 h-7 bg-emerald-500 rounded-full"></span>
+            <section className="mb-6 md:mb-8">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <h2 className="text-white text-lg md:text-xl font-bold flex items-center gap-2">
+                  <span className="w-1 h-5 md:h-6 bg-emerald-500 rounded-full"></span>
                   New Releases
                 </h2>
-                <span className="text-emerald-400 text-sm font-medium">Streaming</span>
+                <span className="text-emerald-400 text-[10px] md:text-xs font-medium">Streaming</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {newReleases.map(song => renderCard(song, 'newrelease', () => playStreamingSong(song)))}
               </div>
             </section>
 
             {/* Downloaded */}
-            <section className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white text-2xl font-bold flex items-center gap-2">
-                  <span className="w-1 h-7 bg-emerald-500 rounded-full"></span>
+            <section className="mb-6 md:mb-8">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <h2 className="text-white text-lg md:text-xl font-bold flex items-center gap-2">
+                  <span className="w-1 h-5 md:h-6 bg-emerald-500 rounded-full"></span>
                   Downloaded Songs
                 </h2>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {songs.length > 0 ? (
                   <div 
                     className="group relative bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl 
@@ -777,6 +763,9 @@ export default function HomeOnline() {
           </div>
         </div>
       )}
+
+      {/* Player Controls */}
+      <PlayerControls />
     </div>
   );
 }

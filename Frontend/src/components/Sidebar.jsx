@@ -17,7 +17,7 @@ export default function Sidebar({ active, setActive }) {
     const { currentSong } = usePlayer();
 
     return (
-        <aside className="sidebar w-[220px] h-[calc(100vh-40px)] rounded-2xl flex flex-col py-6 my-5 ml-5 overflow-hidden relative group">
+        <aside className="sidebar w-[220px] h-[calc(100vh-160px)] rounded-2xl flex flex-col py-6 my-5 ml-5 overflow-hidden relative group">
             {/* Animated gradient background */}
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/40 via-teal-900/30 to-slate-900/40 backdrop-blur-2xl" />
             

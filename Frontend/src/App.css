@@ -1,65 +1,94 @@
-#root {
-  width: 100dvw;
-  height: 100dvh;
-  overflow-x: hidden;
+/* Custom select and option styles for genres dropdown */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: rgba(255,255,255,0.08);
+  border-radius: 20px;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding-right: 2.5rem;
+  position: relative;
 }
 
-/* Add this to your global CSS file (e.g., index.css or App.css) */
-
-/* Wave animation for equalizer bars */
-@keyframes wave {
-  0%, 100% {
-    height: 0.5rem;
-  }
-  50% {
-    height: 0.75rem;
-  }
+/* Custom arrow using a background SVG */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
 }
 
-/* Custom scrollbar for sidebar */
-.scrollbar-thin {
-  scrollbar-width: thin;
+select, select:focus {
+  background: rgba(255, 255, 255, 0) !important;
+  border-radius: 20px !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
+option {
+  background: transparent !important;
+  color: #fff !important;
+  border-radius: 12px !important;
 }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
+option:hover, option:checked, option:focus {
+  background: #10b981 !important;
+  color: #fff !important;
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+@import 'tailwindcss';
+
+::-webkit-scrollbar {
+    width: 3px;
+    height: 1px;
+    background-color: transparent;
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 5px;
 }
 
-/* Smooth scroll behavior */
-.sidebar nav {
-  scroll-behavior: smooth;
+::-webkit-scrollbar-track {
+    background-color: transparent;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0);
 }
 
-/* Optional: Add blur backdrop support for older browsers */
-@supports not (backdrop-filter: blur(40px)) {
-  .sidebar {
-    background: rgba(0, 0, 0, 0.7);
-  }
+:root {
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  font-family: 'poppins', sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* ✅ NEW: Beautiful emerald gradient background */
+  background: linear-gradient(
+    135deg, 
+    #022c22 0%,   /* Darkest emerald */
+    #064e3b 25%,  /* Dark emerald */
+    #047857 50%,  /* Medium emerald */
+    #064e3b 75%,  /* Dark emerald */
+    #022c22 100%  /* Darkest emerald */
+  );
+  background-attachment: fixed;
+  background-size: cover;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+  
+  /* ❌ REMOVED: background-image: url('/background2.jpg'); */
 }
 
-/* Tailwind doesn't include these animations by default, so we define them */
-@keyframes pulse-slow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.animate-pulse-slow {
-  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* Optional: Add very subtle texture (can remove if you want pure gradient) */
+:root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: -1;
 }

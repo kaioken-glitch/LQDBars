@@ -1,4 +1,4 @@
-// YouTube to Audio Converter Utility
+// Updated YouTube Converter - Works WITHOUT backend server
 class YouTubeConverter {
   constructor() {
     this.apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
@@ -9,7 +9,7 @@ class YouTubeConverter {
   async searchVideos(query, maxResults = 20) {
     try {
       if (!this.apiKey || this.apiKey === 'your_youtube_api_key_here') {
-        console.warn('YouTube API key not configured. Please add VITE_YOUTUBE_API_KEY to your .env file');
+        console.warn('YouTube API key not configured');
         return [];
       }
 
@@ -17,9 +17,7 @@ class YouTubeConverter {
         `${this.baseUrl}/search?part=snippet&type=video&videoCategoryId=10&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${this.apiKey}`
       );
       
-      if (!response.ok) {
-        throw new Error('YouTube API request failed');
-      }
+      if (!response.ok) throw new Error('YouTube API request failed');
       
       const data = await response.json();
       
@@ -37,7 +35,58 @@ class YouTubeConverter {
     }
   }
 
-  // Get video details including duration
+  // Extract video ID from URL
+  extractVideoId(url) {
+    const patterns = [
+      /youtube\.com\/watch\?v=([^&]+)/,
+      /youtu\.be\/([^?]+)/,
+      /youtube\.com\/embed\/([^?]+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
+    }
+    
+    return null;
+  }
+
+  // Get audio stream - NO BACKEND NEEDED!
+  async getAudioStream(videoIdOrUrl) {
+    try {
+      // Extract video ID if URL provided
+      const videoId = videoIdOrUrl.includes('youtube.com') || videoIdOrUrl.includes('youtu.be')
+        ? this.extractVideoId(videoIdOrUrl)
+        : videoIdOrUrl;
+
+      if (!videoId) {
+        throw new Error('Invalid YouTube URL or ID');
+      }
+
+      // Return direct YouTube URL
+      // The audio element will handle playback via iframe
+      return `https://www.youtube.com/watch?v=${videoId}`;
+      
+    } catch (error) {
+      console.error('Error getting audio stream:', error);
+      throw error;
+    }
+  }
+
+  // Parse YouTube duration format (PT4M13S)
+  parseDuration(duration) {
+    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+    const hours = (match[1] || '').replace('H', '');
+    const minutes = (match[2] || '').replace('M', '');
+    const seconds = (match[3] || '').replace('S', '');
+    
+    if (hours) {
+      return `${hours}:${minutes.padStart(2, '0')}:${seconds.padStart(2, '0')}`;
+    }
+    return `${minutes || '0'}:${seconds.padStart(2, '0')}`;
+  }
+
+  // Get video details
   async getVideoDetails(videoId) {
     try {
       const response = await fetch(
@@ -65,40 +114,46 @@ class YouTubeConverter {
     }
   }
 
-  // Parse YouTube duration format (PT4M13S) to readable format
-  parseDuration(duration) {
-    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-    const hours = (match[1] || '').replace('H', '');
-    const minutes = (match[2] || '').replace('M', '');
-    const seconds = (match[3] || '').replace('S', '');
-    
-    if (hours) {
-      return `${hours}:${minutes.padStart(2, '0')}:${seconds.padStart(2, '0')}`;
-    }
-    return `${minutes || '0'}:${seconds.padStart(2, '0')}`;
-  }
-
-  // Convert YouTube video to audio stream URL
-  // Note: This calls your backend service for audio conversion
-  async getAudioStream(videoId) {
+  // Prepare song for playback - SIMPLIFIED VERSION
+  async prepareSongForPlayback(song) {
     try {
-      // Call your backend API endpoint
-      const response = await fetch(`http://localhost:3001/api/youtube/audio/${videoId}`);
-      
-      if (!response.ok) {
-        throw new Error('Audio conversion failed');
+      // If song already has streamUrl, return it directly
+      if (song.streamUrl) {
+        return {
+          ...song,
+          audio: song.streamUrl,
+          source: song.source || 'youtube'
+        };
       }
+
+      // If song has audio URL, use it
+      if (song.audio) {
+        return song;
+      }
+
+      // Fallback: search for song on YouTube
+      console.log(`Searching YouTube for: ${song.name} ${song.artist}`);
+      const searchResults = await this.searchVideos(`${song.name} ${song.artist}`, 1);
       
-      const data = await response.json();
-      return data.audioUrl;
+      if (searchResults.length > 0) {
+        return {
+          ...song,
+          audio: searchResults[0].youtubeUrl,
+          streamUrl: searchResults[0].youtubeUrl,
+          source: 'youtube',
+          youtubeId: searchResults[0].id
+        };
+      }
+
+      throw new Error('Could not find stream for this song');
+      
     } catch (error) {
-      console.error('Error getting audio stream:', error);
-      // For demo purposes, return a placeholder
-      return 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav';
+      console.error('Error preparing song:', error);
+      throw error;
     }
   }
 
-  // Get trending music videos
+  // Get trending music
   async getTrendingMusic() {
     try {
       const response = await fetch(
@@ -120,54 +175,20 @@ class YouTubeConverter {
     }
   }
 
-  // Search for specific artist's music
-  async searchArtist(artistName, maxResults = 20) {
-    const query = `${artistName} music official`;
-    return this.searchVideos(query, maxResults);
-  }
-
-  // Search for playlists
-  async searchPlaylists(query, maxResults = 10) {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/search?part=snippet&type=playlist&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${this.apiKey}`
-      );
-      
-      const data = await response.json();
-      
-      return data.items.map(item => ({
-        id: item.id.playlistId,
-        title: item.snippet.title,
-        channel: item.snippet.channelTitle,
-        thumbnail: item.snippet.thumbnails.medium.url,
-        playlistUrl: `https://www.youtube.com/playlist?list=${item.id.playlistId}`
-      }));
-    } catch (error) {
-      console.error('Error searching playlists:', error);
-      return [];
-    }
-  }
-
-  // Get videos from a playlist
-  async getPlaylistVideos(playlistId, maxResults = 50) {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=${maxResults}&key=${this.apiKey}`
-      );
-      
-      const data = await response.json();
-      
-      return data.items.map(item => ({
-        id: item.snippet.resourceId.videoId,
-        title: item.snippet.title,
-        channel: item.snippet.channelTitle,
-        thumbnail: item.snippet.thumbnails.medium.url,
-        youtubeUrl: `https://www.youtube.com/watch?v=${item.snippet.resourceId.videoId}`
-      }));
-    } catch (error) {
-      console.error('Error getting playlist videos:', error);
-      return [];
-    }
+  // Check if URL is streamable
+  isStreamableUrl(url) {
+    if (!url) return false;
+    
+    const patterns = [
+      /youtube\.com/,
+      /youtu\.be/,
+      /\.mp3$/,
+      /\.m4a$/,
+      /\.wav$/,
+      /\.ogg$/
+    ];
+    
+    return patterns.some(pattern => pattern.test(url));
   }
 }
 

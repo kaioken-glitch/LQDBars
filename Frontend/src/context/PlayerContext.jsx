@@ -1,124 +1,243 @@
-import React, { createContext, useContext, useRef, useState, useEffect } from 'react';
+// src/context/PlayerContext.jsx - UPDATED for YouTube playback
+import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 
 const PlayerContext = createContext();
 
-export function PlayerProvider({ children, initialSongs = [] }) {
-  const [songs, setSongs] = useState(initialSongs);
+export function PlayerProvider({ children }) {
+  const [songs, setSongs] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(0.2);
+  const [volume, setVolume] = useState(0.7);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [downloadedSongs, setDownloadedSongs] = useState([]);
-  const audioRef = useRef(null);
 
-  // Fetch and cache downloaded songs globally
-  useEffect(() => {
-    const cached = localStorage.getItem('downloadedSongs');
-    if (cached) {
-      try {
-        setDownloadedSongs(JSON.parse(cached));
-        return;
-      } catch (e) {}
+  const audioRef = useRef(null);
+  const youtubePlayerRef = useRef(null);
+  const playerTypeRef = useRef('audio'); // 'audio' or 'youtube'
+
+  const currentSong = songs[currentIndex];
+
+  // Determine if song needs YouTube player or regular audio
+  const needsYouTubePlayer = (song) => {
+    if (!song) return false;
+    return song.source === 'youtube' || 
+           song.streamUrl?.includes('youtube.com') || 
+           song.streamUrl?.includes('youtu.be') ||
+           song.audio?.includes('youtube.com') ||
+           song.audio?.includes('youtu.be');
+  };
+
+  // Extract YouTube video ID
+  const extractYouTubeId = (url) => {
+    if (!url) return null;
+    const patterns = [
+      /youtube\.com\/watch\?v=([^&]+)/,
+      /youtu\.be\/([^?]+)/,
+      /youtube\.com\/embed\/([^?]+)/
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
     }
-    fetch('http://localhost:3000/songs')
-      .then(res => res.json())
-      .then(data => {
-        const withDownloadFlag = data.map(song => ({ ...song, downloaded: !!song.downloaded }));
-        const sorted = withDownloadFlag
-          .filter(song => song.downloaded)
-          .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        setDownloadedSongs(sorted);
-        localStorage.setItem('downloadedSongs', JSON.stringify(sorted));
-      })
-      .catch(() => setDownloadedSongs([]));
+    return null;
+  };
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
   }, []);
 
-  // Audio element only rendered once
-  const currentSong = songs[currentIndex] || null;
-
-  // Play/pause effect
+  // Handle song playback
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
-      if (isPlaying) {
-        audioRef.current.play();
-      } else {
-        audioRef.current.pause();
+    if (!currentSong) return;
+
+    const useYouTube = needsYouTubePlayer(currentSong);
+    playerTypeRef.current = useYouTube ? 'youtube' : 'audio';
+
+    if (useYouTube) {
+      // Use YouTube player
+      const videoId = currentSong.youtubeId || 
+                     extractYouTubeId(currentSong.streamUrl) || 
+                     extractYouTubeId(currentSong.audio);
+
+      if (!videoId) {
+        console.error('No YouTube video ID found');
+        return;
+      }
+
+      // Create YouTube player
+      if (window.YT && window.YT.Player) {
+        // Remove old player if exists
+        if (youtubePlayerRef.current) {
+          youtubePlayerRef.current.destroy();
+        }
+
+        // Create container if doesn't exist
+        let container = document.getElementById('youtube-player-container');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'youtube-player-container';
+          container.style.display = 'none';
+          document.body.appendChild(container);
+        }
+
+        youtubePlayerRef.current = new window.YT.Player('youtube-player-container', {
+          height: '0',
+          width: '0',
+          videoId: videoId,
+          playerVars: {
+            autoplay: isPlaying ? 1 : 0,
+            controls: 0,
+          },
+          events: {
+            onReady: (event) => {
+              setDuration(event.target.getDuration());
+              if (isPlaying) {
+                event.target.playVideo();
+              }
+            },
+            onStateChange: (event) => {
+              if (event.data === window.YT.PlayerState.ENDED) {
+                // Go to next song
+                if (currentIndex < songs.length - 1) {
+                  setCurrentIndex(prev => prev + 1);
+                } else {
+                  setIsPlaying(false);
+                }
+              } else if (event.data === window.YT.PlayerState.PLAYING) {
+                setIsPlaying(true);
+              } else if (event.data === window.YT.PlayerState.PAUSED) {
+                setIsPlaying(false);
+              }
+            },
+          },
+        });
+
+        // Update current time
+        const interval = setInterval(() => {
+          if (youtubePlayerRef.current && youtubePlayerRef.current.getCurrentTime) {
+            setCurrentTime(youtubePlayerRef.current.getCurrentTime());
+          }
+        }, 1000);
+
+        return () => clearInterval(interval);
+      }
+    } else {
+      // Use regular audio element
+      if (audioRef.current && currentSong.audio) {
+        audioRef.current.src = currentSong.audio;
+        audioRef.current.load();
+        if (isPlaying) {
+          audioRef.current.play().catch(console.error);
+        }
       }
     }
-  }, [isPlaying, currentIndex, volume, isMuted]);
+  }, [currentSong, currentIndex]);
 
-  // Update currentTime and duration
+  // Handle play/pause
   useEffect(() => {
-    if (!audioRef.current) return;
-    const handleTimeUpdate = () => setCurrentTime(audioRef.current.currentTime);
-    const handleLoadedMetadata = () => setDuration(audioRef.current.duration);
-    audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
-    audioRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
-    // Cleanup
-    return () => {
-      if (!audioRef.current) return;
-      audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
-      audioRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
-    };
-  }, [currentSong]);
+    if (playerTypeRef.current === 'youtube') {
+      if (youtubePlayerRef.current && youtubePlayerRef.current.playVideo) {
+        if (isPlaying) {
+          youtubePlayerRef.current.playVideo();
+        } else {
+          youtubePlayerRef.current.pauseVideo();
+        }
+      }
+    } else {
+      if (audioRef.current) {
+        if (isPlaying) {
+          audioRef.current.play().catch(console.error);
+        } else {
+          audioRef.current.pause();
+        }
+      }
+    }
+  }, [isPlaying]);
 
-  // Next/Prev logic
-  const playNext = () => {
-    setCurrentIndex(i => (i < songs.length - 1 ? i + 1 : 0));
-    setIsPlaying(true);
+  // Handle volume
+  useEffect(() => {
+    if (playerTypeRef.current === 'youtube') {
+      if (youtubePlayerRef.current && youtubePlayerRef.current.setVolume) {
+        youtubePlayerRef.current.setVolume(volume * 100);
+      }
+    } else {
+      if (audioRef.current) {
+        audioRef.current.volume = volume;
+      }
+    }
+  }, [volume]);
+
+  // Seek function
+  const seekTo = (time) => {
+    if (playerTypeRef.current === 'youtube') {
+      if (youtubePlayerRef.current && youtubePlayerRef.current.seekTo) {
+        youtubePlayerRef.current.seekTo(time);
+        setCurrentTime(time);
+      }
+    } else {
+      if (audioRef.current) {
+        audioRef.current.currentTime = time;
+        setCurrentTime(time);
+      }
+    }
   };
-  const playPrev = () => {
-    setCurrentIndex(i => (i > 0 ? i - 1 : songs.length - 1));
-    setIsPlaying(true);
+
+  const setPlayerSongs = (newSongs) => {
+    setSongs(newSongs);
   };
 
-  // Mute toggle
-  const toggleMute = () => setIsMuted(m => !m);
-
-  // Set songs (for Home page fetch)
-  const setPlayerSongs = (newSongs) => setSongs(newSongs);
-
-  // ...existing code...
+  const value = {
+    songs,
+    setPlayerSongs,
+    currentIndex,
+    setCurrentIndex,
+    isPlaying,
+    setIsPlaying,
+    volume,
+    setVolume,
+    currentTime,
+    setCurrentTime,
+    duration,
+    setDuration,
+    audioRef,
+    currentSong,
+    downloadedSongs,
+    setDownloadedSongs,
+    seekTo,
+    playerType: playerTypeRef.current
+  };
 
   return (
-    <PlayerContext.Provider
-      value={{
-        songs,
-        setPlayerSongs,
-        currentIndex,
-        setCurrentIndex,
-        isPlaying,
-        setIsPlaying,
-        isMuted,
-        toggleMute,
-        playNext,
-        playPrev,
-        currentSong,
-        audioRef,
-        volume,
-        setVolume,
-        currentTime,
-        duration,
-        downloadedSongs,
-        setDownloadedSongs
-      }}
-    >
+    <PlayerContext.Provider value={value}>
       {children}
-      {/* Persistent audio element */}
+      {/* Regular audio element for MP3/etc */}
       <audio
         ref={audioRef}
-        src={currentSong?.audio || null}
-        preload="auto"
-        onEnded={playNext}
-        style={{ display: 'none' }}
+        onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
+        onDurationChange={(e) => setDuration(e.target.duration)}
+        onEnded={() => {
+          if (currentIndex < songs.length - 1) {
+            setCurrentIndex(prev => prev + 1);
+          } else {
+            setIsPlaying(false);
+          }
+        }}
       />
     </PlayerContext.Provider>
   );
 }
 
 export function usePlayer() {
-  return useContext(PlayerContext);
+  const context = useContext(PlayerContext);
+  if (!context) {
+    throw new Error('usePlayer must be used within PlayerProvider');
+  }
+  return context;
 }

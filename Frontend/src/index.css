@@ -1,72 +1,273 @@
-/* Custom select and option styles for genres dropdown */
-select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background: rgba(255,255,255,0.08);
-  border-radius: 20px;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.2);
-  padding-right: 2.5rem; /* space for custom arrow */
+#root {
+  width: 100dvw;
+  height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* Add this to your global CSS for scrollbar hiding */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* UNDO - Remove all CSS adjustments */
+/* The sidebar height was the issue, not width */
+/* Revert to original styling */
+
+.sidebar {
+  width: 220px !important; /* Back to original */
+  max-width: 220px;
+}
+
+/* Remove padding adjustments */
+main {
+  padding-bottom: 0; /* Back to default */
+}
+
+@media (max-width: 768px) {
+  main {
+    padding-bottom: 0; /* Back to default */
+  }
+}
+
+/* Remove any body overflow hiding */
+body {
+  overflow: auto; /* Back to default */
+}
+
+/* Add this to your global CSS file (e.g., index.css or App.css) */
+
+/* Wave animation for equalizer bars */
+@keyframes wave {
+  0%, 100% {
+    height: 0.5rem;
+  }
+  50% {
+    height: 0.75rem;
+  }
+}
+
+/* Custom scrollbar for sidebar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth scroll behavior */
+.sidebar nav {
+  scroll-behavior: smooth;
+}
+
+/* Optional: Add blur backdrop support for older browsers */
+@supports not (backdrop-filter: blur(40px)) {
+  .sidebar {
+    background: rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* Tailwind doesn't include these animations by default, so we define them */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Marquee Animation for Song Title */
+.marquee {
+  width: 100%;
+  overflow: hidden;
   position: relative;
 }
 
-/* Custom arrow using a background SVG */
-select {
-  background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
+.marquee-content {
+  display: inline-block;
+  animation: marquee 8s linear infinite;
+  padding-right: 2rem;
 }
 
-select, select:focus {
-  background: rgba(255, 255, 255, 0) !important;
-  border-radius: 20px !important;
-  color: #fff !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+@keyframes marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
 }
 
-option {
-  background: transparent !important;
-  color: #fff !important;
-  border-radius: 12px !important;
+.marquee:hover .marquee-content {
+  animation-play-state: paused;
 }
 
-option:hover, option:checked, option:focus {
-  background: #10b981 !important; /* emerald-500 */
-  color: #fff !important;
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .marquee-content {
+    animation-duration: 6s;
+  }
 }
 
-@import 'tailwindcss';
-
-::-webkit-scrollbar {
-    width: 3px;
-    height: 1px;
-    background-color: transparent;
+/* Smooth slider styling for volume control */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
 }
 
-::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    border-radius: 5px;
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #06d6a0);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  transition: all 0.2s ease;
 }
 
-::-webkit-scrollbar-track {
-    background-color: transparent;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0);
+input[type="range"]::-webkit-slider-thumb:hover {
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.6);
 }
 
-:root {
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #06d6a0);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  transition: all 0.2s ease;
+}
 
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-color: transparent;
-  font-family: 'poppins', sans-serif;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-image: url('/background2.jpg');
+input[type="range"]::-moz-range-thumb:hover {
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.6);
+}
+
+/* Track styling */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Focus states for accessibility */
+input[type="range"]:focus {
+  outline: none;
+}
+
+input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.8);
+}
+
+input[type="range"]:focus::-moz-range-thumb {
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.8);
+}
+
+/* Player controls responsive adjustments */
+@media (max-width: 640px) {
+  .playerControls {
+    padding: 12px 16px;
+  }
+}
+
+/* Smooth transitions for button states */
+.playerControls button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hide scrollbar for progress bar container if needed */
+.playerControls::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile PlayerControls Positioning - Move it up so it's visible */
+
+/* On mobile screens, adjust the player controls positioning */
+@media (max-width: 768px) {
+  .playerControls {
+    bottom: 70px !important; /* Lift it up above bottom nav */
+    height: auto;
+    padding: 8px 12px !important;
+  }
+
+  /* Ensure content doesn't hide under it */
+  .homeOnline,
+  main {
+    padding-bottom: 180px !important; /* Space for player + bottom nav */
+  }
+
+  /* Make player controls more compact on mobile */
+  .playerControls > div:first-child {
+    margin-bottom: 6px !important; /* Progress bar */
+  }
+
+  /* Smaller cover image on mobile */
+  .playerControls .w-12 {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  /* Reduce font sizes for mobile */
+  .playerControls {
+    font-size: 0.75rem;
+  }
+}
+
+/* Extra small screens - lift even higher */
+@media (max-width: 480px) {
+  .playerControls {
+    bottom: 65px !important;
+    padding: 6px 8px !important;
+  }
+
+  .homeOnline,
+  main {
+    padding-bottom: 160px !important;
+  }
+}
+
+/* Ensure BottomNav stays at very bottom */
+.bottom-nav {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 35 !important;
 }
