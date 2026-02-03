@@ -1,6 +1,6 @@
 // src/services/api.js
 // Updated to work with JSON library (like mp3juices - metadata only, stream from external sources)
-const SONGS_JSON_URL = '/public/data/song.json';
+const SONGS_JSON_URL = '/data/song.json';
 let cachedLibrary = null;
 
 // Fetch the entire JSON library
