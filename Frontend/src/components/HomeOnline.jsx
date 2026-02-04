@@ -518,7 +518,7 @@ export default function HomeOnline() {
           </div>
 
           {/* Content - Optimized spacing */}
-          <div className="w-full flex-1 overflow-y-auto px-4 md:px-8 lg:px-12">
+          <div className="w-full min-h-[540px] flex-1 overflow-y-auto px-4 md:px-8 lg:px-12 overflow-scroll">
             
             {/* Suggestions */}
             <section className="mb-6 md:mb-8">
@@ -637,8 +637,9 @@ export default function HomeOnline() {
           </div>
         </>
       ) : (
-        <div className="detailView w-full h-full flex flex-col">
-          <div className="w-full p-4 md:p-6 border-b border-white/10 backdrop-blur-xl bg-black/40">
+        <div className="detailView w-full h-full flex flex-col overflow-y-auto">
+          <div className="w-full p-2 md:p-2 border-b border-white/10 backdrop-blur-xl bg-black/60 max-h-[70px]
+          rounded">
             <button 
               className="w-11 h-11 flex items-center justify-center rounded-full bg-white/10 
               backdrop-blur-xl hover:bg-white/20 transition-all border border-white/20 shadow-lg"
@@ -650,8 +651,8 @@ export default function HomeOnline() {
             </button>
           </div>
 
-          <div className="w-full px-4 md:px-8 py-6 flex flex-col md:flex-row items-start md:items-center gap-6 
-          border-b border-white/10 bg-gradient-to-b from-black/60 to-transparent">
+          <div className="w-full px-4 md:px-8 py-2 flex flex-col md:flex-row items-start md:items-center gap-6 
+          border-b border-grey/10 bg-gradient-to-b from-black/60 to-transparent max-h-[250]">
             {selectedItem?.type === 'downloaded' && (
               <div className="w-48 h-48 md:w-56 md:h-56 rounded-3xl shadow-2xl overflow-hidden relative 
               bg-emerald-600/40 border-4 border-white/10 grid grid-cols-2 gap-0.5">
@@ -672,7 +673,7 @@ export default function HomeOnline() {
             </div>
           </div>
 
-          <div className="flex-1 px-4 md:px-8 py-6 overflow-y-auto">
+          <div className="flex-1 px-4 md:px-8 py-6 overflow-y-auto min-h-[540px] overflow-visible">
             <div className="max-w-[1400px] mx-auto">
               <h2 className="text-white text-xl font-bold mb-4 flex items-center gap-2">
                 <span className="w-1 h-6 bg-emerald-500 rounded-full"></span>

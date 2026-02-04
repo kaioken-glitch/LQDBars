@@ -90,7 +90,8 @@ export default function Playlists() {
     playNext,
     isMuted,
     toggleMute,
-    setPlayerSongs
+    setPlayerSongs,
+    playSongAtIndex
   } = usePlayer();
 
   // Load saved folders on component mount
@@ -115,7 +116,7 @@ export default function Playlists() {
       const songs = await loadSongsFromFolder(dirHandle);
       
       if (songs.length > 0) {
-        const newPlaylist = createPlaylistFromFiles(
+        const newPlaylist = await createPlaylistFromFiles(
           songs, 
           dirHandle.name, 
           `Local songs from ${dirHandle.name}`
@@ -194,6 +195,61 @@ export default function Playlists() {
     setSelectedPlaylist(null);
   };
 
+  // Fix: Handle playing a song from playlist
+  const handlePlaySongFromPlaylist = (songIndex) => {
+    if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
+      try {
+        // Filter out songs that don't have valid audio sources
+        const validSongs = selectedPlaylist.songs.filter(song => 
+          song.audio || song.url || song.audioUrl || song.src
+        );
+        
+        if (validSongs.length === 0) {
+          console.error('No valid songs found in playlist');
+          return;
+        }
+      
+        // Adjust index if some songs were filtered out
+        let adjustedIndex = songIndex;
+        if (validSongs.length < selectedPlaylist.songs.length) {
+          // Find the position of the selected song in validSongs
+          const selectedSong = selectedPlaylist.songs[songIndex];
+          adjustedIndex = validSongs.findIndex(s => s.id === selectedSong?.id);
+          if (adjustedIndex === -1) adjustedIndex = 0;
+        }
+      
+        // Set the valid songs to player context
+        setPlayerSongs(validSongs, adjustedIndex);
+        
+        // Give a small delay before playing to allow state to update
+        setTimeout(() => {
+          setIsPlaying(true);
+        }, 100);
+        
+      } catch (error) {
+        console.error('Error playing song:', error);
+      }
+    }
+  };
+
+  // Fix: Handle playing the entire playlist from the beginning
+  const handlePlayPlaylist = () => {
+    if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
+      handlePlaySongFromPlaylist(0);
+    }
+  };
+
+  // Update mock song states
+  const updateMockSongState = (songId, updates) => {
+    setMockSongStates(prev => ({
+      ...prev,
+      [songId]: {
+        ...prev[songId],
+        ...updates
+      }
+    }));
+  };
+
   const handleSearch = async (searchQuery) => {
     setQuery(searchQuery);
     if (searchQuery.trim()) {
@@ -248,7 +304,7 @@ export default function Playlists() {
                     to-emerald-700 rounded-2xl shadow-2xl z-50 overflow-hidden border border-white/10 backdrop-blur-xl">
                       {results.map((song, i) => (
                         <div
-                          key={song.id || i}
+                          key={song.id ? `search-${song.id}` : `search-result-${i}`}
                           className="px-4 py-3 text-white hover:bg-white/10 cursor-pointer text-sm 
                           flex items-center gap-3 transition-all"
                           onClick={() => {
@@ -324,7 +380,7 @@ export default function Playlists() {
                       to-emerald-700 rounded-2xl shadow-2xl z-50 backdrop-blur-xl border border-white/10 py-2">
                         {['Pop', 'Rock', 'Hip-Hop', 'Jazz', 'Electronic', 'Classical'].map(genre => (
                           <div
-                            key={genre}
+                            key={`genre-${genre}`}
                             className="px-4 py-2.5 text-sm font-medium text-white cursor-pointer 
                             hover:bg-white/20 transition-all"
                             onClick={() => {
@@ -351,26 +407,6 @@ export default function Playlists() {
                     {userPlaylists.length} playlists • {userPlaylists.reduce((acc, p) => acc + p.songCount, 0)} songs
                   </p>
                 </div>
-              </div>
-
-              {/* Import Error Message */}
-              {importError && (
-                <div className="mt-3 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
-                  {importError}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Playlists Grid */}
-          <div className="w-full max-w-[1600px] px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
-            {userPlaylists.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-96 text-center">
-                <FaMusic className="text-white/40 text-6xl mb-4" />
-                <h3 className="text-white text-2xl font-bold mb-2">No playlists yet</h3>
-                <p className="text-white/60 max-w-md mb-6">
-                  Create your own playlist or browse our collection of premade playlists to get started.
-                </p>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setShowCreateModal(true)}
@@ -392,6 +428,26 @@ export default function Playlists() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Import Error Message */}
+              {importError && (
+                <div className="mt-3 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
+                  {importError}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Playlists Grid */}
+          <div className="w-full max-w-[1600px] px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
+            {userPlaylists.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-96 text-center">
+                <FaMusic className="text-white/40 text-6xl mb-4" />
+                <h3 className="text-white text-2xl font-bold mb-2">No playlists yet</h3>
+                <p className="text-white/60 max-w-md mb-6">
+                  Create your own playlist or browse our collection of premade playlists to get started.
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6 pb-8">
@@ -490,6 +546,17 @@ export default function Playlists() {
               <h1 className="text-white text-3xl md:text-5xl font-bold mb-3">{selectedPlaylist?.name}</h1>
               <p className="text-white/80 text-base mb-2">{selectedPlaylist?.description}</p>
               <p className="text-white/60 text-sm">{selectedPlaylist?.songCount} songs • {selectedPlaylist?.duration}</p>
+              
+              {/* Fix: Add Play button to play the entire playlist */}
+              <button 
+                className="mt-4 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 
+                to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-full 
+                font-semibold transition-all shadow-lg hover:shadow-emerald-500/50 w-fit"
+                onClick={handlePlayPlaylist}
+                disabled={!selectedPlaylist?.songs || selectedPlaylist.songs.length === 0}
+              >
+                <FaPlay className="text-white" /> Play Playlist
+              </button>
             </div>
           </div>
 
@@ -502,95 +569,85 @@ export default function Playlists() {
                   Tracks
                 </h2>
                 <div className="flex flex-col gap-1">
-                  {selectedPlaylist.songs.map((song, index) => (
-                    <React.Fragment key={song.id}>
-                      {/* Mobile View */}
-                      <div className="block md:hidden">
-                        <SongTile 
-                          song={song} 
-                          index={index} 
-                          onPlay={() => console.log(`Playing ${song.name} by ${song.artist}`)} 
-                        />
-                      </div>
+                  {selectedPlaylist.songs.map((song, index) => {
+                    const songId = song.id || `song-${index}`;
+                    const isFavorite = mockSongStates[songId]?.favorite || false;
+                    const isLiked = mockSongStates[songId]?.liked || false;
+                    
+                    return (
+                      <React.Fragment key={songId}>
+                        {/* Mobile View */}
+                        <div className="block md:hidden">
+                          <SongTile 
+                            song={song} 
+                            index={index} 
+                            onPlay={() => handlePlaySongFromPlaylist(index)} 
+                          />
+                        </div>
 
-                      {/* Desktop View */}
-                      <div 
-                        className="hidden md:flex songItem items-center gap-4 px-4 py-3 rounded-xl 
-                        bg-white/5 hover:bg-white/10 transition-all cursor-pointer group border border-transparent 
-                        hover:border-white/10" 
-                        onClick={() => { console.log(`Playing ${song.name} by ${song.artist}`); }}
-                      >
-                        <span className="text-white/40 group-hover:text-white/60 text-sm w-10 text-center font-medium">
-                          {index + 1}
-                        </span>
-                        <img 
-                          src={song.cover} 
-                          alt={song.name} 
-                          className="w-12 h-12 rounded-lg object-cover shadow-md"
-                        />
-                        <div className="flex flex-col flex-1 min-w-0">
-                          <span className="text-white font-semibold truncate">{song.name}</span>
-                          <span className="text-white/60 text-sm truncate">{song.artist}</span>
-                        </div>
-                        <span className="text-white/40 text-sm">{song.duration}</span>
-                        
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-1">
-                          <button 
-                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
-                            transition-all"
-                            title="Add to Favorites"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMockSongStates(prev => ({
-                                ...prev,
-                                [song.id]: {
-                                  ...prev[song.id],
-                                  favorite: !prev[song.id]?.favorite
-                                }
-                              }));
-                            }}
-                          >
-                            <FaStar className={`text-sm ${
-                              mockSongStates[song.id]?.favorite ? 'text-yellow-400' : 'text-white/40 group-hover:text-white/60'
-                            }`} />
-                          </button>
+                        {/* Desktop View */}
+                        <div 
+                          className="hidden md:flex songItem items-center gap-4 px-4 py-3 rounded-xl 
+                          bg-white/5 hover:bg-white/10 transition-all cursor-pointer group border border-transparent 
+                          hover:border-white/10" 
+                          onClick={() => handlePlaySongFromPlaylist(index)}
+                        >
+                          <span className="text-white/40 group-hover:text-white/60 text-sm w-10 text-center font-medium">
+                            {index + 1}
+                          </span>
+                          <img 
+                            src={song.cover} 
+                            alt={song.name} 
+                            className="w-12 h-12 rounded-lg object-cover shadow-md"
+                          />
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <span className="text-white font-semibold truncate">{song.name}</span>
+                            <span className="text-white/60 text-sm truncate">{song.artist}</span>
+                          </div>
+                          <span className="text-white/40 text-sm">{song.duration}</span>
                           
-                          <button 
-                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
-                            transition-all"
-                            title="Like Song"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMockSongStates(prev => ({
-                                ...prev,
-                                [song.id]: {
-                                  ...prev[song.id],
-                                  liked: !prev[song.id]?.liked
-                                }
-                              }));
-                            }}
-                          >
-                            <FaHeart className={`text-sm ${
-                              mockSongStates[song.id]?.liked ? 'text-red-500' : 'text-white/40 group-hover:text-white/60'
-                            }`} />
-                          </button>
-                          
-                          <button 
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-500 
-                            hover:bg-emerald-600 transition-all ml-2 shadow-lg hover:shadow-emerald-500/50 
-                            transform hover:scale-110"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              console.log(`Playing ${song.name} by ${song.artist}`);
-                            }}
-                          >
-                            <FaPlay className="text-white text-xs ml-0.5" />
-                          </button>
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1">
+                            <button 
+                              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
+                              transition-all"
+                              title="Add to Favorites"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateMockSongState(songId, { favorite: !isFavorite });
+                              }}
+                            >
+                              <FaStar className={`text-sm ${isFavorite ? 'text-yellow-400' : 'text-white/40 group-hover:text-white/60'}`} />
+                            </button>
+                            
+                            <button 
+                              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
+                              transition-all"
+                              title="Like Song"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateMockSongState(songId, { liked: !isLiked });
+                              }}
+                            >
+                              <FaHeart className={`text-sm ${isLiked ? 'text-red-500' : 'text-white/40 group-hover:text-white/60'}`} />
+                            </button>
+                            
+                            <button 
+                              className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-500 
+                              hover:bg-emerald-600 transition-all ml-2 shadow-lg hover:shadow-emerald-500/50 
+                              transform hover:scale-110"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePlaySongFromPlaylist(index);
+                              }}
+                            >
+                              <FaPlay className="text-white text-xs ml-0.5" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    </React.Fragment>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </div>
             ) : (

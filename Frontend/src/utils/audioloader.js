@@ -3,6 +3,9 @@
  * Handles loading and playing local audio files
  */
 
+// Store active blob URLs
+const activeBlobUrls = new Map();
+
 /**
  * Load audio file from local storage
  * @param {File|Blob} audioFile - The audio file to load
@@ -16,6 +19,19 @@ export const loadAudioFile = async (audioFile) => {
 
     // Create a blob URL for the file
     const blobUrl = URL.createObjectURL(audioFile);
+    
+    // Store it to prevent garbage collection
+    const fileKey = `${audioFile.name}-${audioFile.size}-${audioFile.lastModified}`;
+    activeBlobUrls.set(fileKey, blobUrl);
+    
+    // Set cleanup timeout
+    setTimeout(() => {
+      if (activeBlobUrls.has(fileKey) && activeBlobUrls.get(fileKey) === blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+        activeBlobUrls.delete(fileKey);
+      }
+    }, 30 * 60 * 1000); // 30 minutes
+
     return blobUrl;
   } catch (error) {
     console.error('Error loading audio file:', error);
@@ -56,20 +72,23 @@ export const getAudioDuration = (audioUrl) => {
     audio.src = audioUrl;
 
     audio.onloadedmetadata = () => {
-      const minutes = Math.floor(audio.duration / 60);
-      const seconds = Math.floor(audio.duration % 60);
+      URL.revokeObjectURL(audioUrl); // Clean up temp URL
       resolve({
         seconds: audio.duration,
-        formatted: `${minutes}:${String(seconds).padStart(2, '0')}`
+        formatted: formatDuration(audio.duration)
       });
     };
 
     audio.onerror = () => {
+      URL.revokeObjectURL(audioUrl); // Clean up temp URL
       reject(new Error('Error loading audio duration'));
     };
 
     // Timeout
-    setTimeout(() => reject(new Error('Audio loading timeout')), 5000);
+    setTimeout(() => {
+      URL.revokeObjectURL(audioUrl); // Clean up temp URL
+      reject(new Error('Audio loading timeout'));
+    }, 5000);
   });
 };
 
@@ -87,7 +106,7 @@ export const formatDuration = (seconds) => {
  * Validate audio file format
  */
 export const isValidAudioFormat = (fileName) => {
-  const validFormats = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma'];
+  const validFormats = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma', 'opus'];
   const extension = fileName.split('.').pop().toLowerCase();
   return validFormats.includes(extension);
 };
@@ -119,41 +138,104 @@ export const formatFileSize = (bytes) => {
 /**
  * Create playlist from local files
  */
-export const createPlaylistFromFiles = (files, playlistName, playlistDesc = '') => {
+export const createPlaylistFromFiles = async (files, playlistName, playlistDesc = '') => {
+  const formattedSongs = [];
+  let totalDuration = 0;
+
+  for (const file of files) {
+    try {
+      let audioUrl;
+      
+      // Check if file already has a blob URL or needs one
+      if (file.audioUrl && file.audioUrl.startsWith('blob:')) {
+        audioUrl = file.audioUrl;
+      } else if (file.file instanceof File) {
+        audioUrl = await loadAudioFile(file.file);
+      } else if (file instanceof File) {
+        audioUrl = await loadAudioFile(file);
+      } else if (file.url && file.url.startsWith('blob:')) {
+        audioUrl = file.url;
+      } else {
+        console.warn('No valid audio source found for file:', file.name);
+        continue;
+      }
+
+      // Get or use existing duration
+      let duration = file.duration;
+      let formattedDuration = file.formattedDuration;
+      
+      if (!duration && audioUrl) {
+        try {
+          const durationInfo = await getAudioDuration(audioUrl);
+          duration = durationInfo.seconds;
+          formattedDuration = durationInfo.formatted;
+        } catch (e) {
+          console.warn('Could not get duration for file:', file.name);
+          duration = 0;
+          formattedDuration = '0:00';
+        }
+      } else if (duration && !formattedDuration) {
+        formattedDuration = formatDuration(duration);
+      }
+
+      const formattedSong = {
+        ...file,
+        id: file.id || `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: file.name || 'Unknown Track',
+        artist: file.artist || 'Unknown Artist',
+        cover: file.cover || 'https://placehold.co/300x300?text=Local+Track',
+        audio: audioUrl,
+        audioUrl: audioUrl,
+        url: audioUrl,
+        src: audioUrl,
+        duration: duration,
+        formattedDuration: formattedDuration,
+        isLocal: true,
+      };
+
+      formattedSongs.push(formattedSong);
+      totalDuration += duration || 0;
+    } catch (error) {
+      console.error('Error processing song:', file.name, error);
+    }
+  }
+
   return {
-    id: `local-playlist-${Date.now()}`,
-    name: playlistName,
-    description: playlistDesc,
-    cover: 'https://placehold.co/300x300?text=Local+Playlist',
-    songCount: files.length,
-    duration: calculateTotalDuration(files),
-    songs: files,
+    id: `local-${Date.now()}`,
+    name: playlistName || 'Local Playlist',
+    description: playlistDesc || 'Imported local songs',
+    cover: formattedSongs[0]?.cover || 'https://placehold.co/300x300?text=Local+Songs',
+    songs: formattedSongs,
+    songCount: formattedSongs.length,
+    duration: calculateTotalDuration(formattedSongs),
     isLocal: true,
     isCustom: true
   };
 };
 
 /**
- * Calculate total duration
+ * Calculate total duration from formatted songs
  */
-const calculateTotalDuration = (files) => {
-  // Parse duration strings and sum them
-  const total = files.reduce((acc, file) => {
-    if (file.duration) {
-      const parts = file.duration.split(':');
-      const minutes = parseInt(parts[0]) || 0;
-      const seconds = parseInt(parts[1]) || 0;
-      return acc + (minutes * 60) + seconds;
-    }
-    return acc;
-  }, 0);
-
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  if (minutes > 60) {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
+const calculateTotalDuration = (songs) => {
+  const totalSeconds = songs.reduce((acc, song) => acc + (song.duration || 0), 0);
+  
+  if (totalSeconds === 0) return '0 min';
+  
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  
+  if (hours > 0) {
+    return `${hours} hr ${minutes} min`;
   }
-  return `${minutes}m`;
+  return `${minutes} min`;
+};
+
+/**
+ * Cleanup all blob URLs
+ */
+export const cleanupAllBlobUrls = () => {
+  activeBlobUrls.forEach((url) => {
+    URL.revokeObjectURL(url);
+  });
+  activeBlobUrls.clear();
 };
