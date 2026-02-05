@@ -8,8 +8,6 @@ export default function PlayerControls() {
     currentSong,
     isPlaying,
     setIsPlaying,
-    playNext,
-    playPrev,
     songs,
     currentIndex,
     setCurrentIndex,
@@ -49,36 +47,82 @@ export default function PlayerControls() {
 
   // Handle next track with shuffle and repeat logic
   const handlePlayNext = () => {
-    if (shuffle) {
-      if (currentIndex < shuffledOrder.length - 1) {
-        setCurrentIndex(shuffledOrder[currentIndex + 1]);
+    if (songs.length === 0) return;
+    
+    if (repeatMode === 'one') {
+      // For repeat one, just restart the current song
+      if (audioRef?.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
+      return;
+    }
+    
+    let nextIndex;
+    
+    if (shuffle && shuffledOrder.length > 0) {
+      const currentShuffleIdx = shuffledOrder.indexOf(currentIndex);
+      if (currentShuffleIdx < shuffledOrder.length - 1) {
+        nextIndex = shuffledOrder[currentShuffleIdx + 1];
       } else if (repeatMode === 'all') {
-        setCurrentIndex(shuffledOrder[0]);
+        nextIndex = shuffledOrder[0];
       } else {
-        setCurrentIndex(0);
+        // End of playlist - stop playback
+        setIsPlaying(false);
+        return;
       }
     } else {
       if (currentIndex < songs.length - 1) {
-        playNext();
+        nextIndex = currentIndex + 1;
       } else if (repeatMode === 'all') {
-        setCurrentIndex(0);
+        nextIndex = 0;
+      } else {
+        // End of playlist - stop playback
+        setIsPlaying(false);
+        return;
       }
     }
+    
+    setCurrentIndex(nextIndex);
   };
 
   // Handle previous track
   const handlePlayPrev = () => {
-    if (shuffle) {
-      if (currentIndex > 0) {
-        setCurrentIndex(shuffledOrder[currentIndex - 1]);
+    if (songs.length === 0) return;
+    
+    if (currentTime > 3) {
+      // If we're more than 3 seconds into the song, restart it
+      if (audioRef?.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
+      return;
+    }
+    
+    let prevIndex;
+    
+    if (shuffle && shuffledOrder.length > 0) {
+      const currentShuffleIdx = shuffledOrder.indexOf(currentIndex);
+      if (currentShuffleIdx > 0) {
+        prevIndex = shuffledOrder[currentShuffleIdx - 1];
       } else if (repeatMode === 'all') {
-        setCurrentIndex(shuffledOrder[shuffledOrder.length - 1]);
+        prevIndex = shuffledOrder[shuffledOrder.length - 1];
       } else {
-        playPrev();
+        // Beginning of playlist - go to first song
+        prevIndex = 0;
       }
     } else {
-      playPrev();
+      if (currentIndex > 0) {
+        prevIndex = currentIndex - 1;
+      } else if (repeatMode === 'all') {
+        prevIndex = songs.length - 1;
+      } else {
+        // Beginning of playlist - go to first song
+        prevIndex = 0;
+      }
     }
+    
+    setCurrentIndex(prevIndex);
   };
 
   // Format time helper

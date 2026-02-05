@@ -2,6 +2,7 @@ import React from 'react'
 import { usePlayer } from '../context/PlayerContext'
 import logo from '../assets/logo.svg'
 import '../App.css'
+import '../sidenar.css'
 import { FaHome, FaCompactDisc, FaListUl, FaHeart, FaHistory, FaCog, FaPlay } from 'react-icons/fa'
 
 export default function Sidebar({ active, setActive }) {
@@ -15,6 +16,38 @@ export default function Sidebar({ active, setActive }) {
 
     const user = { firstName: 'Ava' };
     const { currentSong } = usePlayer();
+
+    // Add the scrollbar CSS as a style element
+    React.useEffect(() => {
+        const style = document.createElement('style');
+        style.textContent = `
+            /* Custom scrollbar for sidebar navigation */
+            .sidebar-nav::-webkit-scrollbar {
+                width: 3px;
+                height: 5px;
+                cursor: default;
+            }
+            .sidebar-nav::-webkit-scrollbar-thumb {
+                background-color: #55555500;
+            }
+            .sidebar-nav::-webkit-scrollbar-track {
+                background-color: #52525200;
+            }
+            .sidebar-nav::-webkit-scrollbar-thumb:hover {
+                background-color: #88888800;
+            }
+            /* Firefox */
+            .sidebar-nav {
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
 
     return (
         <aside className="sidebar w-[220px] h-[calc(100vh-160px)] rounded-2xl flex flex-col py-6 my-5 ml-5 overflow-hidden relative group">
@@ -46,8 +79,8 @@ export default function Sidebar({ active, setActive }) {
                     </button>
                 </div>
 
-                {/* Navigation */}
-                <nav className="flex-1 flex flex-col px-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {/* Navigation - Added sidebar-nav class for custom scrollbar */}
+                <nav className="sidebar-nav flex-1 flex flex-col px-3 space-y-1 overflow-y-auto">
                     {navItems.map((item) => {
                         const Icon = item.icon;
                         const isActive = active === item.label;

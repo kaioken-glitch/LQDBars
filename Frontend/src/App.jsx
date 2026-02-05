@@ -31,7 +31,7 @@ function App() {
         // Try a small same-origin request with a short timeout to confirm connectivity
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 3000);
-        const url = `${window.location.origin}/favicon.ico`;
+        const url = `${window.location.origin}/favicon.svg`;
         const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
         clearTimeout(timeout);
 
