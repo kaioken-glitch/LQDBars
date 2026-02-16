@@ -61,6 +61,34 @@ class MusicApiService {
     }
   }
 
+  async getTopTracks(limit = 12) {
+    try {
+      const res = await fetch(
+        `${LASTFM_BASE_URL}?method=chart.getTopTracks&api_key=${LASTFM_API_KEY}&limit=${limit}&format=json`
+      );
+      const data = await res.json();
+      if (!data.tracks || !data.tracks.track) return [];
+
+      return data.tracks.track.map((track, index) => ({
+        id: track.mbid || `lfm-${index}-${Date.now()}`,
+        name: track.name,
+        artist: {
+          name: track.artist.name,
+          mbid: track.artist.mbid,
+        },
+        cover: track.image?.find(i => i.size === 'large')?.['#text'] || 
+               'https://placehold.co/300x200/6366f1/FFFFFF?text=🎵',
+        duration: track.duration ? Math.floor(track.duration / 60) + ':' + 
+                  String(track.duration % 60).padStart(2, '0') : '3:00',
+        url: track.url,
+        listeners: track.listeners,
+      }));
+    } catch (err) {
+      console.error('Last.fm getTopTracks error:', err);
+      return [];
+    }
+  }
+
   async addSong(song) {
     try {
       const res = await fetch(`${BASE_URL}/songs`, {

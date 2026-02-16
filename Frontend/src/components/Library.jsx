@@ -13,72 +13,73 @@ export default function Library() {
     setIsPlaying,
     isMuted,
     toggleMute,
-    downloadedSongs,
+    librarySongs = [],          // ✅ real library songs
     setPlayerSongs,
     setCurrentIndex,
-    songs
   } = usePlayer();
 
   const [showInput, setShowInput] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
   const [showGenres, setShowGenres] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
   const [activeFilter, setActiveFilter] = useState('Albums');
   const [showDetailView, setShowDetailView] = useState(false);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
 
-  const collageCovers = React.useMemo(() => {
-    if (!downloadedSongs.length) return [];
-    const shuffled = [...downloadedSongs];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  // ---------- Filtered songs based on search & genre ----------
+  const filteredSongs = useMemo(() => {
+    let filtered = librarySongs;
+
+    // Search filter
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      filtered = filtered.filter(song =>
+        song.name?.toLowerCase().includes(q) ||
+        song.artist?.toLowerCase().includes(q) ||
+        song.album?.toLowerCase().includes(q)
+      );
     }
-    return shuffled.slice(0, 4);
-  }, [downloadedSongs]);
 
-  const library = downloadedSongs && downloadedSongs.length ? downloadedSongs : songs || [];
+    // Genre filter (if you store genre, else skip)
+    if (selectedGenre && selectedGenre !== 'Genres') {
+      filtered = filtered.filter(song =>
+        song.genre?.toLowerCase() === selectedGenre.toLowerCase()
+      );
+    }
 
+    return filtered;
+  }, [librarySongs, query, selectedGenre]);
+
+  // ---------- Group by album ----------
   const albums = useMemo(() => {
     const map = {};
-    library.forEach(s => {
+    filteredSongs.forEach(s => {
       const key = s.album || 'Unknown Album';
       if (!map[key]) map[key] = [];
       map[key].push(s);
     });
     return Object.keys(map).map(k => ({ album: k, songs: map[k] }));
-  }, [library]);
+  }, [filteredSongs]);
 
-  function playFromAlbum(song, albumSongs) {
+  // ---------- Play an album ----------
+  const playAlbum = (albumSongs) => {
+    setPlayerSongs(albumSongs);
+    setCurrentIndex(0);
+    setIsPlaying(true);
+  };
+
+  // ---------- Play a single song inside an album ----------
+  const playSongFromAlbum = (song, albumSongs) => {
     setPlayerSongs(albumSongs);
     const idx = albumSongs.findIndex(s => s.id === song.id);
     setCurrentIndex(idx >= 0 ? idx : 0);
     setIsPlaying(true);
-  }
+  };
 
-  function openAlbum(alb) {
-    setSelectedAlbum(alb);
-    setShowDetailView(true);
-  }
-
-  function closeDetail() {
-    setShowDetailView(false);
-    setSelectedAlbum(null);
-  }
-
-  function handleSearch(val) {
+  // ---------- Search handler (real) ----------
+  const handleSearch = (val) => {
     setQuery(val);
-    if (val.trim() === '') {
-      setResults([]);
-      return;
-    }
-    setResults([
-      val + ' Song',
-      val + ' Artist',
-      val + ' Album',
-    ]);
-  }
+  };
 
   return (
     <div className="library flex flex-col items-center justify-start w-full h-full pb-20">
@@ -93,7 +94,7 @@ export default function Library() {
                 className="search flex items-center justify-center border border-white/20 bg-white/10 
                 backdrop-blur-xl w-[40px] h-[40px] rounded-full hover:bg-white/20 transition-all 
                 shadow-lg hover:shadow-emerald-500/20"
-                onClick={() => setShowInput((v) => !v)}
+                onClick={() => setShowInput(v => !v)}
               >
                 <FaSearch className="text-white text-base" />
               </button>
@@ -108,21 +109,6 @@ export default function Library() {
                 onChange={e => handleSearch(e.target.value)}
                 placeholder="Search library..."
               />
-              {showInput && results.length > 0 && (
-                <div className="absolute left-0 top-14 w-full max-w-[320px] bg-gradient-to-b from-emerald-600 
-                to-emerald-700 rounded-2xl shadow-2xl z-50 overflow-hidden border border-white/10 backdrop-blur-xl">
-                  {results.map((song, i) => (
-                    <div 
-                      key={i} 
-                      className="px-4 py-3 text-white hover:bg-white/10 cursor-pointer text-sm 
-                      flex items-center gap-3 transition-all"
-                    >
-                      <img src={song.cover} alt={song.name} className="w-10 h-10 rounded-lg object-cover shadow-md" />
-                      <span className="font-semibold truncate">{song.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* TinyPlayer - Desktop */}
@@ -205,7 +191,7 @@ export default function Library() {
               Library
             </h1>
             <p className="text-white/60 text-sm md:text-base mt-2">
-              {albums.length} albums • {library.length} songs
+              {albums.length} albums • {filteredSongs.length} songs
             </p>
           </div>
         </div>
@@ -214,7 +200,7 @@ export default function Library() {
       {/* Content Grid */}
       <div className="w-full max-w-[1600px] px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6 pb-8">
-          {albums.length === 0 ? (
+          {filteredSongs.length === 0 ? (
             <div className="col-span-full text-center py-20">
               <div className="inline-flex flex-col items-center gap-4">
                 <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center">
@@ -224,7 +210,7 @@ export default function Library() {
                 </div>
                 <div>
                   <p className="text-white/60 text-lg font-medium">No songs in library</p>
-                  <p className="text-white/40 text-sm mt-1">Start adding music to see it here</p>
+                  <p className="text-white/40 text-sm mt-1">Import local music or download tracks</p>
                 </div>
               </div>
             </div>
@@ -235,17 +221,21 @@ export default function Library() {
                 className="group relative bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl 
                 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer 
                 border border-white/10 hover:border-emerald-400/30 hover:scale-[1.02] overflow-hidden" 
-                onClick={() => openAlbum(alb)}
+                onClick={() => {
+                  setSelectedAlbum(alb);
+                  setShowDetailView(true);
+                }}
               >
-                {/* Album Grid */}
+                {/* Album Grid - show first 4 covers, fallback to placeholder */}
                 <div className="aspect-square bg-gradient-to-br from-emerald-500/40 to-teal-600/40 
                 rounded-t-2xl grid grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden p-0.5">
                   {alb.songs.slice(0, 4).map((s, idx) => (
                     <img 
-                      key={idx} 
-                      src={s.cover} 
+                      key={s.id || idx} 
+                      src={s.cover || 'https://placehold.co/150x150?text=🎵'} 
                       alt={s.name} 
                       className="object-cover w-full h-full"
+                      onError={(e) => { e.target.src = 'https://placehold.co/150x150?text=🎵'; }}
                     />
                   ))}
                 </div>
@@ -253,16 +243,14 @@ export default function Library() {
                 {/* Info */}
                 <div className="p-4">
                   <h3 className="text-white font-bold text-base mb-1 truncate">{alb.album}</h3>
-                  <p className="text-white/60 text-xs mb-1 truncate">{alb.songs[0]?.artist || ''}</p>
+                  <p className="text-white/60 text-xs mb-1 truncate">{alb.songs[0]?.artist || 'Unknown Artist'}</p>
                   <p className="text-white/50 text-xs">{alb.songs.length} song{alb.songs.length !== 1 ? 's' : ''}</p>
                   
                   {/* Play Button */}
                   <button 
                     onClick={(e) => { 
                       e.stopPropagation(); 
-                      setPlayerSongs(alb.songs); 
-                      setCurrentIndex(0); 
-                      setIsPlaying(true); 
+                      playAlbum(alb.songs);
                     }} 
                     className="w-11 h-11 flex items-center justify-center rounded-full bg-gradient-to-r 
                     from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
@@ -291,7 +279,10 @@ export default function Library() {
               className="w-11 h-11 flex items-center justify-center rounded-full bg-white/10 
               backdrop-blur-xl hover:bg-white/20 transition-all border border-white/20 
               hover:border-white/30 shadow-lg"
-              onClick={closeDetail}
+              onClick={() => {
+                setShowDetailView(false);
+                setSelectedAlbum(null);
+              }}
             >
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -303,10 +294,11 @@ export default function Library() {
           <div className="w-full px-4 md:px-8 py-6 flex flex-col md:flex-row items-start md:items-center gap-6 
           border-b border-white/10 bg-gradient-to-b from-black/60 to-transparent">
             <img 
-              src={selectedAlbum.songs[0]?.cover} 
+              src={selectedAlbum.songs[0]?.cover || 'https://placehold.co/300x300?text=Album'} 
               alt={selectedAlbum.album} 
               className="w-48 h-48 md:w-56 md:h-56 rounded-3xl object-cover shadow-2xl 
               border-4 border-white/10"
+              onError={(e) => { e.target.src = 'https://placehold.co/300x300?text=Album'; }}
             />
             <div className="flex flex-col justify-center">
               <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-2">Album</p>
@@ -331,7 +323,7 @@ export default function Library() {
                       <SongTile 
                         song={song} 
                         index={index} 
-                        onPlay={() => playFromAlbum(song, selectedAlbum.songs)} 
+                        onPlay={() => playSongFromAlbum(song, selectedAlbum.songs)} 
                       />
                     </div>
 
@@ -340,21 +332,22 @@ export default function Library() {
                       className="hidden md:flex songItem items-center gap-4 px-4 py-3 rounded-xl 
                       bg-white/5 hover:bg-white/10 transition-all cursor-pointer group border border-transparent 
                       hover:border-white/10" 
-                      onClick={() => playFromAlbum(song, selectedAlbum.songs)}
+                      onClick={() => playSongFromAlbum(song, selectedAlbum.songs)}
                     >
                       <span className="text-white/40 group-hover:text-white/60 text-sm w-10 text-center font-medium">
                         {index + 1}
                       </span>
                       <img 
-                        src={song.cover} 
+                        src={song.cover || 'https://placehold.co/60x60?text=🎵'} 
                         alt={song.name} 
                         className="w-12 h-12 rounded-lg object-cover shadow-md"
+                        onError={(e) => { e.target.src = 'https://placehold.co/60x60?text=🎵'; }}
                       />
                       <div className="flex flex-col flex-1 min-w-0">
                         <span className="text-white font-semibold truncate">{song.name}</span>
-                        <span className="text-white/60 text-sm truncate">{song.artist}</span>
+                        <span className="text-white/60 text-sm truncate">{song.artist || 'Unknown'}</span>
                       </div>
-                      <span className="text-white/40 text-sm">{song.duration}</span>
+                      <span className="text-white/40 text-sm">{song.formattedDuration || song.duration || '0:00'}</span>
                     </div>
                   </div>
                 ))}

@@ -7,6 +7,7 @@ import { usePlayer } from '../context/PlayerContext';
 import SongTile from './SongTile';
 import PlayerControls from './PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
+import Loader, { VinylLoaderCSS } from '../utils/Splashscreen'
 
 export default function HomeOnline() {
   const [showInput, setShowInput] = useState(false);
@@ -338,13 +339,7 @@ export default function HomeOnline() {
   return (
     <div className="homeOnline w-full h-full flex flex-col pb-24 md:pb-28">
       {loading && songs.length === 0 && (
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-emerald-400 border-t-transparent rounded-full 
-            animate-spin mx-auto mb-4"></div>
-            <p className="text-white text-lg font-medium">Loading music...</p>
-          </div>
-        </div>
+       <Loader/>
       )}
       
       {!showDetailView ? (
@@ -656,9 +651,9 @@ export default function HomeOnline() {
             {selectedItem?.type === 'downloaded' && (
               <div className="w-48 h-48 md:w-56 md:h-56 rounded-3xl shadow-2xl overflow-hidden relative 
               bg-emerald-600/40 border-4 border-white/10 grid grid-cols-2 gap-0.5">
-                <img src={selectedItem?.songs?.[0]?.cover || 'https://placehold.co/150x150?text=1'} alt="1" className="w-full h-full object-cover" />
-                <img src={selectedItem?.songs?.[1]?.cover || 'https://placehold.co/150x150?text=2'} alt="2" className="w-full h-full object-cover" />
-                <img src={selectedItem?.songs?.[2]?.cover || 'https://placehold.co/300x150?text=3'} alt="3" 
+                <img src={selectedItem?.songs?.[0]?.cover || '/emerald.jpg'} alt="1" className="w-full h-full object-cover" />
+                <img src={selectedItem?.songs?.[1]?.cover || '/emerald.jpg'} alt="2" className="w-full h-full object-cover" />
+                <img src={selectedItem?.songs?.[2]?.cover || '/emerald.jpg'} alt="3" 
                 className="w-full h-full object-cover col-span-2" />
                 <div className="absolute top-3 right-3 bg-emerald-500/90 backdrop-blur-sm rounded-full p-2 shadow-lg">
                   <FontAwesomeIcon icon={faCircleArrowDown} className="text-white text-base" />

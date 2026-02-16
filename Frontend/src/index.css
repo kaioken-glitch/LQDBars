@@ -310,3 +310,318 @@ input[type="range"]:focus::-moz-range-thumb {
   right: 0 !important;
   z-index: 35 !important;
 }
+
+/* ============================================
+   NETFLIX/YOUTUBE TV STYLE SPLASH SCREEN
+   Add to your index.css or animations.css
+   ============================================ */
+
+/* Splash Screen Container */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+/* Content Wrapper */
+.splash-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+/* Logo Container */
+.splash-logo {
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Logo SVG */
+.logo-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 40px rgba(16, 185, 129, 0.6));
+}
+
+/* App Name */
+.splash-app-name {
+  font-size: 32px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: fade-in-name 0.8s ease-out 1.2s forwards;
+}
+
+/* Background Gradient */
+.splash-bg-gradient {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at center,
+    rgba(16, 185, 129, 0.15) 0%,
+    rgba(6, 78, 59, 0.1) 40%,
+    transparent 70%
+  );
+  animation: pulse-gradient 3s ease-in-out infinite;
+}
+
+/* ============================================
+   ANIMATION PHASES
+   ============================================ */
+
+/* Phase 1: ZOOM IN (Netflix/YouTube style) */
+.splash-zoom .splash-logo {
+  animation: zoom-in 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Phase 2: HOLD */
+.splash-hold .splash-logo {
+  transform: scale(1);
+  animation: subtle-pulse 0.5s ease-in-out;
+}
+
+/* Phase 3: FADE OUT */
+.splash-fadeOut {
+  animation: fade-out-screen 0.7s ease-out forwards;
+}
+
+.splash-fadeOut .splash-logo {
+  animation: fade-out-logo 0.7s ease-out forwards;
+}
+
+/* ============================================
+   KEYFRAME ANIMATIONS
+   ============================================ */
+
+/* Zoom In (Netflix style - starts small, zooms to normal) */
+@keyframes zoom-in {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Subtle Pulse on Hold */
+@keyframes subtle-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Fade In App Name */
+@keyframes fade-in-name {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fade Out Screen */
+@keyframes fade-out-screen {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Fade Out Logo */
+@keyframes fade-out-logo {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+
+/* Background Gradient Pulse */
+@keyframes pulse-gradient {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* ============================================
+   ALTERNATIVE STYLES
+   ============================================ */
+
+/* YouTube TV Style (Red accent) */
+.splash-screen.youtube-style {
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+}
+
+.splash-screen.youtube-style .logo-svg {
+  filter: drop-shadow(0 0 40px rgba(255, 0, 0, 0.6));
+}
+
+.splash-screen.youtube-style .splash-bg-gradient {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 0, 0, 0.15) 0%,
+    rgba(139, 0, 0, 0.1) 40%,
+    transparent 70%
+  );
+}
+
+/* Netflix Style (Dramatic zoom with slight bounce) */
+.splash-zoom.netflix-style .splash-logo {
+  animation: netflix-zoom 2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes netflix-zoom {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Spotify Style (Smooth scale with glow) */
+.splash-zoom.spotify-style .splash-logo {
+  animation: spotify-zoom 1.8s ease-out forwards;
+}
+
+@keyframes spotify-zoom {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+    filter: drop-shadow(0 0 0px rgba(16, 185, 129, 0));
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 0 40px rgba(16, 185, 129, 0.8));
+  }
+}
+
+/* ============================================
+   SOUND WAVE VISUALIZATION (Optional)
+   ============================================ */
+
+.splash-sound-waves {
+  position: absolute;
+  bottom: 60px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  height: 40px;
+}
+
+.sound-bar {
+  width: 4px;
+  background: linear-gradient(to top, #10b981, #34d399);
+  border-radius: 2px;
+  animation: wave-bounce 0.8s ease-in-out infinite;
+}
+
+.sound-bar:nth-child(1) { animation-delay: 0s; }
+.sound-bar:nth-child(2) { animation-delay: 0.1s; }
+.sound-bar:nth-child(3) { animation-delay: 0.2s; }
+.sound-bar:nth-child(4) { animation-delay: 0.3s; }
+.sound-bar:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes wave-bounce {
+  0%, 100% {
+    height: 10px;
+  }
+  50% {
+    height: 40px;
+  }
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 768px) {
+  .splash-logo {
+    width: 150px;
+    height: 150px;
+  }
+
+  .splash-app-name {
+    font-size: 24px;
+    letter-spacing: 3px;
+  }
+}
+
+@media (max-width: 480px) {
+  .splash-logo {
+    width: 120px;
+    height: 120px;
+  }
+
+  .splash-app-name {
+    font-size: 20px;
+    letter-spacing: 2px;
+  }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .splash-zoom .splash-logo {
+    animation: fade-in-simple 1s ease-out forwards;
+  }
+
+  @keyframes fade-in-simple {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  .splash-bg-gradient {
+    animation: none;
+  }
+}

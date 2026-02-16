@@ -15,45 +15,9 @@ import {
 } from '../utils/localstoragehandler';
 import { createPlaylistFromFiles } from '../utils/audioloader';
 
-// Premade playlists available to add
-const PREMADE_PLAYLISTS = [
-  {
-    id: 'premade-fav',
-    name: "My Favorites",
-    description: "All my favorite tracks",
-    cover: "https://placehold.co/300x300?text=My+Favorites",
-  },
-  {
-    id: 'premade-workout',
-    name: "Workout Mix",
-    description: "High energy songs for gym",
-    cover: "https://placehold.co/300x300?text=Workout+Mix",
-  },
-  {
-    id: 'premade-chill',
-    name: "Chill Vibes",
-    description: "Relaxing music for study",
-    cover: "https://placehold.co/300x300?text=Chill+Vibes",
-  },
-  {
-    id: 'premade-roadtrip',
-    name: "Road Trip",
-    description: "Perfect songs for long drives",
-    cover: "https://placehold.co/300x300?text=Road+Trip",
-  },
-  {
-    id: 'premade-party',
-    name: "Party Hits",
-    description: "Dance floor bangers",
-    cover: "https://placehold.co/300x300?text=Party+Hits",
-  },
-  {
-    id: 'premade-throwback',
-    name: "Throwback",
-    description: "Classic hits from the past",
-    cover: "https://placehold.co/300x300?text=Throwback",
-  }
-];
+// LocalStorage keys
+const STORAGE_KEY = 'music_player_playlists';
+const MOCK_STATES_KEY = 'music_player_mock_states';
 
 export default function Playlists() {
   const [userPlaylists, setUserPlaylists] = useState([]);
@@ -67,7 +31,6 @@ export default function Playlists() {
   const [showGenres, setShowGenres] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showPremadeModal, setShowPremadeModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
   
@@ -78,23 +41,48 @@ export default function Playlists() {
   const [importError, setImportError] = useState('');
 
   const {
-    songs,
-    currentIndex,
+    currentSong,
     isPlaying,
     setIsPlaying,
-    currentTime,
-    duration,
-    audioRef,
-    currentSong,
     playPrev,
     playNext,
     isMuted,
     toggleMute,
     setPlayerSongs,
-    playSongAtIndex
   } = usePlayer();
 
-  // Load saved folders on component mount
+  // ---------- Load from localStorage on mount ----------
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        setUserPlaylists(JSON.parse(stored));
+      } catch (e) {
+        console.error('Failed to parse stored playlists', e);
+      }
+    }
+
+    const storedStates = localStorage.getItem(MOCK_STATES_KEY);
+    if (storedStates) {
+      try {
+        setMockSongStates(JSON.parse(storedStates));
+      } catch (e) {
+        console.error('Failed to parse mock states', e);
+      }
+    }
+  }, []);
+
+  // ---------- Save to localStorage whenever playlists change ----------
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(userPlaylists));
+  }, [userPlaylists]);
+
+  // ---------- Save mock states ----------
+  useEffect(() => {
+    localStorage.setItem(MOCK_STATES_KEY, JSON.stringify(mockSongStates));
+  }, [mockSongStates]);
+
+  // ---------- Load saved folders ----------
   useEffect(() => {
     const loadFolders = async () => {
       try {
@@ -107,7 +95,7 @@ export default function Playlists() {
     loadFolders();
   }, []);
 
-  // Handle importing local folder
+  // ---------- Import local folder ----------
   const handleImportLocalFolder = async () => {
     setImportLoading(true);
     setImportError('');
@@ -121,9 +109,8 @@ export default function Playlists() {
           dirHandle.name, 
           `Local songs from ${dirHandle.name}`
         );
-        setUserPlaylists([...userPlaylists, newPlaylist]);
+        setUserPlaylists(prev => [...prev, newPlaylist]);
         
-        // Reload local folders
         const folders = await getSavedFolders();
         setLocalFolders(folders);
       } else {
@@ -137,13 +124,12 @@ export default function Playlists() {
     }
   };
 
-  // Handle removing local folder
+  // ---------- Remove local folder ----------
   const handleRemoveLocalFolder = async (folderName) => {
     try {
       await deleteFolder(folderName);
-      setUserPlaylists(userPlaylists.filter(p => p.folderName !== folderName));
+      setUserPlaylists(prev => prev.filter(p => p.folderName !== folderName));
       
-      // Reload local folders
       const folders = await getSavedFolders();
       setLocalFolders(folders);
     } catch (error) {
@@ -152,7 +138,7 @@ export default function Playlists() {
     }
   };
 
-  // Create a new custom playlist
+  // ---------- Create custom playlist ----------
   const handleCreatePlaylist = () => {
     if (newPlaylistName.trim()) {
       const newPlaylist = {
@@ -165,24 +151,16 @@ export default function Playlists() {
         songs: [],
         isCustom: true
       };
-      setUserPlaylists([...userPlaylists, newPlaylist]);
+      setUserPlaylists(prev => [...prev, newPlaylist]);
       setNewPlaylistName('');
       setNewPlaylistDesc('');
       setShowCreateModal(false);
     }
   };
 
-  // Add premade playlist to user playlists
-  const handleAddPremade = (premadePlaylist) => {
-    const exists = userPlaylists.some(p => p.id === premadePlaylist.id);
-    if (!exists) {
-      setUserPlaylists([...userPlaylists, { ...premadePlaylist, songs: [], songCount: 0, duration: '0 min' }]);
-    }
-  };
-
-  // Remove playlist from user playlists
+  // ---------- Remove playlist ----------
   const handleRemovePlaylist = (playlistId) => {
-    setUserPlaylists(userPlaylists.filter(p => p.id !== playlistId));
+    setUserPlaylists(prev => prev.filter(p => p.id !== playlistId));
   };
 
   const handlePlaylistPlay = (playlist) => {
@@ -195,11 +173,10 @@ export default function Playlists() {
     setSelectedPlaylist(null);
   };
 
-  // Fix: Handle playing a song from playlist
+  // ---------- Play song from playlist ----------
   const handlePlaySongFromPlaylist = (songIndex) => {
     if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
       try {
-        // Filter out songs that don't have valid audio sources
         const validSongs = selectedPlaylist.songs.filter(song => 
           song.audio || song.url || song.audioUrl || song.src
         );
@@ -209,37 +186,27 @@ export default function Playlists() {
           return;
         }
       
-        // Adjust index if some songs were filtered out
         let adjustedIndex = songIndex;
         if (validSongs.length < selectedPlaylist.songs.length) {
-          // Find the position of the selected song in validSongs
           const selectedSong = selectedPlaylist.songs[songIndex];
           adjustedIndex = validSongs.findIndex(s => s.id === selectedSong?.id);
           if (adjustedIndex === -1) adjustedIndex = 0;
         }
       
-        // Set the valid songs to player context
         setPlayerSongs(validSongs, adjustedIndex);
-        
-        // Give a small delay before playing to allow state to update
-        setTimeout(() => {
-          setIsPlaying(true);
-        }, 100);
-        
+        setTimeout(() => setIsPlaying(true), 100);
       } catch (error) {
         console.error('Error playing song:', error);
       }
     }
   };
 
-  // Fix: Handle playing the entire playlist from the beginning
   const handlePlayPlaylist = () => {
     if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
       handlePlaySongFromPlaylist(0);
     }
   };
 
-  // Update mock song states
   const updateMockSongState = (songId, updates) => {
     setMockSongStates(prev => ({
       ...prev,
@@ -255,11 +222,7 @@ export default function Playlists() {
     if (searchQuery.trim()) {
       try {
         const apiResults = await musicApi.searchTracks(searchQuery, 10);
-        if (apiResults && apiResults.length > 0) {
-          setResults(apiResults);
-        } else {
-          setResults([]);
-        }
+        setResults(apiResults && apiResults.length > 0 ? apiResults : []);
       } catch (error) {
         console.error('Search error:', error);
         setResults([]);
@@ -314,8 +277,8 @@ export default function Playlists() {
                         >
                           <img src={song.cover} alt={song.name} className="w-10 h-10 rounded-lg object-cover shadow-md" />
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold truncate">{song.name && song.name.length > 24 ? song.name.slice(0, 24) + '…' : song.name}</p>
-                            <p className="text-white/70 text-xs truncate">{song.artist && song.artist.length > 24 ? song.artist.slice(0, 24) + '…' : song.artist}</p>
+                            <p className="font-semibold truncate">{song.name}</p>
+                            <p className="text-white/70 text-xs truncate">{song.artist}</p>
                           </div>
                         </div>
                       ))}
@@ -401,10 +364,11 @@ export default function Playlists() {
               <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h1 className="text-white text-4xl md:text-5xl font-bold tracking-tight">
-                    Playlists
+                    Your Playlists
                   </h1>
                   <p className="text-white/60 text-sm md:text-base mt-2">
-                    {userPlaylists.length} playlists • {userPlaylists.reduce((acc, p) => acc + p.songCount, 0)} songs
+                    {userPlaylists.length} {userPlaylists.length === 1 ? 'playlist' : 'playlists'} • 
+                    {userPlaylists.reduce((acc, p) => acc + p.songCount, 0)} songs
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -446,7 +410,7 @@ export default function Playlists() {
                 <FaMusic className="text-white/40 text-6xl mb-4" />
                 <h3 className="text-white text-2xl font-bold mb-2">No playlists yet</h3>
                 <p className="text-white/60 max-w-md mb-6">
-                  Create your own playlist or browse our collection of premade playlists to get started.
+                  Create your first playlist or import local music to get started.
                 </p>
               </div>
             ) : (
@@ -465,6 +429,7 @@ export default function Playlists() {
                         src={playlist.cover} 
                         alt={playlist.name} 
                         className="w-full h-full object-cover" 
+                        onError={(e) => { e.target.src = 'https://placehold.co/300x300?text=Playlist'; }}
                       />
                     </div>
                     
@@ -488,7 +453,7 @@ export default function Playlists() {
                       </button>
                     </div>
 
-                    {/* Remove Button (for custom playlists) */}
+                    {/* Remove Button (for custom/imported playlists) */}
                     {(playlist.isCustom || playlist.isLocal) && (
                       <button
                         onClick={(e) => {
@@ -540,6 +505,7 @@ export default function Playlists() {
               alt={selectedPlaylist?.name} 
               className="w-48 h-48 md:w-56 md:h-56 rounded-3xl object-cover shadow-2xl 
               border-4 border-white/10"
+              onError={(e) => { e.target.src = 'https://placehold.co/300x300?text=Playlist'; }}
             />
             <div className="flex flex-col justify-center">
               <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-2">Playlist</p>
@@ -547,7 +513,6 @@ export default function Playlists() {
               <p className="text-white/80 text-base mb-2">{selectedPlaylist?.description}</p>
               <p className="text-white/60 text-sm">{selectedPlaylist?.songCount} songs • {selectedPlaylist?.duration}</p>
               
-              {/* Fix: Add Play button to play the entire playlist */}
               <button 
                 className="mt-4 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 
                 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-full 
@@ -599,6 +564,7 @@ export default function Playlists() {
                             src={song.cover} 
                             alt={song.name} 
                             className="w-12 h-12 rounded-lg object-cover shadow-md"
+                            onError={(e) => { e.target.src = 'https://placehold.co/60x60?text=🎵'; }}
                           />
                           <div className="flex flex-col flex-1 min-w-0">
                             <span className="text-white font-semibold truncate">{song.name}</span>
@@ -734,65 +700,7 @@ export default function Playlists() {
         </div>
       )}
 
-      {/* Browse Premade Playlists Modal */}
-      {showPremadeModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl shadow-2xl 
-          max-w-2xl w-full border border-white/10 p-8 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white text-2xl font-bold">Browse Playlists</h2>
-              <button
-                onClick={() => setShowPremadeModal(false)}
-                className="text-white/60 hover:text-white transition-colors"
-              >
-                <FaTimes className="text-xl" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3">
-              {PREMADE_PLAYLISTS.map((playlist) => {
-                const isAdded = userPlaylists.some(p => p.id === playlist.id);
-                return (
-                  <div
-                    key={playlist.id}
-                    className="flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 
-                    rounded-2xl border border-white/10 transition-all"
-                  >
-                    <img
-                      src={playlist.cover}
-                      alt={playlist.name}
-                      className="w-16 h-16 rounded-xl object-cover shadow-md flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-white font-bold truncate">{playlist.name}</h3>
-                      <p className="text-white/60 text-sm truncate">{playlist.description}</p>
-                    </div>
-                    <button
-                      onClick={() => handleAddPremade(playlist)}
-                      disabled={isAdded}
-                      className={`px-6 py-2.5 rounded-full font-semibold whitespace-nowrap transition-all
-                      ${isAdded
-                        ? 'bg-white/10 text-white/60 cursor-default'
-                        : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white shadow-lg'
-                      }`}
-                    >
-                      {isAdded ? 'Added' : 'Add'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => setShowPremadeModal(false)}
-              className="mt-6 w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl
-              font-semibold transition-all border border-white/20"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 🔥 PREMADE PLAYLISTS MODAL REMOVED – no dummy data */}
     </div>
   );
 }

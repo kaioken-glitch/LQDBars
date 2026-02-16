@@ -11,6 +11,7 @@ import Settings from './components/Settings';
 import { PlayerProvider } from './context/PlayerContext';
 import MobilePlayer from './components/MobilePlayer';
 import BottomNav from './components/BottomNav';
+import SplashScreen from '../src/utils/Splashscreen';
 
 
 
@@ -70,24 +71,27 @@ function App() {
     }
   }
 
-  return (
-    <PlayerProvider>
-      <div className="app flex flex-row items-stretch h-screen">
-        {/* Sidebar visible on medium+ screens */}
-        <div className="hidden md:flex">
-          <Sidebar active={active} setActive={setActive} />
-        </div>
-
-        <Main>
-          {renderPage()}
-        </Main>
-
-        {/* Mobile player (only show on pages other than Home) */}
-        {active !== 'Home' && <MobilePlayer />}
-        <BottomNav active={active} setActive={setActive} />
+   const [showSplash, setShowSplash] = useState(true);
+  return showSplash ? (
+  <SplashScreen onComplete={() => setShowSplash(false)} />
+) : (
+  <PlayerProvider>
+    <div className="app flex flex-row items-stretch h-screen">
+      {/* Sidebar visible on medium+ screens */}
+      <div className="hidden md:flex">
+        <Sidebar active={active} setActive={setActive} />
       </div>
-    </PlayerProvider>
-  );
+
+      <Main>
+        {renderPage()}
+      </Main>
+
+      {/* Mobile player (only show on pages other than Home) */}
+      {active !== 'Home' && <MobilePlayer />}
+      <BottomNav active={active} setActive={setActive} />
+    </div>
+  </PlayerProvider>
+);
 }
 
 export default App
