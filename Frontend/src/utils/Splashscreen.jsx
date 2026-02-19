@@ -2,15 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../index.css';
 import Splashlogo from '../assets/logo.svg';
 
+// Create audio context outside component to ensure single instance
+let audioContextInstance = null;
+let hasPlayedGlobally = false;
+
 export function SplashScreen({ onComplete }) {
   const [phase, setPhase] = useState('zoom');
-  const hasPlayedRef = useRef(false); // Track if audio has played
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    // Only play chime once (prevents double play in React Strict Mode)
-    if (!hasPlayedRef.current) {
+    // Prevent double execution in Strict Mode
+    if (isMountedRef.current) return;
+    isMountedRef.current = true;
+
+    // Play chime only once globally
+    if (!hasPlayedGlobally) {
       playWebAudioChime();
-      hasPlayedRef.current = true;
+      hasPlayedGlobally = true;
     }
 
     // Phase 1: Zoom in and hold (1.8s)
@@ -33,13 +41,17 @@ export function SplashScreen({ onComplete }) {
       clearTimeout(holdTimer);
       clearTimeout(completeTimer);
     };
-  }, [onComplete]);
+  }, []); // Empty dependency array - only run once
 
   // Web Audio API - Generates chime sound programmatically
   const playWebAudioChime = () => {
     try {
-      // Create audio context
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // Reuse existing audio context or create new one
+      if (!audioContextInstance) {
+        audioContextInstance = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      const audioContext = audioContextInstance;
       
       // Helper function to play a note
       const playNote = (frequency, startTime, duration, volume = 0.3) => {
