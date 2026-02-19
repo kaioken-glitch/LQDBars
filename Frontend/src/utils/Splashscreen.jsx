@@ -12,14 +12,9 @@ export function SplashScreen({ onComplete }) {
 
   useEffect(() => {
     // Prevent double execution in Strict Mode
-    if (isMountedRef.current) return;
-    isMountedRef.current = true;
 
     // Play chime only once globally
-    if (!hasPlayedGlobally) {
-      playWebAudioChime();
-      hasPlayedGlobally = true;
-    }
+    playWebAudioChime();
 
     // Phase 1: Zoom in and hold (1.8s)
     const zoomTimer = setTimeout(() => {

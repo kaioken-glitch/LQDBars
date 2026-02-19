@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowLeft } from '@fortawesome/free-solid-svg-icons';
-import { FaStar, FaHeart, FaSearch, FaPlay, FaPlus, FaMusic, FaTimes, FaFolderOpen } from 'react-icons/fa';
+import { faArrowLeft, faChevronDown } from '@fortawesome/free-solid-svg-icons';
+import { FaStar, FaHeart, FaSearch, FaPlay, FaPlus, FaMusic, FaTimes, FaFolderOpen, FaYoutube } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import TinyPlayer from './TinyPlayer';
 import SongTile from './SongTile';
@@ -14,10 +14,21 @@ import {
   checkLocalFileSupport 
 } from '../utils/localstoragehandler';
 import { createPlaylistFromFiles } from '../utils/audioloader';
+import { fetchYouTubePlaylist, fetchVideoDurations } from '../utils/youtubePlaylist';
 
-// LocalStorage keys
 const STORAGE_KEY = 'music_player_playlists';
 const MOCK_STATES_KEY = 'music_player_mock_states';
+
+// Helper to format total seconds into a readable string
+const formatTotalDuration = (totalSeconds) => {
+  if (!totalSeconds || totalSeconds === 0) return '0 min';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours} hr ${minutes} min`;
+  }
+  return `${minutes} min`;
+};
 
 export default function Playlists() {
   const [userPlaylists, setUserPlaylists] = useState([]);
@@ -34,6 +45,13 @@ export default function Playlists() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
   
+  // Import dropdown state
+  const [showImportDropdown, setShowImportDropdown] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeImportLoading, setYoutubeImportLoading] = useState(false);
+  const [youtubeImportError, setYoutubeImportError] = useState('');
+
   // Local file state
   const [localFolders, setLocalFolders] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
@@ -51,7 +69,7 @@ export default function Playlists() {
     setPlayerSongs,
   } = usePlayer();
 
-  // ---------- Load from localStorage on mount ----------
+  // Load from localStorage
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -72,17 +90,14 @@ export default function Playlists() {
     }
   }, []);
 
-  // ---------- Save to localStorage whenever playlists change ----------
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userPlaylists));
   }, [userPlaylists]);
 
-  // ---------- Save mock states ----------
   useEffect(() => {
     localStorage.setItem(MOCK_STATES_KEY, JSON.stringify(mockSongStates));
   }, [mockSongStates]);
 
-  // ---------- Load saved folders ----------
   useEffect(() => {
     const loadFolders = async () => {
       try {
@@ -95,7 +110,7 @@ export default function Playlists() {
     loadFolders();
   }, []);
 
-  // ---------- Import local folder ----------
+  // Import local folder
   const handleImportLocalFolder = async () => {
     setImportLoading(true);
     setImportError('');
@@ -124,12 +139,92 @@ export default function Playlists() {
     }
   };
 
-  // ---------- Remove local folder ----------
+  // Import YouTube playlist
+  const handleImportYouTube = async () => {
+    if (!youtubeUrl.trim()) {
+      setYoutubeImportError('Please enter a YouTube playlist URL');
+      return;
+    }
+
+    const playlistId = extractYouTubePlaylistId(youtubeUrl);
+    if (!playlistId) {
+      setYoutubeImportError('Invalid YouTube playlist URL');
+      return;
+    }
+
+    setYoutubeImportLoading(true);
+    setYoutubeImportError('');
+
+    try {
+      const videos = await fetchYouTubePlaylist(playlistId);
+      if (videos.length === 0) {
+        setYoutubeImportError('No videos found in playlist');
+        return;
+      }
+
+      // Fetch durations for all videos
+      const videoIds = videos.map(v => v.id);
+      const durations = await fetchVideoDurations(videoIds);
+
+      let totalSeconds = 0;
+      const songs = videos.map(v => {
+        const duration = durations[v.id] || 0;
+        totalSeconds += duration;
+        const minutes = Math.floor(duration / 60);
+        const seconds = Math.floor(duration % 60);
+        const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        return {
+          id: v.id,
+          name: v.title,
+          artist: v.channel,
+          duration: formattedDuration,
+          cover: v.thumbnail,
+          audio: null,
+          youtubeId: v.id,
+          source: 'youtube',
+        };
+      });
+
+      const newPlaylist = {
+        id: `youtube-${Date.now()}`,
+        name: `YouTube Playlist (${new Date().toLocaleDateString()})`,
+        description: `Imported from YouTube • ${videos.length} videos`,
+        cover: videos[0]?.thumbnail || '/default-cover.png',
+        songs: songs,
+        songCount: videos.length,
+        duration: formatTotalDuration(totalSeconds),
+        isCustom: true,
+        isYouTube: true,
+      };
+
+      setUserPlaylists(prev => [...prev, newPlaylist]);
+      setShowYouTubeModal(false);
+      setYoutubeUrl('');
+    } catch (error) {
+      console.error('YouTube import error:', error);
+      setYoutubeImportError(error.message || 'Failed to import playlist');
+    } finally {
+      setYoutubeImportLoading(false);
+    }
+  };
+
+  const extractYouTubePlaylistId = (url) => {
+    const patterns = [
+      /[?&]list=([^&]+)/,
+      /youtube\.com\/playlist\?list=([^&]+)/,
+      /youtu\.be\/.*[?&]list=([^&]+)/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  };
+
   const handleRemoveLocalFolder = async (folderName) => {
     try {
       await deleteFolder(folderName);
       setUserPlaylists(prev => prev.filter(p => p.folderName !== folderName));
-      
       const folders = await getSavedFolders();
       setLocalFolders(folders);
     } catch (error) {
@@ -138,7 +233,6 @@ export default function Playlists() {
     }
   };
 
-  // ---------- Create custom playlist ----------
   const handleCreatePlaylist = () => {
     if (newPlaylistName.trim()) {
       const newPlaylist = {
@@ -147,7 +241,7 @@ export default function Playlists() {
         description: newPlaylistDesc || 'Custom playlist',
         songCount: 0,
         duration: '0 min',
-        cover: 'https://placehold.co/300x300?text=Custom+Playlist',
+        cover: '/default-cover.png',
         songs: [],
         isCustom: true
       };
@@ -158,7 +252,6 @@ export default function Playlists() {
     }
   };
 
-  // ---------- Remove playlist ----------
   const handleRemovePlaylist = (playlistId) => {
     setUserPlaylists(prev => prev.filter(p => p.id !== playlistId));
   };
@@ -173,12 +266,12 @@ export default function Playlists() {
     setSelectedPlaylist(null);
   };
 
-  // ---------- Play song from playlist ----------
+  // Handle playing a song from playlist
   const handlePlaySongFromPlaylist = (songIndex) => {
     if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
       try {
         const validSongs = selectedPlaylist.songs.filter(song => 
-          song.audio || song.url || song.audioUrl || song.src
+          song.audio || song.url || song.audioUrl || song.src || song.youtubeId
         );
         
         if (validSongs.length === 0) {
@@ -371,26 +464,62 @@ export default function Playlists() {
                     {userPlaylists.reduce((acc, p) => acc + p.songCount, 0)} songs
                   </p>
                 </div>
-                <div className="flex gap-3">
+
+                {/* Combined Action Buttons with Dropdown */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Create Playlist button */}
                   <button
                     onClick={() => setShowCreateModal(true)}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 
                     to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-full 
                     font-semibold transition-all shadow-lg hover:shadow-emerald-500/50"
                   >
-                    <FaPlus /> Create Playlist
+                    <FaPlus /> Create
                   </button>
-                  {supportCheck.fileSystemAccess && (
+
+                  {/* Import Dropdown */}
+                  <div className="relative">
                     <button
-                      onClick={handleImportLocalFolder}
-                      disabled={importLoading}
+                      onClick={() => setShowImportDropdown(!showImportDropdown)}
                       className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 
                       to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white rounded-full 
-                      font-semibold transition-all shadow-lg hover:shadow-purple-500/50 disabled:opacity-50"
+                      font-semibold transition-all shadow-lg hover:shadow-purple-500/50"
                     >
-                      <FaFolderOpen /> {importLoading ? 'Importing...' : 'Import Local'}
+                      <FaFolderOpen /> Import
+                      <FontAwesomeIcon icon={faChevronDown} className="text-sm" />
                     </button>
-                  )}
+
+                    {showImportDropdown && (
+                      <div className="absolute right-0 mt-2 w-56 bg-gradient-to-b from-purple-600 
+                      to-purple-700 rounded-2xl shadow-2xl z-50 backdrop-blur-xl border border-white/10 
+                      overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setShowImportDropdown(false);
+                            handleImportLocalFolder();
+                          }}
+                          disabled={importLoading}
+                          className="w-full px-4 py-3 text-left text-white hover:bg-white/20 
+                          transition-all flex items-center gap-3"
+                        >
+                          <FaFolderOpen className="text-purple-200" />
+                          <span className="flex-1">Local Folder</span>
+                          {importLoading && <span className="text-xs animate-pulse">...</span>}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowImportDropdown(false);
+                            setShowYouTubeModal(true);
+                          }}
+                          className="w-full px-4 py-3 text-left text-white hover:bg-white/20 
+                          transition-all flex items-center gap-3"
+                        >
+                          <FaYoutube className="text-red-300" />
+                          <span className="flex-1">YouTube Playlist</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -429,8 +558,13 @@ export default function Playlists() {
                         src={playlist.cover} 
                         alt={playlist.name} 
                         className="w-full h-full object-cover" 
-                        onError={(e) => { e.target.src = 'https://placehold.co/300x300?text=Playlist'; }}
+                        onError={(e) => { e.target.src = '/default-cover.png'; }}
                       />
+                      {playlist.isYouTube && (
+                        <div className="absolute top-2 left-2 bg-red-600/80 rounded-full p-1">
+                          <FaYoutube className="text-white text-xs" />
+                        </div>
+                      )}
                     </div>
                     
                     {/* Info */}
@@ -454,7 +588,7 @@ export default function Playlists() {
                     </div>
 
                     {/* Remove Button (for custom/imported playlists) */}
-                    {(playlist.isCustom || playlist.isLocal) && (
+                    {(playlist.isCustom || playlist.isLocal || playlist.isYouTube) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -485,7 +619,6 @@ export default function Playlists() {
       ) : (
         /* Detail View - Playlist Songs List */
         <div className="detailView w-full h-full flex flex-col">
-          {/* Header */}
           <div className="detailHeader w-full p-4 md:p-6 border-b border-white/10 backdrop-blur-xl bg-black/40">
             <button 
               className="w-11 h-11 flex items-center justify-center rounded-full bg-white/10 
@@ -497,7 +630,6 @@ export default function Playlists() {
             </button>
           </div>
 
-          {/* Playlist Header */}
           <div className="playlistDetails w-full px-4 md:px-8 py-6 flex flex-col md:flex-row items-start md:items-center gap-6 
           border-b border-white/10 bg-gradient-to-b from-black/60 to-transparent">
             <img 
@@ -505,7 +637,7 @@ export default function Playlists() {
               alt={selectedPlaylist?.name} 
               className="w-48 h-48 md:w-56 md:h-56 rounded-3xl object-cover shadow-2xl 
               border-4 border-white/10"
-              onError={(e) => { e.target.src = 'https://placehold.co/300x300?text=Playlist'; }}
+              onError={(e) => { e.target.src = '/default-cover.png'; }}
             />
             <div className="flex flex-col justify-center">
               <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-2">Playlist</p>
@@ -525,7 +657,6 @@ export default function Playlists() {
             </div>
           </div>
 
-          {/* Songs List */}
           <div className="songsList flex-1 px-4 md:px-8 py-6 overflow-y-auto">
             {selectedPlaylist?.songs && selectedPlaylist.songs.length > 0 ? (
               <div className="max-w-[1400px] mx-auto">
@@ -541,7 +672,6 @@ export default function Playlists() {
                     
                     return (
                       <React.Fragment key={songId}>
-                        {/* Mobile View */}
                         <div className="block md:hidden">
                           <SongTile 
                             song={song} 
@@ -550,7 +680,6 @@ export default function Playlists() {
                           />
                         </div>
 
-                        {/* Desktop View */}
                         <div 
                           className="hidden md:flex songItem items-center gap-4 px-4 py-3 rounded-xl 
                           bg-white/5 hover:bg-white/10 transition-all cursor-pointer group border border-transparent 
@@ -564,7 +693,7 @@ export default function Playlists() {
                             src={song.cover} 
                             alt={song.name} 
                             className="w-12 h-12 rounded-lg object-cover shadow-md"
-                            onError={(e) => { e.target.src = 'https://placehold.co/60x60?text=🎵'; }}
+                            onError={(e) => { e.target.src = '/default-cover.png'; }}
                           />
                           <div className="flex flex-col flex-1 min-w-0">
                             <span className="text-white font-semibold truncate">{song.name}</span>
@@ -572,7 +701,6 @@ export default function Playlists() {
                           </div>
                           <span className="text-white/40 text-sm">{song.duration}</span>
                           
-                          {/* Action buttons */}
                           <div className="flex items-center gap-1">
                             <button 
                               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
@@ -700,7 +828,83 @@ export default function Playlists() {
         </div>
       )}
 
-      {/* 🔥 PREMADE PLAYLISTS MODAL REMOVED – no dummy data */}
+      {/* YouTube Import Modal */}
+      {showYouTubeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl shadow-2xl 
+          max-w-md w-full border border-white/10 p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-white text-2xl font-bold flex items-center gap-2">
+                <FaYoutube className="text-red-500" /> Import YouTube Playlist
+              </h2>
+              <button
+                onClick={() => {
+                  setShowYouTubeModal(false);
+                  setYoutubeUrl('');
+                  setYoutubeImportError('');
+                }}
+                className="text-white/60 hover:text-white transition-colors"
+              >
+                <FaTimes className="text-xl" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-white text-sm font-semibold block mb-2">
+                  YouTube Playlist URL
+                </label>
+                <input
+                  type="text"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  placeholder="https://youtube.com/playlist?list=..."
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl 
+                  text-white placeholder:text-white/40 focus:outline-none focus:border-emerald-400/50
+                  focus:bg-white/15 transition-all"
+                  autoFocus
+                />
+                {youtubeImportError && (
+                  <p className="mt-2 text-red-400 text-sm">{youtubeImportError}</p>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowYouTubeModal(false);
+                    setYoutubeUrl('');
+                    setYoutubeImportError('');
+                  }}
+                  className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl
+                  font-semibold transition-all border border-white/20"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportYouTube}
+                  disabled={youtubeImportLoading}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600
+                  hover:from-red-400 hover:to-red-500 text-white rounded-xl font-semibold
+                  transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg
+                  flex items-center justify-center gap-2"
+                >
+                  {youtubeImportLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <FaYoutube /> Import
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
