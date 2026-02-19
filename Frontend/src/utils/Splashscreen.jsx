@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../index.css';
 import Splashlogo from '../assets/logo.svg';
 
 export function SplashScreen({ onComplete }) {
   const [phase, setPhase] = useState('zoom');
+  const hasPlayedRef = useRef(false); // Track if audio has played
 
   useEffect(() => {
-    // Play chime immediately - Web Audio API bypasses autoplay blocking!
-    playWebAudioChime();
+    // Only play chime once (prevents double play in React Strict Mode)
+    if (!hasPlayedRef.current) {
+      playWebAudioChime();
+      hasPlayedRef.current = true;
+    }
 
     // Phase 1: Zoom in and hold (1.8s)
     const zoomTimer = setTimeout(() => {
