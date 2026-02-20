@@ -1,13 +1,14 @@
 {
-  "name": "lbars",
+  "name": "lqdbars",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "prebuild": "echo \"{\\\"version\\\": \\\"$npm_package_version\\\"}\" > public/version.json",
     "api": "json-server --watch db.json --port 3001 --static ./audio",
     "start-all": "concurrently --names \"YouTube,Backend,Frontend\" --prefix-colors \"red,blue,green\" \"cd ../Backend && node youtube-converter.js\" \"cd ../Backend && npm start\" \"npm run dev\""
   },

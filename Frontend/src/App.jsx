@@ -12,6 +12,7 @@ import { PlayerProvider } from './context/PlayerContext';
 import MobilePlayer from './components/MobilePlayer';
 import BottomNav from './components/BottomNav';
 import SplashScreen from '../src/utils/Splashscreen';
+import UpdatePopup from './components/updatePopup';
 
 
 
