@@ -12,6 +12,9 @@ export function PlayerProvider({ children }) {
   const [duration, setDuration] = useState(0);
   const [downloadedSongs, setDownloadedSongs] = useState([]);
   const [isMuted, setIsMuted] = useState(false); // added for consistency
+  const [shuffle, setShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState('off'); // 'off', 'all', 'one'
+  const [shuffledOrder, setShuffledOrder] = useState([]);
 
   const audioRef = useRef(new Audio());
   const youtubePlayerRef = useRef(null);
@@ -255,25 +258,100 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (shuffle && songs.length > 1) {
+      const indices = songs.map((_, i) => i);
+      // Fisher-Yates shuffle
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      // Ensure current song is first if possible (optional)
+      const currentIdx = indices.indexOf(currentIndex);
+      if (currentIdx > 0) {
+        [indices[0], indices[currentIdx]] = [indices[currentIdx], indices[0]];
+      }
+      setShuffledOrder(indices);
+    } else {
+      setShuffledOrder([]);
+    }
+  }, [shuffle, songs, currentIndex]);
+
   // Navigation functions
   const playNext = useCallback(() => {
     if (songs.length === 0) return;
-    if (currentIndex < songs.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    } else {
-      setCurrentIndex(0); // loop to first
+    if (repeatMode === 'one') {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(console.error);
+      }
+      return;
     }
-    // Playback will start automatically due to effect
-  }, [songs.length, currentIndex]);
+
+    let nextIndex;
+    if (shuffle && shuffledOrder.length > 0) {
+      const currentShuffleIdx = shuffledOrder.indexOf(currentIndex);
+      if (currentShuffleIdx < shuffledOrder.length - 1) {
+        nextIndex = shuffledOrder[currentShuffleIdx + 1];
+      } else if (repeatMode === 'all') {
+        nextIndex = shuffledOrder[0];
+      } else {
+        setIsPlaying(false);
+        return;
+      }
+    } else {
+      if (currentIndex < songs.length - 1) {
+        nextIndex = currentIndex + 1;
+      } else if (repeatMode === 'all') {
+        nextIndex = 0;
+      } else {
+        setIsPlaying(false);
+        return;
+      }
+    }
+    setCurrentIndex(nextIndex);
+  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode, audioRef]);
+
 
   const playPrev = useCallback(() => {
     if (songs.length === 0) return;
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-    } else {
-      setCurrentIndex(songs.length - 1); // loop to last
+
+    // If more than 3 seconds into song, restart instead of going to previous
+    if (audioRef.current && audioRef.current.currentTime > 3) {
+      audioRef.current.currentTime = 0;
+      return;
     }
-  }, [songs.length, currentIndex]);
+
+    let prevIndex;
+    if (shuffle && shuffledOrder.length > 0) {
+      const currentShuffleIdx = shuffledOrder.indexOf(currentIndex);
+      if (currentShuffleIdx > 0) {
+        prevIndex = shuffledOrder[currentShuffleIdx - 1];
+      } else if (repeatMode === 'all') {
+        prevIndex = shuffledOrder[shuffledOrder.length - 1];
+      } else {
+        prevIndex = 0;
+      }
+    } else {
+      if (currentIndex > 0) {
+        prevIndex = currentIndex - 1;
+      } else if (repeatMode === 'all') {
+        prevIndex = songs.length - 1;
+      } else {
+        prevIndex = 0;
+      }
+    }
+    setCurrentIndex(prevIndex);
+  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode, audioRef]);
+
+  const toggleShuffle = useCallback(() => setShuffle(prev => !prev), []);
+  const toggleRepeatMode = useCallback(() => {
+    setRepeatMode(prev => {
+      if (prev === 'off') return 'all';
+      if (prev === 'all') return 'one';
+      return 'off';
+    });
+  }, []);
 
   // Seek function
   const seekTo = useCallback((time) => {
@@ -342,6 +420,8 @@ export function PlayerProvider({ children }) {
     };
   }, [cleanupYouTube]);
 
+  
+
   const value = {
     songs,
     setPlayerSongs,
@@ -363,6 +443,10 @@ export function PlayerProvider({ children }) {
     playerType: playerTypeRef.current,
     playNext,
     playPrev,
+    shuffle,
+    toggleShuffle,
+    repeatMode,
+    toggleRepeatMode,
     toggleMute,
     isMuted,
   };
