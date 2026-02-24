@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowLeft, faChevronDown } from '@fortawesome/free-solid-svg-icons';
-import { FaStar, FaHeart, FaSearch, FaPlay, FaPlus, FaMusic, FaTimes, FaFolderOpen, FaYoutube } from 'react-icons/fa';
+import { faArrowLeft, faChevronDown, faThLarge, faList, faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
+import { FaStar, FaHeart, FaSearch, FaPlay, FaPlus, FaMusic, FaTimes, FaFolderOpen, FaYoutube, FaRandom } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
-import TinyPlayer from './TinyPlayer';
-import SongTile from './SongTile';
+import TinyPlayer from '../components/TinyPlayer';
+import SongTile from '../components/SongTile';
 import musicApi from '../utils/musicApi';
 import { 
   selectFolderForImport, 
@@ -35,24 +35,19 @@ export default function Playlists() {
   const [showDetailView, setShowDetailView] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [mockSongStates, setMockSongStates] = useState({});
-  const [showInput, setShowInput] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
-  const [activeFilter, setActiveFilter] = useState('Albums');
-  const [showGenres, setShowGenres] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
+  const [viewMode, setViewMode] = useState('grid');
   
-  // Import dropdown state
   const [showImportDropdown, setShowImportDropdown] = useState(false);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [youtubeImportLoading, setYoutubeImportLoading] = useState(false);
   const [youtubeImportError, setYoutubeImportError] = useState('');
 
-  // Local file state
   const [localFolders, setLocalFolders] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
   const [supportCheck, setSupportCheck] = useState(checkLocalFileSupport());
@@ -79,7 +74,6 @@ export default function Playlists() {
         console.error('Failed to parse stored playlists', e);
       }
     }
-
     const storedStates = localStorage.getItem(MOCK_STATES_KEY);
     if (storedStates) {
       try {
@@ -110,14 +104,12 @@ export default function Playlists() {
     loadFolders();
   }, []);
 
-  // Import local folder
   const handleImportLocalFolder = async () => {
     setImportLoading(true);
     setImportError('');
     try {
       const dirHandle = await selectFolderForImport();
       const songs = await loadSongsFromFolder(dirHandle);
-      
       if (songs.length > 0) {
         const newPlaylist = await createPlaylistFromFiles(
           songs, 
@@ -125,7 +117,6 @@ export default function Playlists() {
           `Local songs from ${dirHandle.name}`
         );
         setUserPlaylists(prev => [...prev, newPlaylist]);
-        
         const folders = await getSavedFolders();
         setLocalFolders(folders);
       } else {
@@ -139,33 +130,26 @@ export default function Playlists() {
     }
   };
 
-  // Import YouTube playlist
   const handleImportYouTube = async () => {
     if (!youtubeUrl.trim()) {
       setYoutubeImportError('Please enter a YouTube playlist URL');
       return;
     }
-
     const playlistId = extractYouTubePlaylistId(youtubeUrl);
     if (!playlistId) {
       setYoutubeImportError('Invalid YouTube playlist URL');
       return;
     }
-
     setYoutubeImportLoading(true);
     setYoutubeImportError('');
-
     try {
       const videos = await fetchYouTubePlaylist(playlistId);
       if (videos.length === 0) {
         setYoutubeImportError('No videos found in playlist');
         return;
       }
-
-      // Fetch durations for all videos
       const videoIds = videos.map(v => v.id);
       const durations = await fetchVideoDurations(videoIds);
-
       let totalSeconds = 0;
       const songs = videos.map(v => {
         const duration = durations[v.id] || 0;
@@ -184,7 +168,6 @@ export default function Playlists() {
           source: 'youtube',
         };
       });
-
       const newPlaylist = {
         id: `youtube-${Date.now()}`,
         name: `YouTube Playlist (${new Date().toLocaleDateString()})`,
@@ -196,7 +179,6 @@ export default function Playlists() {
         isCustom: true,
         isYouTube: true,
       };
-
       setUserPlaylists(prev => [...prev, newPlaylist]);
       setShowYouTubeModal(false);
       setYoutubeUrl('');
@@ -266,26 +248,22 @@ export default function Playlists() {
     setSelectedPlaylist(null);
   };
 
-  // Handle playing a song from playlist
   const handlePlaySongFromPlaylist = (songIndex) => {
     if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
       try {
         const validSongs = selectedPlaylist.songs.filter(song => 
           song.audio || song.url || song.audioUrl || song.src || song.youtubeId
         );
-        
         if (validSongs.length === 0) {
           console.error('No valid songs found in playlist');
           return;
         }
-      
         let adjustedIndex = songIndex;
         if (validSongs.length < selectedPlaylist.songs.length) {
           const selectedSong = selectedPlaylist.songs[songIndex];
           adjustedIndex = validSongs.findIndex(s => s.id === selectedSong?.id);
           if (adjustedIndex === -1) adjustedIndex = 0;
         }
-      
         setPlayerSongs(validSongs, adjustedIndex);
         setTimeout(() => setIsPlaying(true), 100);
       } catch (error) {
@@ -329,46 +307,33 @@ export default function Playlists() {
     <div className="playlists w-full h-full flex flex-col items-center justify-start overflow-x-hidden pb-20">
       {!showDetailView ? (
         <>
-          {/* Header Section */}
+          {/* Header Section (unchanged) */}
           <div className="head w-full max-w-[1600px] px-4 md:px-6 lg:px-8 pt-6 pb-4">
+            {/* ... (header content – same as before) ... */}
             <div className="flex flex-col gap-4">
-              {/* Top Bar */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                {/* Search */}
-                <div className="relative flex items-center w-full md:w-auto">
-                  <button
-                    className="search flex items-center justify-center border border-white/20 bg-white/10 
-                    backdrop-blur-xl w-[40px] h-[40px] rounded-full hover:bg-white/20 transition-all 
-                    shadow-lg hover:shadow-emerald-500/20"
-                    onClick={() => setShowInput((v) => !v)}
-                  >
-                    <FaSearch className="text-white text-base" />
-                  </button>
+                <div className="relative flex items-center w-full md:w-80">
+                  <FaSearch className="absolute left-4 text-white/50 text-sm" />
                   <input
                     type="text"
-                    className={`searchInput ml-3 px-4 py-2.5 bg-white/10 border border-white/20 text-white 
-                    outline-none rounded-full font-medium text-sm transition-all duration-300 ease-in-out
-                    backdrop-blur-xl placeholder:text-white/50 focus:bg-white/15 focus:border-emerald-400/50
-                    ${showInput ? 'max-w-[280px] opacity-100 w-[280px] scale-x-100' : 'max-w-0 opacity-0 w-0 scale-x-0 pointer-events-none'}`}
-                    autoFocus={showInput}
                     value={query}
                     onChange={e => handleSearch(e.target.value)}
                     placeholder="Search playlists..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-white/10 border border-white/20 text-white 
+                    outline-none rounded-full font-medium text-sm backdrop-blur-xl 
+                    placeholder:text-white/50 focus:bg-white/15 focus:border-emerald-400/50 transition-all"
                   />
-                  {showInput && results.length > 0 && (
-                    <div className="absolute left-0 top-14 w-full max-w-[320px] bg-gradient-to-b from-emerald-600 
+                  {query && results.length > 0 && (
+                    <div className="absolute left-0 top-12 w-full bg-gradient-to-b from-emerald-600 
                     to-emerald-700 rounded-2xl shadow-2xl z-50 overflow-hidden border border-white/10 backdrop-blur-xl">
-                      {results.map((song, i) => (
+                      {results.slice(0, 5).map((song, i) => (
                         <div
-                          key={song.id ? `search-${song.id}` : `search-result-${i}`}
+                          key={song.id || i}
                           className="px-4 py-3 text-white hover:bg-white/10 cursor-pointer text-sm 
                           flex items-center gap-3 transition-all"
-                          onClick={() => {
-                            setShowInput(false);
-                            setQuery(song.name);
-                          }}
+                          onClick={() => setQuery(song.name)}
                         >
-                          <img src={song.cover} alt={song.name} className="w-10 h-10 rounded-lg object-cover shadow-md" />
+                          <img src={song.cover} alt={song.name} className="w-8 h-8 rounded object-cover" />
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold truncate">{song.name}</p>
                             <p className="text-white/70 text-xs truncate">{song.artist}</p>
@@ -379,7 +344,6 @@ export default function Playlists() {
                   )}
                 </div>
 
-                {/* TinyPlayer - Desktop */}
                 <div className="hidden md:block">
                   <TinyPlayer
                     song={currentSong}
@@ -391,83 +355,43 @@ export default function Playlists() {
                     onMuteToggle={toggleMute}
                   />
                 </div>
-
-                {/* Filter Tabs */}
-                <div className="optionsTab relative flex items-center gap-1 bg-white/10 rounded-full 
-                px-1.5 py-1.5 border border-white/20 backdrop-blur-xl shadow-lg w-full md:w-auto">
-                  <div
-                    className="absolute top-1.5 h-[34px] rounded-full bg-gradient-to-r from-emerald-500 
-                    to-emerald-600 shadow-lg transition-all duration-300 ease-out"
-                    style={{
-                      width: activeFilter === 'Albums' ? '90px' : '90px',
-                      transform: activeFilter === 'Albums' ? 'translateX(6px)' : 'translateX(102px)',
-                    }}
-                  />
-                  <button
-                    className={`relative py-2 px-6 rounded-full text-sm font-medium transition-all 
-                    z-10 ${activeFilter === 'Albums' ? 'text-white' : 'text-white/70 hover:text-white'}`}
-                    onClick={() => setActiveFilter('Albums')}
-                  >
-                    Albums
-                  </button>
-                  <button
-                    className={`relative py-2 px-6 rounded-full text-sm font-medium transition-all 
-                    z-10 ${activeFilter === 'Songs' ? 'text-white' : 'text-white/70 hover:text-white'}`}
-                    onClick={() => setActiveFilter('Songs')}
-                  >
-                    Songs
-                  </button>
-                  <div className="relative z-10">
-                    <button
-                      className="px-4 py-2 rounded-full text-sm font-medium text-white bg-white/10 
-                      border border-white/20 flex items-center gap-2 hover:bg-white/20 transition-all ml-2"
-                      onClick={e => {
-                        e.preventDefault();
-                        setShowGenres(g => !g);
-                      }}
-                    >
-                      {selectedGenre || 'Genres'}
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {showGenres && (
-                      <div className="absolute right-0 top-12 min-w-[140px] bg-gradient-to-b from-emerald-600 
-                      to-emerald-700 rounded-2xl shadow-2xl z-50 backdrop-blur-xl border border-white/10 py-2">
-                        {['Pop', 'Rock', 'Hip-Hop', 'Jazz', 'Electronic', 'Classical'].map(genre => (
-                          <div
-                            key={`genre-${genre}`}
-                            className="px-4 py-2.5 text-sm font-medium text-white cursor-pointer 
-                            hover:bg-white/20 transition-all"
-                            onClick={() => {
-                              setSelectedGenre(genre);
-                              setShowGenres(false);
-                            }}
-                          >
-                            {genre}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
 
-              {/* Page Title with Action Buttons */}
               <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <h1 className="text-white text-4xl md:text-5xl font-bold tracking-tight">
-                    Your Playlists
-                  </h1>
+                  <h1 className="text-white text-4xl md:text-5xl font-bold tracking-tight">Your Playlists</h1>
                   <p className="text-white/60 text-sm md:text-base mt-2">
                     {userPlaylists.length} {userPlaylists.length === 1 ? 'playlist' : 'playlists'} • 
                     {userPlaylists.reduce((acc, p) => acc + p.songCount, 0)} songs
                   </p>
                 </div>
 
-                {/* Combined Action Buttons with Dropdown */}
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Create Playlist button */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center bg-white/10 backdrop-blur-xl rounded-full p-1 border border-white/20">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+                        viewMode === 'grid' 
+                          ? 'bg-emerald-500 text-white shadow-lg' 
+                          : 'text-white/60 hover:text-white hover:bg-white/10'
+                      }`}
+                      title="Grid view"
+                    >
+                      <FontAwesomeIcon icon={faThLarge} className="text-sm" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+                        viewMode === 'list' 
+                          ? 'bg-emerald-500 text-white shadow-lg' 
+                          : 'text-white/60 hover:text-white hover:bg-white/10'
+                      }`}
+                      title="List view"
+                    >
+                      <FontAwesomeIcon icon={faList} className="text-sm" />
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => setShowCreateModal(true)}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 
@@ -477,7 +401,6 @@ export default function Playlists() {
                     <FaPlus /> Create
                   </button>
 
-                  {/* Import Dropdown */}
                   <div className="relative">
                     <button
                       onClick={() => setShowImportDropdown(!showImportDropdown)}
@@ -523,7 +446,6 @@ export default function Playlists() {
                 </div>
               </div>
 
-              {/* Import Error Message */}
               {importError && (
                 <div className="mt-3 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
                   {importError}
@@ -532,7 +454,7 @@ export default function Playlists() {
             </div>
           </div>
 
-          {/* Playlists Grid */}
+          {/* Playlists Grid/List (unchanged) */}
           <div className="w-full max-w-[1600px] px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
             {userPlaylists.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-96 text-center">
@@ -542,7 +464,7 @@ export default function Playlists() {
                   Create your first playlist or import local music to get started.
                 </p>
               </div>
-            ) : (
+            ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6 pb-8">
                 {userPlaylists.map((playlist) => (
                   <div 
@@ -551,7 +473,6 @@ export default function Playlists() {
                     rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer 
                     border border-white/10 hover:border-emerald-400/30 hover:scale-[1.02] overflow-hidden"
                   >
-                    {/* Playlist Cover */}
                     <div className="aspect-square bg-gradient-to-br from-purple-500/40 to-indigo-600/40 
                     rounded-t-2xl flex items-center justify-center overflow-hidden relative">
                       <img 
@@ -566,16 +487,12 @@ export default function Playlists() {
                         </div>
                       )}
                     </div>
-                    
-                    {/* Info */}
                     <div className="p-4">
                       <h3 className="text-white font-bold text-base mb-1 truncate">{playlist.name}</h3>
                       <p className="text-white/60 text-xs mb-1 truncate">{playlist.description}</p>
                       <p className="text-white/50 text-xs mb-3">
                         {playlist.songCount} songs • {playlist.duration}
                       </p>
-
-                      {/* Play Button */}
                       <button 
                         className="w-11 h-11 flex items-center justify-center rounded-full bg-gradient-to-r 
                         from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
@@ -586,8 +503,6 @@ export default function Playlists() {
                         <FaPlay className="text-white text-sm ml-0.5" />
                       </button>
                     </div>
-
-                    {/* Remove Button (for custom/imported playlists) */}
                     {(playlist.isCustom || playlist.isLocal || playlist.isYouTube) && (
                       <button
                         onClick={(e) => {
@@ -606,10 +521,72 @@ export default function Playlists() {
                         <FaTimes className="text-white text-sm" />
                       </button>
                     )}
-
-                    {/* Hover Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent 
                     opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 pb-8">
+                {userPlaylists.map((playlist) => (
+                  <div
+                    key={playlist.id}
+                    className="group relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 
+                    hover:border-emerald-400/30 transition-all duration-300 cursor-pointer overflow-hidden"
+                    onClick={() => handlePlaylistPlay(playlist)}
+                  >
+                    <div className="flex items-center p-4 gap-4">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-purple-500/40 to-indigo-600/40">
+                        <img 
+                          src={playlist.cover} 
+                          alt={playlist.name} 
+                          className="w-full h-full object-cover" 
+                          onError={(e) => { e.target.src = '/default-cover.png'; }}
+                        />
+                        {playlist.isYouTube && (
+                          <div className="absolute top-2 left-2 bg-red-600/80 rounded-full p-1">
+                            <FaYoutube className="text-white text-xs" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-white font-bold text-lg truncate">{playlist.name}</h3>
+                        <p className="text-white/60 text-sm truncate">{playlist.description}</p>
+                        <p className="text-white/50 text-xs mt-1">
+                          {playlist.songCount} songs • {playlist.duration}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          className="w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-r 
+                          from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
+                          transition-all shadow-lg hover:shadow-emerald-500/50 transform hover:scale-110"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlaylistPlay(playlist);
+                          }}
+                        >
+                          <FaPlay className="text-white text-sm ml-0.5" />
+                        </button>
+                        {(playlist.isCustom || playlist.isLocal || playlist.isYouTube) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (playlist.isLocal) {
+                                handleRemoveLocalFolder(playlist.folderName || playlist.name);
+                              } else {
+                                handleRemovePlaylist(playlist.id);
+                              }
+                            }}
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-red-500/80 
+                            hover:bg-red-600 transition-all shadow-lg opacity-70 hover:opacity-100"
+                            title="Delete playlist"
+                          >
+                            <FaTimes className="text-white text-sm" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -617,140 +594,183 @@ export default function Playlists() {
           </div>
         </>
       ) : (
-        /* Detail View - Playlist Songs List */
-        <div className="detailView w-full h-full flex flex-col">
-          <div className="detailHeader w-full p-4 md:p-6 border-b border-white/10 backdrop-blur-xl bg-black/40">
-            <button 
-              className="w-11 h-11 flex items-center justify-center rounded-full bg-white/10 
-              backdrop-blur-xl hover:bg-white/20 transition-all border border-white/20 
-              hover:border-white/30 shadow-lg"
-              onClick={handleBackFromDetail}
-            >
-              <FontAwesomeIcon icon={faArrowLeft} className="text-white text-lg" />
-            </button>
-          </div>
-
-          <div className="playlistDetails w-full px-4 md:px-8 py-6 flex flex-col md:flex-row items-start md:items-center gap-6 
-          border-b border-white/10 bg-gradient-to-b from-black/60 to-transparent">
-            <img 
-              src={selectedPlaylist?.cover} 
-              alt={selectedPlaylist?.name} 
-              className="w-48 h-48 md:w-56 md:h-56 rounded-3xl object-cover shadow-2xl 
-              border-4 border-white/10"
-              onError={(e) => { e.target.src = '/default-cover.png'; }}
-            />
-            <div className="flex flex-col justify-center">
-              <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-2">Playlist</p>
-              <h1 className="text-white text-3xl md:text-5xl font-bold mb-3">{selectedPlaylist?.name}</h1>
-              <p className="text-white/80 text-base mb-2">{selectedPlaylist?.description}</p>
-              <p className="text-white/60 text-sm">{selectedPlaylist?.songCount} songs • {selectedPlaylist?.duration}</p>
-              
-              <button 
-                className="mt-4 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 
-                to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-full 
-                font-semibold transition-all shadow-lg hover:shadow-emerald-500/50 w-fit"
-                onClick={handlePlayPlaylist}
-                disabled={!selectedPlaylist?.songs || selectedPlaylist.songs.length === 0}
+        /* Detail View - Playlist Songs List (Redesigned to match HomeOnline) */
+        <div className="detailView w-full h-full flex flex-col overflow-hidden">
+          {/* Full-screen gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/90 via-slate-900 to-black" />
+          
+          {/* Sticky Glass Header */}
+          <div className="sticky top-0 z-20 w-full px-4 md:px-6 py-3 backdrop-blur-2xl bg-black/30 border-b border-white/10">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={handleBackFromDetail}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 
+                backdrop-blur-xl hover:bg-white/20 transition-all border border-white/20 
+                hover:border-white/30 shadow-lg hover:scale-105 active:scale-95"
               >
-                <FaPlay className="text-white" /> Play Playlist
+                <FontAwesomeIcon icon={faChevronLeft} className="text-white text-base" />
               </button>
+              <div className="flex items-center gap-2">
+                <button className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all">
+                  <FaHeart className="text-white/80 hover:text-red-500 text-base" />
+                </button>
+                <button className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all">
+                  <FontAwesomeIcon icon={faEllipsisH} className="text-white/80 text-base" />
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="songsList flex-1 px-4 md:px-8 py-6 overflow-y-auto">
-            {selectedPlaylist?.songs && selectedPlaylist.songs.length > 0 ? (
-              <div className="max-w-[1400px] mx-auto">
-                <h2 className="text-white text-xl font-bold mb-4 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-emerald-500 rounded-full"></span>
-                  Tracks
-                </h2>
-                <div className="flex flex-col gap-1">
-                  {selectedPlaylist.songs.map((song, index) => {
-                    const songId = song.id || `song-${index}`;
-                    const isFavorite = mockSongStates[songId]?.favorite || false;
-                    const isLiked = mockSongStates[songId]?.liked || false;
-                    
-                    return (
-                      <React.Fragment key={songId}>
-                        <div className="block md:hidden">
-                          <SongTile 
-                            song={song} 
-                            index={index} 
-                            onPlay={() => handlePlaySongFromPlaylist(index)} 
-                          />
-                        </div>
+          {/* Hero Section */}
+          <div className="relative z-10 px-4 md:px-6 py-6 md:py-8 flex flex-col md:flex-row items-start md:items-end gap-6">
+            <div className="relative group flex-shrink-0">
+              <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-3xl blur-2xl opacity-40 group-hover:opacity-60 transition" />
+              <div className="relative">
+                <img
+                  src={selectedPlaylist?.cover || '/default-cover.png'}
+                  alt={selectedPlaylist?.name}
+                  className="w-36 h-36 md:w-48 md:h-48 rounded-2xl object-cover shadow-2xl border-2 border-white/20 backdrop-blur-sm"
+                  onError={(e) => e.target.src = '/default-cover.png'}
+                />
+                {selectedPlaylist?.isYouTube && (
+                  <div className="absolute -top-2 -right-2 bg-red-600/90 backdrop-blur-sm rounded-full p-1.5 shadow-xl">
+                    <FaYoutube className="text-white text-xs" />
+                  </div>
+                )}
+              </div>
+            </div>
 
-                        <div 
-                          className="hidden md:flex songItem items-center gap-4 px-4 py-3 rounded-xl 
-                          bg-white/5 hover:bg-white/10 transition-all cursor-pointer group border border-transparent 
-                          hover:border-white/10" 
-                          onClick={() => handlePlaySongFromPlaylist(index)}
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
+                <span className="w-1 h-3 bg-emerald-500 rounded-full" />
+                <span>{selectedPlaylist?.isYouTube ? 'YOUTUBE PLAYLIST' : 'YOUR PLAYLIST'}</span>
+              </div>
+              
+              <h1 className="text-white text-4xl md:text-6xl font-black tracking-tight leading-tight break-words">
+                {selectedPlaylist?.name}
+              </h1>
+              
+              <p className="text-white/70 text-base md:text-lg max-w-2xl">
+                {selectedPlaylist?.description}
+              </p>
+              
+              <div className="flex items-center gap-4 text-sm text-white/60">
+                <span className="flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    <path d="M12 6v6l4 2"/>
+                  </svg>
+                  {selectedPlaylist?.songCount} songs
+                </span>
+                <span className="flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
+                    <path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                  </svg>
+                  {selectedPlaylist?.duration}
+                </span>
+              </div>
+
+              {/* Icon-only action buttons */}
+              <div className="flex items-center gap-4 pt-3">
+                <button
+                  onClick={handlePlayPlaylist}
+                  className="w-14 h-14 flex items-center justify-center rounded-full bg-gradient-to-r 
+                  from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
+                  text-white shadow-xl hover:shadow-emerald-500/50 transform hover:scale-105 transition-all"
+                  aria-label="Play all songs"
+                >
+                  <FaPlay className="text-white text-xl ml-1" />
+                </button>
+                <button 
+                  className="w-30 h-10 flex items-center pl-4 justify-start rounded-full bg-white/10 
+                  backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-all 
+                  text-white/80 hover:text-white gap-3"
+                  aria-label="Shuffle"
+                >
+                  <FaRandom className="text-sm" />
+                  Shuffle
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tracklist */}
+          <div className="relative z-10 flex-1 px-4 md:px-6 py-4 overflow-y-auto">
+            <div className="w-full max-w-5xl mx-auto">
+              <h2 className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">
+                TRACKS · {selectedPlaylist?.songs?.length || 0}
+              </h2>
+              
+              <div className="flex flex-col gap-1">
+                {selectedPlaylist?.songs?.map((song, index) => {
+                  const songId = song.id || `song-${index}`;
+                  const isFavorite = mockSongStates[songId]?.favorite || false;
+                  const isLiked = mockSongStates[songId]?.liked || false;
+
+                  return (
+                    <div
+                      key={songId}
+                      className="group flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 
+                      hover:bg-white/10 transition-all cursor-pointer border border-transparent 
+                      hover:border-white/10 backdrop-blur-sm"
+                      onClick={() => handlePlaySongFromPlaylist(index)}
+                    >
+                      <span className="text-white/40 group-hover:text-white/60 text-xs w-6 text-center font-mono">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      
+                      <div className="relative w-9 h-9 rounded-md overflow-hidden shadow-md flex-shrink-0">
+                        <img src={song.cover} alt={song.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate group-hover:text-emerald-400 transition-colors">
+                          {song.name}
+                        </p>
+                        <p className="text-white/50 text-xs truncate">{song.artist}</p>
+                      </div>
+
+                      <span className="text-white/40 text-xs font-mono hidden md:block">
+                        {song.duration}
+                      </span>
+
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateMockSongState(songId, { favorite: !isFavorite });
+                          }}
                         >
-                          <span className="text-white/40 group-hover:text-white/60 text-sm w-10 text-center font-medium">
-                            {index + 1}
-                          </span>
-                          <img 
-                            src={song.cover} 
-                            alt={song.name} 
-                            className="w-12 h-12 rounded-lg object-cover shadow-md"
-                            onError={(e) => { e.target.src = '/default-cover.png'; }}
-                          />
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <span className="text-white font-semibold truncate">{song.name}</span>
-                            <span className="text-white/60 text-sm truncate">{song.artist}</span>
-                          </div>
-                          <span className="text-white/40 text-sm">{song.duration}</span>
-                          
-                          <div className="flex items-center gap-1">
-                            <button 
-                              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
-                              transition-all"
-                              title="Add to Favorites"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateMockSongState(songId, { favorite: !isFavorite });
-                              }}
-                            >
-                              <FaStar className={`text-sm ${isFavorite ? 'text-yellow-400' : 'text-white/40 group-hover:text-white/60'}`} />
-                            </button>
-                            
-                            <button 
-                              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 
-                              transition-all"
-                              title="Like Song"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateMockSongState(songId, { liked: !isLiked });
-                              }}
-                            >
-                              <FaHeart className={`text-sm ${isLiked ? 'text-red-500' : 'text-white/40 group-hover:text-white/60'}`} />
-                            </button>
-                            
-                            <button 
-                              className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-500 
-                              hover:bg-emerald-600 transition-all ml-2 shadow-lg hover:shadow-emerald-500/50 
-                              transform hover:scale-110"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePlaySongFromPlaylist(index);
-                              }}
-                            >
-                              <FaPlay className="text-white text-xs ml-0.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
+                          <FaStar className={`text-xs ${isFavorite ? 'text-yellow-400' : 'text-white/40'}`} />
+                        </button>
+                        <button
+                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateMockSongState(songId, { liked: !isLiked });
+                          }}
+                        >
+                          <FaHeart className={`text-xs ${isLiked ? 'text-red-500' : 'text-white/40'}`} />
+                        </button>
+                        <button
+                          className="w-7 h-7 flex items-center justify-center rounded-full bg-emerald-500/80 
+                          hover:bg-emerald-500 transition-all shadow-md"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlaySongFromPlaylist(index);
+                          }}
+                        >
+                          <FaPlay className="text-white text-[10px] ml-0.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-80 text-center">
-                <FaMusic className="text-white/40 text-5xl mb-3" />
-                <h3 className="text-white text-xl font-bold mb-2">No songs yet</h3>
-                <p className="text-white/60">Add songs to this playlist to get started</p>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}

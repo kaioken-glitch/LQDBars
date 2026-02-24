@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { FaSearch, FaStar, FaHeart } from 'react-icons/fa';
 import { FaGripVertical } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
-import SongTile from './SongTile';
+import SongTile from '../components/SongTile';
 
 export default function Home() {
   const {

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import Main from './components/Main';
-import Home from './components/Home';
-import HomeOnline from './components/HomeOnline';
-import Library from './components/Library';
-import Playlists from './components/Playlists';
-import Favorites from './components/Favorites';
-import Recent from './components/Recent';
-import Settings from './components/Settings';
+import Main from './pages/Main';
+import Home from './pages/Home';
+import HomeOnline from './pages/HomeOnline';
+import Library from './pages/Library';
+import Playlists from './pages/Playlists';
+import Favorites from './pages/Favorites';
+import Recent from './pages/Recent';
+import Settings from './pages/Settings';
 import { PlayerProvider } from './context/PlayerContext';
 import MobilePlayer from './components/MobilePlayer';
 import BottomNav from './components/BottomNav';
@@ -77,7 +77,7 @@ function App() {
   <SplashScreen onComplete={() => setShowSplash(false)} />
 ) : (
   <PlayerProvider>
-    <div className="app flex flex-row items-stretch h-screen">
+    <div className="app flex flex-row items-stretch w-screen h-screen">
       {/* Sidebar visible on medium+ screens */}
       <div className="hidden md:flex">
         <Sidebar active={active} setActive={setActive} />
