@@ -41,26 +41,40 @@ export default function HomeOnline() {
   } = usePlayer();
 
   const playlists = useMemo(() => [
-    { id: 'trending-hip-hop', name: 'Trending Hip-Hop', description: '50 trending tracks', cover: 'https://placehold.co/300x200/FF6B6B/FFFFFF?text=Hip-Hop', songs: [], type: 'trending' },
-    { id: 'indie-discoveries', name: 'Indie Discoveries', description: '30 fresh finds', cover: 'https://placehold.co/300x200/4ECDC4/FFFFFF?text=Indie', songs: [], type: 'discovery' },
-    { id: 'chill-vibes', name: 'Chill Vibes', description: '40 relaxing songs', cover: 'https://placehold.co/300x200/45B7D1/FFFFFF?text=Chill', songs: [], type: 'mood' }
+    { id: 'indie-folk-mix', name: 'Indie Folk Mix', description: 'Soft acoustic vibes', cover: 'https://placehold.co/300x200/8B4513/FFFFFF?text=Indie+Folk', songs: [], type: 'indie' },
+    { id: 'underground-hiphop', name: 'Underground Hip-Hop', description: 'Raw lyricism & beats', cover: 'https://placehold.co/300x200/2F4F4F/FFFFFF?text=Underground+Hip-Hop', songs: [], type: 'hiphop' },
+    { id: 'edm-bangers', name: 'EDM Bangers', description: 'Festival anthems', cover: 'https://placehold.co/300x200/00CED1/FFFFFF?text=EDM+Bangers', songs: [], type: 'edm' },
+    { id: '8-bit-vibes', name: '8‑Bit Vibes', description: 'Chiptune & retro', cover: 'https://placehold.co/300x200/FFD700/000000?text=8-Bit+Vibes', songs: [], type: '8bit' },
   ], []);
-
+  
   const albums = useMemo(() => [
-    { id: 'album-damn', name: 'DAMN.', artist: 'Kendrick Lamar', cover: 'https://placehold.co/300x200/000000/FFFFFF?text=DAMN', songs: [], type: 'album' },
-    { id: 'album-blonde', name: 'Blonde', artist: 'Frank Ocean', cover: 'https://placehold.co/300x200/FFA500/FFFFFF?text=Blonde', songs: [], type: 'album' },
-    { id: 'album-after-hours', name: 'After Hours', artist: 'The Weeknd', cover: 'https://placehold.co/300x200/800080/FFFFFF?text=After+Hours', songs: [], type: 'album' }
+    { id: 'album-damn', name: 'DAMN.', artist: 'Kendrick Lamar', cover: 'https://placehold.co/300x200/800000/FFFFFF?text=DAMN.', songs: [], type: 'album' },
+    { id: 'album-brent', name: 'Wasteland', artist: 'Brent Faiyaz', cover: 'https://placehold.co/300x200/228B22/FFFFFF?text=Wasteland', songs: [], type: 'album' },
+    { id: 'album-future', name: 'I NEVER LIKED YOU', artist: 'Future', cover: 'https://placehold.co/300x200/000080/FFFFFF?text=I+NEVER+LIKED+YOU', songs: [], type: 'album' },
+    { id: 'album-don', name: 'Life of a DON', artist: 'Don Toliver', cover: 'https://placehold.co/300x200/FF8C00/FFFFFF?text=Life+of+a+DON', songs: [], type: 'album' },
+    { id: 'album-living-tombstone', name: 'The Living Tombstone', artist: 'The Living Tombstone', cover: 'https://placehold.co/300x200/4B0082/FFFFFF?text=TLT', songs: [], type: 'album' },
+    { id: 'album-nina', name: 'I Put a Spell on You', artist: 'Nina Simone', cover: 'https://placehold.co/300x200/000000/FFFFFF?text=Nina+Simone', songs: [], type: 'jazz' },
+    { id: 'album-etta', name: 'At Last!', artist: 'Etta James', cover: 'https://placehold.co/300x200/708090/FFFFFF?text=At+Last', songs: [], type: 'blues' },
   ], []);
-
+  
   const suggestions = useMemo(() => [
-    { id: 'suggestion-blinding-lights', name: 'Blinding Lights', artist: 'The Weeknd', cover: 'https://placehold.co/300x200/FF0000/FFFFFF?text=Blinding', type: 'trending' },
-    { id: 'suggestion-good-4-u', name: 'good 4 u', artist: 'Olivia Rodrigo', cover: 'https://placehold.co/300x200/9370DB/FFFFFF?text=good+4+u', type: 'popular' },
-    { id: 'suggestion-stay', name: 'Stay', artist: 'The Kid LAROI', cover: 'https://placehold.co/300x200/32CD32/FFFFFF?text=Stay', type: 'trending' }
+    { id: 'suggestion-luther', name: 'luther', artist: 'Kendrick Lamar', cover: 'https://placehold.co/300x200/663399/FFFFFF?text=luther', type: 'hiphop' },
+    { id: 'suggestion-skyami', name: 'SKYAMI', artist: 'Don Toliver', cover: 'https://placehold.co/300x200/FF6347/FFFFFF?text=SKYAMI', type: 'hiphop' },
+    { id: 'suggestion-wait-for-u', name: 'Wait For U', artist: 'Future ft. Drake, Tems', cover: 'https://placehold.co/300x200/4682B4/FFFFFF?text=Wait+For+U', type: 'hiphop' },
+    { id: 'suggestion-gravity', name: 'Gravity', artist: 'Brent Faiyaz', cover: 'https://placehold.co/300x200/DAA520/FFFFFF?text=Gravity', type: 'r&b' },
+    { id: 'suggestion-minecraft-calming', name: 'Minecraft Calming', artist: 'C418', cover: 'https://placehold.co/300x200/228B22/FFFFFF?text=Minecraft', type: '8bit' },
+    { id: 'suggestion-pokemon-center', name: 'Pokémon Center', artist: 'Junichi Masuda', cover: 'https://placehold.co/300x200/FF1493/000000?text=Pokémon', type: '8bit' },
+    { id: 'suggestion-bad-guy', name: 'Bad Guy', artist: 'The Living Tombstone', cover: 'https://placehold.co/300x200/DC143C/FFFFFF?text=Bad+Guy', type: 'electronic' },
+    { id: 'suggestion-stressed-out', name: 'Stressed Out', artist: 'Twenty One Pilots', cover: 'https://placehold.co/300x200/696969/FFFFFF?text=Stressed+Out', type: 'indie' },
+    { id: 'suggestion-feeling-good', name: 'Feeling Good', artist: 'Nina Simone', cover: 'https://placehold.co/300x200/2E8B57/FFFFFF?text=Feeling+Good', type: 'jazz' },
+    { id: 'suggestion-at-last', name: 'At Last', artist: 'Etta James', cover: 'https://placehold.co/300x200/CD5C5C/FFFFFF?text=At+Last', type: 'blues' },
   ], []);
-
+  
   const newReleases = useMemo(() => [
-    { id: 'new-unholy', name: 'Unholy', artist: 'Sam Smith', cover: 'https://placehold.co/300x200/000000/FFFFFF?text=Unholy', type: 'new-release' },
-    { id: 'new-anti-hero', name: 'Anti-Hero', artist: 'Taylor Swift', cover: 'https://placehold.co/300x200/4B0082/FFFFFF?text=Anti-Hero', type: 'new-release' }
+    { id: 'new-chromakopia', name: 'CHROMAKOPIA', artist: 'Tyler, The Creator', cover: 'https://placehold.co/300x200/FFD700/000000?text=CHROMAKOPIA', type: 'new-release' },
+    { id: 'new-bando-stone', name: 'Bando Stone', artist: 'Childish Gambino', cover: 'https://placehold.co/300x200/FF4500/FFFFFF?text=Bando+Stone', type: 'new-release' },
+    { id: 'new-we-dont-trust-you', name: 'We Don’t Trust You', artist: 'Future & Metro Boomin', cover: 'https://placehold.co/300x200/8A2BE2/FFFFFF?text=We+Don’t+Trust+You', type: 'new-release' },
+    { id: 'new-vultures', name: 'Vultures 2', artist: '¥$', cover: 'https://placehold.co/300x200/2F4F4F/FFFFFF?text=Vultures+2', type: 'new-release' },
   ], []);
 
   useEffect(() => {
