@@ -138,37 +138,37 @@ export default function Recent() {
               </p>
             </div>
             {recentSongs.length > 0 && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center bg-white/10 backdrop-blur-xl rounded-full p-1 border border-white/20">
                   <button
                     onClick={() => setSortBy('recent')}
-                    className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    className={`flex items-center justify-center gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium transition-all ${
                       sortBy === 'recent'
                         ? 'bg-emerald-500 text-white shadow-lg'
                         : 'text-white/60 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <FaSortAmountDown className="text-xs" />
-                    Recent
+                    <span>Recent</span>
                   </button>
                   <button
                     onClick={() => setSortBy('mostPlayed')}
-                    className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    className={`flex items-center justify-center gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium transition-all ${
                       sortBy === 'mostPlayed'
                         ? 'bg-emerald-500 text-white shadow-lg'
                         : 'text-white/60 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <FaSortAmountUp className="text-xs" />
-                    Most Played
+                    <span>Most Played</span>
                   </button>
                 </div>
                 <button
                   onClick={handleClearHistory}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium border border-red-500/30 transition-all"
+                  className="flex items-center gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs md:text-sm font-medium border border-red-500/30 transition-all"
                 >
                   <FaTrash className="text-xs" />
-                  Clear
+                  <span>Clear</span>
                 </button>
               </div>
             )}
