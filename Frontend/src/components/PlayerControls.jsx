@@ -30,8 +30,7 @@ export default function PlayerControls() {
 
   const [isDragging, setIsDragging] = useState(false);
   const [dominantColor, setDominantColor] = useState('rgba(16, 185, 129, 1)');
-  const [isExpandedMobile, setIsExpandedMobile] = useState(false); // local mobile expanded state
-  const [showQueue, setShowQueue] = useState(false); // queue panel in desktop expanded view
+  const [showQueue, setShowQueue] = useState(false);
   const progressBarRef = useRef(null);
   const colorCacheRef = useRef({});
 
@@ -160,9 +159,10 @@ export default function PlayerControls() {
 
   return (
     <>
-      {/* ---------- DESKTOP COMPACT BAR ---------- */}
+      {/* ---------- DESKTOP COMPACT BAR (visible when not expanded) ---------- */}
       {!showBackgroundDetail && (
         <div className="hidden md:block fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-2xl border-t border-white/5 z-40">
+          {/* ... desktop compact bar (unchanged) ... */}
           <div 
             ref={progressBarRef}
             className="h-1 bg-white/10 cursor-pointer group relative hover:h-1.5 transition-all"
@@ -180,7 +180,6 @@ export default function PlayerControls() {
           <div className="px-6 py-4">
             <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-4">
               
-              {/* Left side: cover + info - clickable to expand */}
               <div className="flex items-center gap-4 flex-1 min-w-0 max-w-sm">
                 <div
                   className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden shadow-xl cursor-pointer"
@@ -198,7 +197,6 @@ export default function PlayerControls() {
                 </div>
               </div>
 
-              {/* Center controls (unchanged) */}
               <div className="flex flex-col items-center gap-2 flex-shrink-0">
                 <div className="flex items-center gap-4">
                   <button onClick={toggleShuffle} className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${shuffle ? 'text-white' : 'text-white/40 hover:text-white/80'}`}>
@@ -225,7 +223,6 @@ export default function PlayerControls() {
                 </div>
               </div>
 
-              {/* Right side (volume and queue info) */}
               <div className="flex items-center gap-3 flex-1 justify-end max-w-sm">
                 <button onClick={toggleMute} className="w-8 h-8 flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all">
                   {isMuted ? <FaVolumeMute className="text-sm" /> : <FaVolumeUp className="text-sm" />}
@@ -259,7 +256,7 @@ export default function PlayerControls() {
       {/* ---------- DESKTOP EXPANDED VIEW ---------- */}
       {showBackgroundDetail && (
         <div className="hidden md:block fixed inset-0 z-50 overflow-hidden" style={{ background: `linear-gradient(to bottom, ${dominantColor} 0%, #000 70%)` }}>
-          {/* Top bar with collapse button and action icons */}
+          {/* ... (desktop expanded view unchanged) ... */}
           <div className="flex items-center justify-between px-8 py-4 bg-black/20 backdrop-blur-sm border-b border-white/10">
             <button
               onClick={() => setShowBackgroundDetail(false)}
@@ -271,7 +268,7 @@ export default function PlayerControls() {
               <button className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all">
                 <FaHeart className="text-white/80 hover:text-red-500 text-lg" />
               </button>
-              <button className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all">
+              <button onClick={() => setShowQueue(!showQueue)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all">
                 <FaList className="text-white/80 text-lg" />
               </button>
               <button className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all">
@@ -280,9 +277,7 @@ export default function PlayerControls() {
             </div>
           </div>
 
-          {/* Main content area: flexible row */}
           <div className="flex h-[calc(100%-80px)] px-8 py-6">
-            {/* Left side: cover and main controls */}
             <div className={`flex-1 flex flex-col items-center justify-center transition-all duration-300 ${showQueue ? 'mr-6' : ''}`}>
               <div className="relative group">
                 <div className="absolute -inset-4 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-3xl blur-3xl opacity-40 group-hover:opacity-60 transition" />
@@ -298,7 +293,6 @@ export default function PlayerControls() {
                 <p className="text-white/70 text-xl mb-6">{currentSong?.artist}</p>
               </div>
 
-              {/* Progress bar */}
               <div className="w-full max-w-md mb-6">
                 <div className="flex justify-between text-white/60 text-sm mb-2">
                   <span>{formatTime(currentTime)}</span>
@@ -309,7 +303,6 @@ export default function PlayerControls() {
                 </div>
               </div>
 
-              {/* Playback controls */}
               <div className="flex items-center gap-6">
                 <button onClick={toggleShuffle} className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${shuffle ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white'}`}>
                   <FaRandom className="text-xl" />
@@ -330,7 +323,6 @@ export default function PlayerControls() {
               </div>
             </div>
 
-            {/* Right side: queue panel (toggleable) */}
             {showQueue && (
               <div className="w-96 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-4 overflow-y-auto">
                 <div className="flex items-center justify-between mb-4">
@@ -359,41 +351,29 @@ export default function PlayerControls() {
               </div>
             )}
           </div>
-
-          {/* Toggle queue button (if queue hidden) */}
-          {!showQueue && (
-            <button
-              onClick={() => setShowQueue(true)}
-              className="absolute right-8 bottom-8 w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 hover:bg-white/20 transition-all flex items-center justify-center"
-            >
-              <FaList className="text-white text-lg" />
-            </button>
-          )}
         </div>
       )}
 
-      {/* ---------- MOBILE VIEWS (unchanged) ---------- */}
-      {/* Mobile - Minimized Player Bar */}
-      <div 
-        className={`md:hidden fixed left-0 right-0 z-40 transition-all duration-300 ${
-          isExpandedMobile ? 'pointer-events-none opacity-0' : 'pointer-events-auto opacity-100'
+      {/* ---------- MOBILE MINIMIZED BAR ---------- */}
+      <div className={`md:hidden fixed left-0 right-0 z-40 transition-all duration-300 ${
+          showBackgroundDetail ? 'pointer-events-none opacity-0' : 'pointer-events-auto opacity-100'
         }`}
         style={{ bottom: '70px' }}
       >
         <div className="bg-black/95 backdrop-blur-2xl border-t border-white/5 px-4 py-3"
-          onClick={() => setIsExpandedMobile(true)}
+          onClick={() => setShowBackgroundDetail(true)}
         >
           <div className="absolute top-0 left-0 right-0 h-1 bg-white/10">
             <div className="h-full bg-white transition-all" style={{ width: `${progressPercent}%` }} />
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Mobile cover – clickable to open global detail view (or local expanded) */}
+            {/* Mobile cover – now triggers global expanded view */}
             <div
               className="w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden shadow-lg cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                setShowBackgroundDetail(true); // use global detail for consistency
+                setShowBackgroundDetail(true);
               }}
             >
               <img src={currentSong?.cover || 'https://placehold.co/64x64?text=No+Cover'} alt={currentSong?.name} className="w-full h-full object-cover" />
@@ -418,106 +398,113 @@ export default function PlayerControls() {
         </div>
       </div>
 
-      {/* Mobile - Full Screen Expanded Player (using local state) */}
-      <div 
-        className={`md:hidden fixed inset-0 z-50 transition-all duration-500 ${
-          isExpandedMobile ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
-        }`}
-        style={{
-          background: `linear-gradient(to bottom, ${dominantColor} 0%, rgba(0, 0, 0, 0.95) 60%, rgba(0, 0, 0, 0.98) 100%)`
-        }}
-      >
-        {/* ... (keep existing mobile expanded player code) ... */}
-        <div className="h-full flex flex-col overflow-y-auto pb-safe">
-          <div className="flex items-center justify-between px-4 py-4 pt-safe">
-            <button 
-              onClick={() => setIsExpandedMobile(false)}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white active:scale-95 transition-transform"
-            >
-              <FaChevronDown className="text-lg" />
-            </button>
-            <span className="text-white/60 text-xs font-medium">Playing from Playlist</span>
-            <button className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white active:scale-95 transition-transform">
-              <FaEllipsisH className="text-base" />
-            </button>
-          </div>
-
-          <div className="flex-1 flex items-center justify-center px-6 py-8">
-            <div className="w-full max-w-[380px] aspect-square rounded-3xl overflow-hidden shadow-2xl">
-              <img src={currentSong?.cover || 'https://placehold.co/400x400?text=No+Cover'} alt={currentSong?.name} className="w-full h-full object-cover" />
-            </div>
-          </div>
-
-          <div className="px-6 pb-4">
-            <h2 className="text-white font-bold text-2xl mb-1 line-clamp-2">{currentSong?.name || 'Unknown Song'}</h2>
-            <p className="text-white/60 text-base truncate">{currentSong?.artist || 'Unknown Artist'}</p>
-          </div>
-
-          <div className="px-6 pb-2">
-            <div 
-              ref={progressBarRef}
-              className="relative h-1 bg-white/20 rounded-full cursor-pointer mb-2"
-              onClick={handleProgressBarClick}
-              onMouseDown={handleProgressBarMouseDown}
-            >
-              <div className="h-full bg-white rounded-full transition-all" style={{ width: `${progressPercent}%` }} />
-              <div 
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg"
-                style={{ left: `${progressPercent}%`, marginLeft: '-6px' }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs font-medium text-white/60">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-          </div>
-
-          <div className="px-6 py-6">
-            <div className="flex items-center justify-between mb-8">
-              <button onClick={toggleShuffle}
-                className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${
-                  shuffle ? 'bg-white/20 text-white' : 'text-white/60'
-                }`}
+      {/* ---------- MOBILE EXPANDED VIEW (uses same global state) ---------- */}
+      {showBackgroundDetail && (
+        <div className="md:hidden fixed inset-0 z-50 overflow-y-auto" style={{ background: `linear-gradient(to bottom, ${dominantColor} 0%, #000 90%)` }}>
+          <div className="h-full flex flex-col pb-safe">
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-4 py-4 pt-safe bg-black/20 backdrop-blur-sm border-b border-white/10">
+              <button
+                onClick={() => setShowBackgroundDetail(false)}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all"
               >
-                <FaRandom className="text-xl" />
+                <FaChevronDown className="text-white text-lg" />
               </button>
-
-              <button onClick={playPrev} className="w-14 h-14 flex items-center justify-center rounded-full text-white active:scale-95 transition-transform">
-                <FaStepBackward className="text-2xl" />
-              </button>
-
-              <button onClick={() => setIsPlaying(!isPlaying)}
-                className="w-20 h-20 flex items-center justify-center rounded-full bg-white text-black active:scale-95 transition-transform shadow-2xl"
-              >
-                {isPlaying ? <FaPause className="text-3xl ml-0.5" /> : <FaPlay className="text-3xl ml-2" />}
-              </button>
-
-              <button onClick={playNext} className="w-14 h-14 flex items-center justify-center rounded-full text-white active:scale-95 transition-transform">
-                <FaStepForward className="text-2xl" />
-              </button>
-
-              <button onClick={toggleRepeatMode}
-                className={`w-11 h-11 flex items-center justify-center rounded-full transition-all relative ${
-                  repeatMode !== 'off' ? 'bg-white/20 text-white' : 'text-white/60'
-                }`}
-              >
-                <FaRedoAlt className="text-xl" />
-                {repeatMode === 'one' && (
-                  <span className="absolute -top-1 -right-1 bg-white text-black text-[11px] font-bold rounded-full w-4 h-4 flex items-center justify-center">1</span>
-                )}
+              <span className="text-white/60 text-xs font-medium">Playing</span>
+              <button className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all">
+                <FaEllipsisH className="text-white/80 text-lg" />
               </button>
             </div>
 
-            <div className="flex items-center justify-between">
-              <button onClick={toggleMute} className="w-11 h-11 flex items-center justify-center rounded-full text-white/70 active:bg-white/10 transition-all">
-                {isMuted ? <FaVolumeMute className="text-xl" /> : <FaVolumeUp className="text-xl" />}
-              </button>
+            {/* Album art */}
+            <div className="flex-1 flex items-center justify-center px-6 py-4">
+              <div className="relative">
+                <div className="absolute -inset-2 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-3xl blur-2xl opacity-40" />
+                <img
+                  src={currentSong?.cover || '/default-cover.png'}
+                  alt={currentSong?.name}
+                  className="relative w-72 h-72 rounded-3xl object-cover shadow-2xl border-4 border-white/20"
+                />
+              </div>
+            </div>
 
-              <span className="text-white/40 text-sm font-medium">{currentIndex + 1} / {songs.length}</span>
+            {/* Song info */}
+            <div className="px-6 pb-2">
+              <h2 className="text-white text-2xl font-bold mb-1">{currentSong?.name}</h2>
+              <p className="text-white/60 text-base">{currentSong?.artist}</p>
+            </div>
+
+            {/* Progress bar */}
+            <div className="px-6 pb-4">
+              <div className="flex justify-between text-white/60 text-xs mb-2">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+              <div className="h-1.5 bg-white/20 rounded-full overflow-hidden cursor-pointer" onClick={handleProgressBarClick}>
+                <div className="h-full bg-white rounded-full transition-all" style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
+
+            {/* Playback controls */}
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <button onClick={toggleShuffle} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${shuffle ? 'bg-white/20 text-white' : 'text-white/60'}`}>
+                  <FaRandom className="text-lg" />
+                </button>
+                <button onClick={playPrev} className="w-12 h-12 flex items-center justify-center rounded-full text-white">
+                  <FaStepBackward className="text-xl" />
+                </button>
+                <button onClick={() => setIsPlaying(!isPlaying)} className="w-16 h-16 flex items-center justify-center rounded-full bg-white text-black shadow-2xl">
+                  {isPlaying ? <FaPause className="text-2xl" /> : <FaPlay className="text-2xl ml-1" />}
+                </button>
+                <button onClick={playNext} className="w-12 h-12 flex items-center justify-center rounded-full text-white">
+                  <FaStepForward className="text-xl" />
+                </button>
+                <button onClick={toggleRepeatMode} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all relative ${repeatMode !== 'off' ? 'bg-white/20 text-white' : 'text-white/60'}`}>
+                  <FaRedoAlt className="text-lg" />
+                  {repeatMode === 'one' && <span className="absolute -top-1 -right-1 bg-white text-black text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">1</span>}
+                </button>
+              </div>
+
+              {/* Extra row for volume / queue */}
+              <div className="flex items-center justify-between mt-6">
+                <button onClick={toggleMute} className="flex items-center gap-2 text-white/70">
+                  {isMuted ? <FaVolumeMute className="text-lg" /> : <FaVolumeUp className="text-lg" />}
+                  <span className="text-sm">{Math.round(volume * 100)}%</span>
+                </button>
+                <span className="text-white/40 text-sm">{currentIndex + 1} / {songs.length}</span>
+                <button onClick={() => setShowQueue(!showQueue)} className="text-white/70 hover:text-white">
+                  <FaList className="text-lg" />
+                </button>
+              </div>
+
+              {/* Queue panel (mobile) */}
+              {showQueue && (
+                <div className="mt-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-4 max-h-64 overflow-y-auto">
+                  <h3 className="text-white font-semibold mb-3">Queue</h3>
+                  <div className="space-y-2">
+                    {songs.map((song, idx) => (
+                      <div
+                        key={song.id}
+                        onClick={() => setCurrentIndex(idx)}
+                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                          idx === currentIndex ? 'bg-white/20' : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <img src={song.cover || '/default-cover.png'} alt={song.name} className="w-10 h-10 rounded object-cover" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{song.name}</p>
+                          <p className="text-white/60 text-xs truncate">{song.artist}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
