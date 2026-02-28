@@ -8,6 +8,7 @@ import SongTile from '../components/SongTile';
 import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
+import BackgroundPlayerDetail from '../components/BackgroundPlayerDetail';
 
 export default function HomeOnline() {
   const [showInput, setShowInput] = useState(false);
