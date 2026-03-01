@@ -1,45 +1,72 @@
-// src/utils/youtubePlaylist.js
-const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
+/**
+ * youtubePlaylist.js
+ *
+ * Fetches full YouTube playlist contents and enriches them with
+ * video durations via the YouTube Data API v3.
+ */
 
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
+const YT_BASE         = 'https://www.googleapis.com/youtube/v3';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   fetchYouTubePlaylist
+   Paginates through all items in a YouTube playlist.
+   Returns an array of lightweight video objects.
+───────────────────────────────────────────────────────────────────────────── */
 export async function fetchYouTubePlaylist(playlistId) {
-  const videos = [];
-  let nextPageToken = '';
+  if (!playlistId) throw new Error('fetchYouTubePlaylist: playlistId is required');
+
+  const videos        = [];
+  let   nextPageToken = null;
 
   do {
-    const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${YOUTUBE_API_KEY}${nextPageToken ? `&pageToken=${nextPageToken}` : ''}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to fetch playlist');
+    const url = new URL(`${YT_BASE}/playlistItems`);
+    url.searchParams.set('part',       'snippet');
+    url.searchParams.set('maxResults', '50');
+    url.searchParams.set('playlistId', playlistId);
+    url.searchParams.set('key',        YOUTUBE_API_KEY);
+    if (nextPageToken) url.searchParams.set('pageToken', nextPageToken);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `YouTube API ${res.status}`);
     }
 
-    const data = await response.json();
-    
-    const items = data.items.map(item => ({
-      id: item.snippet.resourceId.videoId,
-      title: item.snippet.title,
-      channel: item.snippet.videoOwnerChannelTitle || 'YouTube',
-      thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-      publishedAt: item.snippet.publishedAt,
-    }));
+    const data = await res.json();
+
+    const items = (data.items || [])
+      // Skip deleted / private videos (they appear with empty snippet entries)
+      .filter(item => item.snippet?.resourceId?.videoId &&
+                      item.snippet.title !== 'Deleted video' &&
+                      item.snippet.title !== 'Private video')
+      .map(item => ({
+        id:          item.snippet.resourceId.videoId,
+        title:       item.snippet.title,
+        channel:     item.snippet.videoOwnerChannelTitle || 'YouTube',
+        thumbnail:   item.snippet.thumbnails?.medium?.url ||
+                     item.snippet.thumbnails?.default?.url ||
+                     null,
+        publishedAt: item.snippet.publishedAt,
+        youtubeUrl:  `https://www.youtube.com/watch?v=${item.snippet.resourceId.videoId}`,
+      }));
 
     videos.push(...items);
-    nextPageToken = data.nextPageToken;
+    nextPageToken = data.nextPageToken || null;
   } while (nextPageToken);
 
   return videos;
 }
 
-/**
- * Fetch durations for multiple video IDs
- * @param {Array<string>} videoIds - Array of YouTube video IDs
- * @returns {Promise<Object>} Map of videoId -> duration in seconds
- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   fetchVideoDurations
+   Accepts an array of video IDs, batches them into groups of 50,
+   and returns a { [videoId]: durationInSeconds } map.
+───────────────────────────────────────────────────────────────────────────── */
 export async function fetchVideoDurations(videoIds) {
-  if (videoIds.length === 0) return {};
-  
-  // YouTube API allows up to 50 IDs per request
+  if (!videoIds?.length) return {};
+
+  // Split into chunks of 50 (API limit per request)
   const chunks = [];
   for (let i = 0; i < videoIds.length; i += 50) {
     chunks.push(videoIds.slice(i, i + 50));
@@ -47,39 +74,72 @@ export async function fetchVideoDurations(videoIds) {
 
   const durationMap = {};
 
-  for (const chunk of chunks) {
-    const idsParam = chunk.join(',');
-    const url = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${idsParam}&key=${YOUTUBE_API_KEY}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      console.error('Failed to fetch video durations');
-      continue;
-    }
+  await Promise.all(chunks.map(async chunk => {
+    try {
+      const url = new URL(`${YT_BASE}/videos`);
+      url.searchParams.set('part', 'contentDetails');
+      url.searchParams.set('id',   chunk.join(','));
+      url.searchParams.set('key',  YOUTUBE_API_KEY);
 
-    const data = await response.json();
-    
-    data.items.forEach(item => {
-      // Parse ISO 8601 duration (e.g., PT3M25S)
-      const durationStr = item.contentDetails.duration;
-      const seconds = parseISODuration(durationStr);
-      durationMap[item.id] = seconds;
-    });
-  }
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        console.error('[fetchVideoDurations] API error', res.status);
+        return;
+      }
+
+      const data = await res.json();
+      (data.items || []).forEach(item => {
+        durationMap[item.id] = parseISODuration(item.contentDetails.duration);
+      });
+    } catch (err) {
+      console.error('[fetchVideoDurations] chunk failed:', err.message);
+    }
+  }));
 
   return durationMap;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   fetchPlaylistWithDurations
+   Convenience wrapper: fetches a playlist then enriches every video
+   with its duration in seconds AND a formatted timecode string.
+───────────────────────────────────────────────────────────────────────────── */
+export async function fetchPlaylistWithDurations(playlistId) {
+  const videos    = await fetchYouTubePlaylist(playlistId);
+  const ids       = videos.map(v => v.id);
+  const durations = await fetchVideoDurations(ids);
+
+  return videos.map(v => ({
+    ...v,
+    durationSeconds: durations[v.id] ?? 0,
+    duration:        secondsToTimecode(durations[v.id] ?? 0),
+  }));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   INTERNAL HELPERS
+───────────────────────────────────────────────────────────────────────────── */
+
 /**
- * Parse ISO 8601 duration string to seconds
- * @param {string} isoDuration - e.g., PT3M25S
- * @returns {number} seconds
+ * Parse ISO 8601 duration string to total seconds.
+ * e.g. "PT3M25S" → 205
  */
 function parseISODuration(isoDuration) {
-  const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return 0;
-  const hours = parseInt(match[1] || 0);
-  const minutes = parseInt(match[2] || 0);
-  const seconds = parseInt(match[3] || 0);
-  return hours * 3600 + minutes * 60 + seconds;
+  if (!isoDuration) return 0;
+  const m = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || 0) * 3600) +
+         (parseInt(m[2] || 0) * 60)   +
+          parseInt(m[3] || 0);
+}
+
+/**
+ * Convert total seconds → "m:ss" or "h:mm:ss"
+ */
+function secondsToTimecode(totalSeconds) {
+  const h   = Math.floor(totalSeconds / 3600);
+  const min = Math.floor((totalSeconds % 3600) / 60);
+  const sec = totalSeconds % 60;
+  if (h) return `${h}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${min}:${String(sec).padStart(2,'0')}`;
 }

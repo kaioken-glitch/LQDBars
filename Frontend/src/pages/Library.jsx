@@ -1,319 +1,560 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
-import { FaSearch, FaPlay, FaRandom } from 'react-icons/fa';
+import { FaSearch, FaPlay, FaRandom, FaMusic } from 'react-icons/fa';
 import TinyPlayer from '../components/TinyPlayer';
 import { usePlayer } from '../context/PlayerContext';
-import SongTile from '../components/SongTile';
 
+/* ─────────────────────────────────────────────────────────────────────
+   SCOPED CSS — .lib-* namespace, zero global leakage
+───────────────────────────────────────────────────────────────────── */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
+
+.lib-root {
+  --g:      #1DB954;
+  --g2:     #23E065;
+  --gdim:   rgba(29,185,84,0.14);
+  --gglow:  rgba(29,185,84,0.28);
+  --s1:     rgba(255,255,255,0.04);
+  --s2:     rgba(255,255,255,0.07);
+  --sh:     rgba(255,255,255,0.09);
+  --b1:     rgba(255,255,255,0.07);
+  --b2:     rgba(255,255,255,0.13);
+  --t1:     #fff;
+  --t2:     rgba(255,255,255,0.55);
+  --t3:     rgba(255,255,255,0.28);
+  --ease:   cubic-bezier(0.4,0,0.2,1);
+  --spring: cubic-bezier(0.22,1,0.36,1);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--t1);
+}
+.lib-root *, .lib-root *::before, .lib-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.lib-root button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+/* ── Shell ── */
+.lib-shell { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Header ── */
+.lib-header {
+  flex-shrink: 0;
+  padding: 28px 28px 0;
+  background: linear-gradient(180deg, rgba(29,185,84,0.06) 0%, transparent 100%);
+}
+.lib-header-top {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+.lib-title-block { flex: 1; min-width: 0; }
+.lib-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--g);
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.lib-eyebrow-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--g); }
+.lib-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(34px, 5vw, 58px); font-weight: 800;
+  letter-spacing: -0.045em; line-height: 1; color: var(--t1);
+}
+.lib-title em { font-style: normal; color: var(--g2); }
+.lib-subtitle { font-size: 12px; color: var(--t3); margin-top: 5px; letter-spacing: 0.02em; }
+
+.lib-header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.lib-search-wrap { position: relative; }
+.lib-search-ico {
+  position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+  color: var(--t3); font-size: 12px; pointer-events: none;
+}
+.lib-search {
+  padding: 9px 14px 9px 36px; width: 220px;
+  background: var(--s1); border: 1px solid var(--b1);
+  border-radius: 9999px; color: var(--t1);
+  font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none;
+  transition: border-color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease);
+}
+.lib-search::placeholder { color: var(--t3); }
+.lib-search:focus {
+  border-color: rgba(29,185,84,.5); background: var(--s2);
+  box-shadow: 0 0 0 3px rgba(29,185,84,.10);
+}
+
+.lib-divider { height: 1px; background: var(--b1); margin: 18px 0 0; }
+
+/* ── Content ── */
+.lib-content {
+  flex: 1; overflow-y: auto; padding: 24px 28px 40px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent;
+}
+.lib-content::-webkit-scrollbar { width: 4px; }
+.lib-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 3px; }
+
+/* ── Grid ── */
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 16px;
+}
+@media (min-width: 500px)  { .lib-grid { grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 18px; } }
+@media (min-width: 768px)  { .lib-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 20px; } }
+@media (min-width: 1024px) { .lib-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; } }
+
+/* ── Album Card ── */
+.lib-card {
+  position: relative;
+  background: var(--s1); border: 1px solid var(--b1);
+  border-radius: 18px; overflow: hidden; cursor: pointer;
+  transition: transform .24s var(--spring), border-color .22s var(--ease), box-shadow .22s var(--ease);
+  animation: libUp .38s var(--spring) both;
+}
+@keyframes libUp {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.lib-card:hover {
+  transform: translateY(-6px) scale(1.025);
+  border-color: rgba(29,185,84,.28);
+  box-shadow: 0 24px 56px rgba(0,0,0,.55), 0 0 32px rgba(29,185,84,.07);
+}
+/* stagger */
+.lib-card:nth-child(1)  { animation-delay:.03s }
+.lib-card:nth-child(2)  { animation-delay:.06s }
+.lib-card:nth-child(3)  { animation-delay:.09s }
+.lib-card:nth-child(4)  { animation-delay:.12s }
+.lib-card:nth-child(5)  { animation-delay:.15s }
+.lib-card:nth-child(n+6){ animation-delay:.17s }
+
+/* art */
+.lib-art { position: relative; width: 100%; padding-top: 100%; }
+.lib-art-mosaic {
+  position: absolute; inset: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: rgba(29,185,84,.12);
+}
+.lib-art-single { position: absolute; inset: 0; overflow: hidden; }
+.lib-art-mosaic img, .lib-art-single img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform .55s var(--ease);
+}
+.lib-card:hover .lib-art-mosaic img,
+.lib-card:hover .lib-art-single img { transform: scale(1.07); }
+
+.lib-art-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,.72) 0%, transparent 55%);
+  opacity: 0; transition: opacity .22s var(--ease);
+  display: flex; align-items: center; justify-content: center;
+}
+.lib-card:hover .lib-art-overlay { opacity: 1; }
+
+.lib-play-btn {
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--g); color: #000; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 22px rgba(29,185,84,.5);
+  transform: scale(.82) translateY(4px);
+  transition: transform .22s var(--spring), background .15s var(--ease);
+}
+.lib-card:hover .lib-play-btn { transform: scale(1) translateY(0); }
+.lib-play-btn:hover { background: var(--g2); }
+
+/* card info */
+.lib-card-info { padding: 13px 15px 15px; }
+.lib-card-name {
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+  color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 4px; letter-spacing: -.01em;
+}
+.lib-card-artist {
+  font-size: 11px; color: var(--t2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
+}
+.lib-card-count { font-size: 11px; color: var(--t3); }
+
+/* ── Empty ── */
+.lib-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 55vh; gap: 16px; text-align: center;
+}
+.lib-empty-icon {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: var(--s1); border: 1px solid var(--b1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; color: var(--t3);
+  animation: libPulse 3s ease-in-out infinite;
+}
+@keyframes libPulse { 0%,100%{box-shadow:0 0 0 0 rgba(29,185,84,0)} 50%{box-shadow:0 0 0 8px rgba(29,185,84,.08)} }
+.lib-empty h3 {
+  font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800;
+  color: var(--t1); letter-spacing: -.025em;
+}
+.lib-empty p { font-size: 14px; color: var(--t3); max-width: 300px; line-height: 1.6; }
+
+/* ══════════════════════════════════
+   DETAIL MODAL
+══════════════════════════════════ */
+.lib-modal {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: libFadeIn .28s var(--spring) both;
+}
+@keyframes libFadeIn { from{opacity:0} to{opacity:1} }
+
+.lib-modal-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 20% -10%, rgba(29,185,84,.22) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(4,28,16,.95) 0%, #07080A 50%);
+}
+.lib-modal-grain {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px; opacity: .022; mix-blend-mode: screen;
+}
+
+/* modal top bar */
+.lib-modal-bar {
+  position: relative; z-index: 2; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--b1);
+  background: rgba(0,0,0,.22); backdrop-filter: blur(24px);
+}
+.lib-modal-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--s1); border: 1px solid var(--b1);
+  color: var(--t1); font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s var(--ease), transform .15s var(--ease);
+}
+.lib-modal-btn:hover { background: var(--sh); }
+.lib-modal-btn:active { transform: scale(.9); }
+
+/* hero section */
+.lib-hero {
+  position: relative; z-index: 2; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 20px;
+  padding: 28px 30px 20px;
+}
+@media (min-width: 560px) { .lib-hero { flex-direction: row; align-items: flex-end; padding: 32px 40px 24px; } }
+
+.lib-hero-art {
+  position: relative; flex-shrink: 0;
+  width: 148px; height: 148px;
+}
+@media (min-width: 560px) { .lib-hero-art { width: 185px; height: 185px; } }
+
+.lib-hero-glow {
+  position: absolute; inset: -14px; border-radius: 26px;
+  background: radial-gradient(circle, var(--gglow) 0%, transparent 70%);
+  filter: blur(14px);
+  animation: heroGlow 3.5s ease-in-out infinite;
+}
+@keyframes heroGlow { 0%,100%{opacity:.7;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+
+.lib-hero-img {
+  position: relative; display: block;
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: 20px;
+  box-shadow: 0 28px 64px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08);
+}
+
+.lib-hero-info { flex: 1; min-width: 0; }
+.lib-hero-tag {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--g); margin-bottom: 9px;
+}
+.lib-hero-tag-bar { width: 3px; height: 18px; border-radius: 2px; background: var(--g); }
+.lib-hero-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(26px, 4.5vw, 50px); font-weight: 800;
+  letter-spacing: -.04em; color: var(--t1); line-height: 1.04;
+  margin-bottom: 7px;
+}
+.lib-hero-artist { font-size: 15px; color: var(--t2); margin-bottom: 5px; }
+.lib-hero-count  { font-size: 12px; color: var(--t3); margin-bottom: 22px; }
+
+.lib-hero-actions { display: flex; align-items: center; gap: 12px; }
+.lib-hero-play {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--g); color: #000; font-size: 19px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 28px rgba(29,185,84,.45);
+  transition: transform .18s var(--spring), background .15s var(--ease), box-shadow .15s var(--ease);
+}
+.lib-hero-play:hover { background: var(--g2); transform: scale(1.09); box-shadow: 0 10px 36px rgba(29,185,84,.55); }
+.lib-hero-play:active { transform: scale(.93); }
+.lib-hero-shuffle {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--s1); border: 1px solid var(--b1);
+  color: var(--t2); font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.lib-hero-shuffle:hover { background: var(--sh); color: var(--t1); }
+
+/* tracklist */
+.lib-tracks {
+  position: relative; z-index: 2; flex: 1; overflow-y: auto;
+  padding: 0 22px 36px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent;
+}
+.lib-tracks::-webkit-scrollbar { width: 4px; }
+.lib-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
+
+.lib-tracks-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--t3);
+  padding: 0 12px 14px;
+}
+.lib-track-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: 12px; cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .14s var(--ease), border-color .14s var(--ease);
+}
+.lib-track-row:hover { background: var(--s2); border-color: var(--b1); }
+.lib-track-row.active {
+  background: rgba(29,185,84,.09); border-color: rgba(29,185,84,.2);
+}
+.lib-track-num {
+  width: 24px; text-align: center; font-size: 11px;
+  color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.lib-track-row.active .lib-track-num { color: var(--g); }
+.lib-track-thumb {
+  width: 40px; height: 40px; border-radius: 8px;
+  overflow: hidden; flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+}
+.lib-track-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-track-meta { flex: 1; min-width: 0; }
+.lib-track-name {
+  font-size: 13px; font-weight: 600; color: var(--t1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 2px;
+  transition: color .14s var(--ease);
+}
+.lib-track-row:hover .lib-track-name,
+.lib-track-row.active .lib-track-name { color: var(--g); }
+.lib-track-artist {
+  font-size: 11px; color: var(--t3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lib-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+`;
+
+const FB = 'https://placehold.co/200x200/061408/112208?text=♪';
+
+/* ── ALBUM CARD ── */
+const AlbumCard = memo(({ alb, onOpen, onPlay }) => {
+  const covers = alb.songs.slice(0, 4).map(s => s.cover || FB);
+  const single = covers.length <= 1;
+
+  return (
+    <div className="lib-card" onClick={() => onOpen(alb)}>
+      <div className="lib-art">
+        {single
+          ? <div className="lib-art-single"><img src={covers[0] || FB} alt={alb.album} onError={e => { e.target.src = FB; }} /></div>
+          : <div className="lib-art-mosaic">{covers.map((c, i) => <img key={i} src={c} alt="" onError={e => { e.target.src = FB; }} />)}</div>
+        }
+        <div className="lib-art-overlay">
+          <button className="lib-play-btn" onClick={e => { e.stopPropagation(); onPlay(alb.songs); }} aria-label={`Play ${alb.album}`}>
+            <FaPlay style={{ marginLeft: 2 }} />
+          </button>
+        </div>
+      </div>
+      <div className="lib-card-info">
+        <div className="lib-card-name">{alb.album}</div>
+        <div className="lib-card-artist">{alb.songs[0]?.artist || 'Unknown Artist'}</div>
+        <div className="lib-card-count">{alb.songs.length} song{alb.songs.length !== 1 ? 's' : ''}</div>
+      </div>
+    </div>
+  );
+});
+
+/* ── TRACK ROW ── */
+const TrackRow = memo(({ song, index, isActive, onClick }) => (
+  <div className={`lib-track-row${isActive ? ' active' : ''}`} onClick={onClick} role="button" aria-label={`Play ${song.name}`}>
+    <span className="lib-track-num">{String(index + 1).padStart(2, '0')}</span>
+    <div className="lib-track-thumb">
+      <img src={song.cover || FB} alt={song.name} onError={e => { e.target.src = FB; }} />
+    </div>
+    <div className="lib-track-meta">
+      <div className="lib-track-name">{song.name}</div>
+      <div className="lib-track-artist">{song.artist || 'Unknown'}</div>
+    </div>
+    <span className="lib-track-dur">{song.formattedDuration || song.duration || ''}</span>
+  </div>
+));
+
+/* ── MAIN ── */
 export default function Library() {
   const {
-    currentSong,
-    isPlaying,
-    playNext,
-    playPrev,
-    setIsPlaying,
-    isMuted,
-    toggleMute,
-    librarySongs = [],
-    setPlayerSongs,
-    setCurrentIndex,
+    currentSong, isPlaying, playNext, playPrev, setIsPlaying,
+    isMuted, toggleMute, librarySongs = [],
+    setPlayerSongs, setCurrentIndex,
   } = usePlayer();
 
-  const [query, setQuery] = useState('');
-  const [showDetailView, setShowDetailView] = useState(false);
-  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [query,    setQuery]    = useState('');
+  const [selected, setSelected] = useState(null);
 
-  // Filter songs based on search query
-  const filteredSongs = useMemo(() => {
+  const filtered = useMemo(() => {
     if (!query.trim()) return librarySongs;
     const q = query.toLowerCase();
-    return librarySongs.filter(song =>
-      song.name?.toLowerCase().includes(q) ||
-      song.artist?.toLowerCase().includes(q) ||
-      song.album?.toLowerCase().includes(q)
+    return librarySongs.filter(s =>
+      s.name?.toLowerCase().includes(q) ||
+      s.artist?.toLowerCase().includes(q) ||
+      s.album?.toLowerCase().includes(q)
     );
   }, [librarySongs, query]);
 
-  // Group by album
   const albums = useMemo(() => {
     const map = {};
-    filteredSongs.forEach(s => {
-      const key = s.album || 'Unknown Album';
-      if (!map[key]) map[key] = [];
-      map[key].push(s);
+    filtered.forEach(s => {
+      const k = s.album || 'Unknown Album';
+      if (!map[k]) map[k] = [];
+      map[k].push(s);
     });
-    return Object.keys(map).map(k => ({ album: k, songs: map[k] }));
-  }, [filteredSongs]);
+    return Object.values(map).map(songs => ({ album: songs[0].album || 'Unknown Album', songs }));
+  }, [filtered]);
 
-  const playAlbum = (albumSongs) => {
-    setPlayerSongs(albumSongs);
-    setCurrentIndex(0);
+  const playAlbum = useCallback((songs, startIdx = 0) => {
+    setPlayerSongs(songs);
+    setCurrentIndex(startIdx);
     setIsPlaying(true);
-  };
+  }, [setPlayerSongs, setCurrentIndex, setIsPlaying]);
 
-  const playSongFromAlbum = (song, albumSongs) => {
-    setPlayerSongs(albumSongs);
-    const idx = albumSongs.findIndex(s => s.id === song.id);
-    setCurrentIndex(idx >= 0 ? idx : 0);
-    setIsPlaying(true);
-  };
+  const playSong = useCallback((song, songs) => {
+    const idx = songs.findIndex(s => s.id === song.id);
+    playAlbum(songs, idx >= 0 ? idx : 0);
+  }, [playAlbum]);
+
+  const shuffleAlbum = useCallback((songs) => {
+    playAlbum([...songs].sort(() => Math.random() - 0.5));
+  }, [playAlbum]);
 
   return (
-    <div className="library w-full h-full flex flex-col items-center justify-start overflow-x-hidden pb-20">
-      {/* Header Section */}
-      <div className="head w-full max-w-[1600px] px-4 md:px-6 lg:px-8 pt-6 pb-4">
-        <div className="flex flex-col gap-4">
-          {/* Top Bar */}
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-            {/* Search - always visible */}
-            <div className="relative flex items-center w-full md:w-80">
-              <FaSearch className="absolute left-4 text-white/50 text-sm" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search library..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white/10 border border-white/20 text-white 
-                outline-none rounded-full font-medium text-sm backdrop-blur-xl 
-                placeholder:text-white/50 focus:bg-white/15 focus:border-emerald-400/50 transition-all"
-              />
-            </div>
+    <div className="lib-root" style={{ width: '100%', height: '100%' }}>
+      <style>{CSS}</style>
+      <div className="lib-shell">
 
-            {/* TinyPlayer - Desktop */}
-            <div className="hidden md:block">
-              <TinyPlayer
-                song={currentSong}
-                isPlaying={isPlaying}
-                onPlayPause={() => setIsPlaying(p => !p)}
-                onPrev={playPrev}
-                onNext={playNext}
-                isMuted={isMuted}
-                onMuteToggle={toggleMute}
-              />
+        {/* ── Header ── */}
+        <div className="lib-header">
+          <div className="lib-header-top">
+            <div className="lib-title-block">
+              <div className="lib-eyebrow"><span className="lib-eyebrow-dot" /> Your Collection</div>
+              <h1 className="lib-title">Li<em>brary</em></h1>
+              <p className="lib-subtitle">{albums.length} albums · {filtered.length} songs</p>
+            </div>
+            <div className="lib-header-controls">
+              {/* Search */}
+              <div className="lib-search-wrap">
+                <FaSearch className="lib-search-ico" />
+                <input
+                  className="lib-search"
+                  type="text"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search library…"
+                  aria-label="Search library"
+                />
+              </div>
+              {/* TinyPlayer – desktop */}
+              <div style={{ display: 'none' }} className="lib-tiny-player">
+                <TinyPlayer
+                  song={currentSong}
+                  isPlaying={isPlaying}
+                  onPlayPause={() => setIsPlaying(p => !p)}
+                  onPrev={playPrev}
+                  onNext={playNext}
+                  isMuted={isMuted}
+                  onMuteToggle={toggleMute}
+                />
+              </div>
             </div>
           </div>
+          <div className="lib-divider" />
+        </div>
 
-          {/* Page Title */}
-          <div className="mt-4">
-            <h1 className="text-white text-4xl md:text-5xl font-bold tracking-tight">
-              Library
-            </h1>
-            <p className="text-white/60 text-sm md:text-base mt-2">
-              {albums.length} albums • {filteredSongs.length} songs
-            </p>
-          </div>
+        <style>{`@media(min-width:768px){.lib-tiny-player{display:block !important}}`}</style>
+
+        {/* ── Content ── */}
+        <div className="lib-content">
+          {albums.length === 0 ? (
+            <div className="lib-empty">
+              <div className="lib-empty-icon"><FaMusic /></div>
+              <h3>Library is empty</h3>
+              <p>Import local music or download tracks to see them here.</p>
+            </div>
+          ) : (
+            <div className="lib-grid">
+              {albums.map(alb => (
+                <AlbumCard key={alb.album} alb={alb} onOpen={setSelected} onPlay={playAlbum} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Content Grid */}
-      <div className="w-full max-w-[1600px] px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
-        {filteredSongs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-96 text-center">
-            <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center mb-4">
-              <svg className="w-10 h-10 text-white/40" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
+      {/* ── Detail Modal ── */}
+      {selected && (
+        <div className="lib-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+          <div className="lib-modal">
+            <div className="lib-modal-bg" />
+            <div className="lib-modal-grain" />
+
+            {/* bar */}
+            <div className="lib-modal-bar">
+              <button className="lib-modal-btn" onClick={() => setSelected(null)} aria-label="Back">
+                <FontAwesomeIcon icon={faChevronLeft} />
+              </button>
+              <button className="lib-modal-btn" aria-label="More options">
+                <FontAwesomeIcon icon={faEllipsisH} />
+              </button>
             </div>
-            <h3 className="text-white text-2xl font-bold mb-2">No songs in library</h3>
-            <p className="text-white/60 max-w-md">Import local music or download tracks to see them here.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6 pb-8">
-            {albums.map((alb) => (
-              <div
-                key={alb.album}
-                className="group relative bg-white/5 backdrop-blur-xl rounded-2xl shadow-xl hover:shadow-2xl 
-                transition-all duration-300 cursor-pointer border border-white/10 hover:border-emerald-400/30 
-                hover:scale-[1.02] overflow-hidden"
-                onClick={() => {
-                  setSelectedAlbum(alb);
-                  setShowDetailView(true);
-                }}
-              >
-                {/* Album Cover Grid */}
-                <div className="aspect-square grid grid-cols-2 gap-0.5 p-0.5 bg-gradient-to-br from-emerald-500/40 to-teal-600/40">
-                  {alb.songs.slice(0, 4).map((s, idx) => (
-                    <img
-                      key={s.id || idx}
-                      src={s.cover || '/default-cover.png'}
-                      alt={s.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => (e.target.src = '/default-cover.png')}
-                    />
-                  ))}
-                </div>
 
-                {/* Info */}
-                <div className="p-4">
-                  <h3 className="text-white font-bold text-base mb-1 truncate">{alb.album}</h3>
-                  <p className="text-white/60 text-xs mb-1 truncate">{alb.songs[0]?.artist || 'Unknown Artist'}</p>
-                  <p className="text-white/50 text-xs">{alb.songs.length} song{alb.songs.length !== 1 ? 's' : ''}</p>
-
-                  {/* Play Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      playAlbum(alb.songs);
-                    }}
-                    className="w-11 h-11 flex items-center justify-center rounded-full bg-gradient-to-r 
-                    from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
-                    transition-all shadow-lg hover:shadow-emerald-500/50 ml-auto mt-3 transform 
-                    hover:scale-110 active:scale-95"
-                  >
-                    <FaPlay className="text-white text-sm ml-0.5" />
+            {/* hero */}
+            <div className="lib-hero">
+              <div className="lib-hero-art">
+                <div className="lib-hero-glow" />
+                <img
+                  className="lib-hero-img"
+                  src={selected.songs[0]?.cover || FB}
+                  alt={selected.album}
+                  onError={e => { e.target.src = FB; }}
+                />
+              </div>
+              <div className="lib-hero-info">
+                <div className="lib-hero-tag"><span className="lib-hero-tag-bar" /> Album</div>
+                <h1 className="lib-hero-title">{selected.album}</h1>
+                <p className="lib-hero-artist">{selected.songs[0]?.artist || 'Various Artists'}</p>
+                <p className="lib-hero-count">{selected.songs.length} song{selected.songs.length !== 1 ? 's' : ''}</p>
+                <div className="lib-hero-actions">
+                  <button className="lib-hero-play" onClick={() => playAlbum(selected.songs)} aria-label="Play all">
+                    <FaPlay style={{ marginLeft: 2 }} />
+                  </button>
+                  <button className="lib-hero-shuffle" onClick={() => shuffleAlbum(selected.songs)} aria-label="Shuffle">
+                    <FaRandom />
                   </button>
                 </div>
-
-                {/* Hover Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent 
-                opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Detail View Modal */}
-      {showDetailView && selectedAlbum && (
-        <div className="fixed inset-0 z-50 flex flex-col overflow-hidden">
-          {/* Gradient Background */}
-          <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/90 via-slate-900 to-black" />
-
-          {/* Sticky Glass Header */}
-          <div className="sticky top-0 z-20 w-full px-4 md:px-6 py-3 backdrop-blur-2xl bg-black/30 border-b border-white/10">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => {
-                  setShowDetailView(false);
-                  setSelectedAlbum(null);
-                }}
-                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 
-                backdrop-blur-xl hover:bg-white/20 transition-all border border-white/20 
-                hover:border-white/30 shadow-lg hover:scale-105 active:scale-95"
-              >
-                <FontAwesomeIcon icon={faChevronLeft} className="text-white text-base" />
-              </button>
-              <div className="flex items-center gap-2">
-                <button className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all">
-                  <FontAwesomeIcon icon={faEllipsisH} className="text-white/80 text-base" />
-                </button>
               </div>
             </div>
-          </div>
 
-          {/* Hero Section */}
-          <div className="relative z-10 px-4 md:px-6 py-6 md:py-8 flex flex-col md:flex-row items-start md:items-end gap-6">
-            <div className="relative group flex-shrink-0">
-              <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-3xl blur-2xl opacity-40 group-hover:opacity-60 transition" />
-              <img
-                src={selectedAlbum.songs[0]?.cover || '/default-cover.png'}
-                alt={selectedAlbum.album}
-                className="relative w-36 h-36 md:w-48 md:h-48 rounded-2xl object-cover shadow-2xl border-2 border-white/20 backdrop-blur-sm"
-                onError={(e) => (e.target.src = '/default-cover.png')}
-              />
-            </div>
-
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
-                <span className="w-1 h-3 bg-emerald-500 rounded-full" />
-                <span>ALBUM</span>
-              </div>
-
-              <h1 className="text-white text-4xl md:text-6xl font-black tracking-tight leading-tight break-words">
-                {selectedAlbum.album}
-              </h1>
-
-              <p className="text-white/70 text-base md:text-lg max-w-2xl">
-                {selectedAlbum.songs[0]?.artist || 'Various Artists'}
-              </p>
-
-              <div className="flex items-center gap-4 text-sm text-white/60">
-                <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-                    <path d="M12 6v6l4 2" />
-                  </svg>
-                  {selectedAlbum.songs.length} songs
-                </span>
-              </div>
-
-              {/* Icon-only action buttons */}
-              <div className="flex items-center gap-4 pt-3">
-                <button
-                  onClick={() => playAlbum(selectedAlbum.songs)}
-                  className="w-14 h-14 flex items-center justify-center rounded-full bg-gradient-to-r 
-                  from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
-                  text-white shadow-xl hover:shadow-emerald-500/50 transform hover:scale-105 transition-all"
-                  aria-label="Play all songs"
-                >
-                  <FaPlay className="text-white text-xl ml-1" />
-                </button>
-                <button
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 
-                  backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-all 
-                  text-white/80 hover:text-white"
-                  aria-label="Shuffle"
-                >
-                  <FaRandom className="text-sm" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Tracklist */}
-          <div className="relative z-10 flex-1 px-4 md:px-6 py-4 overflow-y-auto">
-            <div className="w-full max-w-5xl mx-auto">
-              <h2 className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">
-                TRACKS · {selectedAlbum.songs.length}
-              </h2>
-
-              <div className="flex flex-col gap-1">
-                {selectedAlbum.songs.map((song, index) => {
-                  const songId = song.id || `song-${index}`;
-                  return (
-                    <div
-                      key={songId}
-                      className="group flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 
-                      hover:bg-white/10 transition-all cursor-pointer border border-transparent 
-                      hover:border-white/10 backdrop-blur-sm"
-                      onClick={() => playSongFromAlbum(song, selectedAlbum.songs)}
-                    >
-                      <span className="text-white/40 group-hover:text-white/60 text-xs w-6 text-center font-mono">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-
-                      <div className="relative w-9 h-9 rounded-md overflow-hidden shadow-md flex-shrink-0">
-                        <img src={song.cover || '/default-cover.png'} alt={song.name} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate group-hover:text-emerald-400 transition-colors">
-                          {song.name}
-                        </p>
-                        <p className="text-white/50 text-xs truncate">{song.artist || 'Unknown'}</p>
-                      </div>
-
-                      <span className="text-white/40 text-xs font-mono hidden md:block">
-                        {song.formattedDuration || song.duration || '0:00'}
-                      </span>
-
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Optional: add favorite/like functionality here
-                          }}
-                        >
-                          <FaPlay className="text-white text-[10px] ml-0.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            {/* tracklist */}
+            <div className="lib-tracks">
+              <div className="lib-tracks-label">Tracks · {selected.songs.length}</div>
+              {selected.songs.map((song, i) => (
+                <TrackRow
+                  key={song.id || i}
+                  song={song} index={i}
+                  isActive={currentSong?.id === song.id}
+                  onClick={() => playSong(song, selected.songs)}
+                />
+              ))}
             </div>
           </div>
         </div>

@@ -13,24 +13,21 @@ export function PlayerProvider({ children }) {
   const [downloadedSongs, setDownloadedSongs] = useState([]);
   const [isMuted, setIsMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
-  const [repeatMode, setRepeatMode] = useState('off'); // 'off', 'all', 'one'
+  const [repeatMode, setRepeatMode] = useState('off');
   const [shuffledOrder, setShuffledOrder] = useState([]);
-  // New state for background detail view
   const [showBackgroundDetail, setShowBackgroundDetail] = useState(false);
 
   const audioRef = useRef(new Audio());
   const youtubePlayerRef = useRef(null);
-  const playerTypeRef = useRef('audio'); // 'audio' or 'youtube'
+  const playerTypeRef = useRef('audio');
   const timeUpdateInterval = useRef(null);
 
   const currentSong = songs[currentIndex];
 
-  // Toggle function for convenience
   const toggleBackgroundDetail = useCallback(() => {
     setShowBackgroundDetail(prev => !prev);
   }, []);
 
-  // Determine if song needs YouTube player or regular audio
   const needsYouTubePlayer = useCallback((song) => {
     if (!song) return false;
     return song.source === 'youtube' || 
@@ -41,7 +38,6 @@ export function PlayerProvider({ children }) {
            song.audio?.includes('youtu.be');
   }, []);
 
-  // Extract YouTube video ID from various URL formats
   const extractYouTubeId = useCallback((url) => {
     if (!url) return null;
     const patterns = [
@@ -56,7 +52,6 @@ export function PlayerProvider({ children }) {
     return null;
   }, []);
 
-  // Load YouTube IFrame API once
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -66,7 +61,6 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  // Clean up YouTube player and intervals
   const cleanupYouTube = useCallback(() => {
     if (timeUpdateInterval.current) {
       clearInterval(timeUpdateInterval.current);
@@ -82,7 +76,6 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  // Handle song playback when currentSong changes
   useEffect(() => {
     if (!currentSong) {
       if (playerTypeRef.current === 'youtube') {
@@ -195,7 +188,6 @@ export function PlayerProvider({ children }) {
     }
   }, [currentSong, currentIndex, songs.length, needsYouTubePlayer, extractYouTubeId, cleanupYouTube, isPlaying]);
 
-  // Handle play/pause
   useEffect(() => {
     if (!currentSong) return;
 
@@ -221,7 +213,6 @@ export function PlayerProvider({ children }) {
     }
   }, [isPlaying, currentSong]);
 
-  // Handle volume
   useEffect(() => {
     if (playerTypeRef.current === 'youtube') {
       if (youtubePlayerRef.current && youtubePlayerRef.current.setVolume) {
@@ -232,7 +223,6 @@ export function PlayerProvider({ children }) {
     }
   }, [volume]);
 
-  // Mute toggle
   const toggleMute = useCallback(() => {
     if (playerTypeRef.current === 'youtube') {
       if (youtubePlayerRef.current && youtubePlayerRef.current.isMuted) {
@@ -248,7 +238,6 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  // Shuffle order
   useEffect(() => {
     if (shuffle && songs.length > 1) {
       const indices = songs.map((_, i) => i);
@@ -266,7 +255,6 @@ export function PlayerProvider({ children }) {
     }
   }, [shuffle, songs, currentIndex]);
 
-  // Navigation
   const playNext = useCallback(() => {
     if (songs.length === 0) return;
     if (repeatMode === 'one') {
@@ -359,7 +347,6 @@ export function PlayerProvider({ children }) {
     setCurrentIndex(startIndex);
   }, []);
 
-  // Audio element events
   useEffect(() => {
     const audio = audioRef.current;
 
@@ -394,7 +381,6 @@ export function PlayerProvider({ children }) {
     };
   }, [songs.length, currentIndex]);
 
-  // Cleanup
   useEffect(() => {
     return () => {
       cleanupYouTube();
@@ -404,9 +390,6 @@ export function PlayerProvider({ children }) {
       }
     };
   }, [cleanupYouTube]);
-
-  // Media Session API (optional)
-  // ... (if you have it, keep it)
 
   const value = {
     songs,
@@ -435,7 +418,6 @@ export function PlayerProvider({ children }) {
     toggleRepeatMode,
     toggleMute,
     isMuted,
-    // New background detail state
     showBackgroundDetail,
     setShowBackgroundDetail,
     toggleBackgroundDetail,

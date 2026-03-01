@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: LiquidBars
+    restart: unless-stopped
+    env_file:
+      - .env              # loads all vars from your .env into the container
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"           # Main app
+      - "${CONVERTER_PORT:-3001}:${CONVERTER_PORT:-3001}"  # YouTube converter
+    volumes:
+      - ytdlp-cache:/root/.cache/yt-dlp
+
+volumes:
+  ytdlp-cache:

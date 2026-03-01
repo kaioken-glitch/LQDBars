@@ -1,176 +1,278 @@
-#root {
-  width: 100dvw;
-  height: 100dvh;
-  overflow-x: hidden;
+/* ═══════════════════════════════════════════════════════════════════
+   LIQUID BARS — index.css
+   ───────────────────────────────────────────────────────────────────
+   Single source of truth for the app.
+   App.css has been merged in here and deleted.
+   Component / page styles live in their own files via Tailwind
+   utility classes — nothing page-specific belongs here.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap');
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────
+   DESIGN TOKENS
+───────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Brand */
+  --lb-green:          #1DB954;
+  --lb-green-bright:   #23E065;
+  --lb-green-dim:      rgba(29, 185, 84, 0.14);
+  --lb-green-glow:     rgba(29, 185, 84, 0.32);
+
+  /* Backgrounds */
+  --lb-bg-base:        #07080A;
+  --lb-bg-raised:      #0E1012;
+  --lb-bg-elevated:    #141618;
+
+  /* Surfaces */
+  --lb-surface-1:      rgba(255, 255, 255, 0.04);
+  --lb-surface-2:      rgba(255, 255, 255, 0.07);
+  --lb-surface-hover:  rgba(255, 255, 255, 0.09);
+
+  /* Borders */
+  --lb-border-1:       rgba(255, 255, 255, 0.07);
+  --lb-border-2:       rgba(255, 255, 255, 0.12);
+  --lb-border-focus:   rgba(29, 185, 84, 0.5);
+
+  /* Text */
+  --lb-text-1:         #FFFFFF;
+  --lb-text-2:         rgba(255, 255, 255, 0.55);
+  --lb-text-3:         rgba(255, 255, 255, 0.28);
+
+  /* Radius */
+  --lb-r-sm:    8px;
+  --lb-r-md:    14px;
+  --lb-r-lg:    20px;
+  --lb-r-xl:    28px;
+  --lb-r-pill:  9999px;
+
+  /* Motion */
+  --lb-ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --lb-ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --lb-dur-fast:    0.15s;
+  --lb-dur-mid:     0.25s;
+  --lb-dur-slow:    0.45s;
+
+  /* Layout */
+  --lb-sidebar-w:   220px;
+  --lb-bottomnav-h: 64px;
+  --lb-player-h:    88px;
+
+  /* Typography defaults */
+  font-family:              'DM Sans', sans-serif;
+  font-size:                16px;
+  font-weight:              400;
+  line-height:              1.55;
+  font-synthesis:           none;
+  text-rendering:           optimizeLegibility;
+  -webkit-font-smoothing:   antialiased;
+  -moz-osx-font-smoothing:  grayscale;
+  font-optical-sizing:      auto;
 }
 
-/* Add this to your global CSS for scrollbar hiding */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+/* ─────────────────────────────────────────────────────────────────────
+   RESET
+───────────────────────────────────────────────────────────────────── */
 
-/* Sidebar.module.css */
-
-.sidebarContainer {
-    width: 220px;
-    height: calc(100vh - 160px);
-    border-radius: 1rem;
-    display: flex;
-    flex-direction: column;
-    padding: 1.5rem 0;
-    margin: 1.25rem 0 1.25rem 1.25rem;
-    overflow: hidden;
-    position: relative;
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* Custom scrollbar */
-.customScrollbar::-webkit-scrollbar {
-    width: 3px;
-    height: 5px;
-    cursor: default;
-}
-
-.customScrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(85, 85, 85, 0);
-}
-
-.customScrollbar::-webkit-scrollbar-track {
-    background-color: rgba(82, 82, 82, 0);
-}
-
-.customScrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(136, 136, 136, 0);
-}
-
-/* Firefox */
-.customScrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-}
-
-/* UNDO - Remove all CSS adjustments */
-/* The sidebar height was the issue, not width */
-/* Revert to original styling */
-
-.sidebar {
-  width: 220px !important; /* Back to original */
-  max-width: 220px;
-}
-
-/* Remove padding adjustments */
-main {
-  padding-bottom: 0; /* Back to default */
-}
-
-@media (max-width: 768px) {
-  main {
-    padding-bottom: 0; /* Back to default */
-  }
-}
-
-/* Remove any body overflow hiding */
-body {
-  overflow: auto; /* Back to default */
-}
-
-/* Add this to your global CSS file (e.g., index.css or App.css) */
-
-/* Wave animation for equalizer bars */
-@keyframes wave {
-  0%, 100% {
-    height: 0.5rem;
-  }
-  50% {
-    height: 0.75rem;
-  }
-}
-
-/* Custom scrollbar for sidebar */
-.scrollbar-thin {
-  scrollbar-width: thin;
-}
-
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Smooth scroll behavior */
-.sidebar nav {
+html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
-/* Optional: Add blur backdrop support for older browsers */
-@supports not (backdrop-filter: blur(40px)) {
-  .sidebar {
-    background: rgba(0, 0, 0, 0.7);
-  }
-}
+/* ─────────────────────────────────────────────────────────────────────
+   ROOT — deep emerald mesh background
+   Fixed so it never re-paints as the user scrolls pages.
+───────────────────────────────────────────────────────────────────── */
 
-/* Tailwind doesn't include these animations by default, so we define them */
-@keyframes pulse-slow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.animate-pulse-slow {
-  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Marquee Animation for Song Title */
-.marquee {
+html, body, #root {
   width: 100%;
+  height: 100%;
+  overflow: hidden;   /* App shell owns all scrolling */
+}
+
+body {
+  background-color: var(--lb-bg-base);
+  background-image:
+    radial-gradient(ellipse 70% 55% at -10% -5%,   rgba(4,  80, 50, 0.55) 0%, transparent 62%),
+    radial-gradient(ellipse 50% 40% at 110%  0%,   rgba(0,  60, 35, 0.32) 0%, transparent 56%),
+    radial-gradient(ellipse 80% 60% at  50% 45%,   rgba(2,  40, 22, 0.42) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 50% at 50% 110%,  rgba(1,  25, 12, 0.58) 0%, transparent 60%),
+    linear-gradient(160deg, #041C11 0%, #07080A 55%, #030D07 100%);
+  background-attachment: fixed;
+  background-size: cover;
+  background-repeat: no-repeat;
+  color: var(--lb-text-1);
   overflow: hidden;
+}
+
+/* Subtle grain — over the background only, never over UI */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 220px;
+  opacity: 0.02;
+  mix-blend-mode: screen;
+}
+
+#root {
   position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-.marquee-content {
-  display: inline-block;
-  animation: marquee 8s linear infinite;
-  padding-right: 2rem;
+/* ─────────────────────────────────────────────────────────────────────
+   APP SHELL LAYOUT
+   ┌────────────────────────────────┐
+   │  .app-content-row              │  flex-1, min-height 0
+   │  ┌────────────┬───────────────┐│
+   │  │ .app-side  │  .app-main    ││  sidebar hidden on mobile
+   │  └────────────┴───────────────┘│
+   ├────────────────────────────────┤
+   │  .app-bottom-bar               │  player + mobile nav
+   └────────────────────────────────┘
+───────────────────────────────────────────────────────────────────── */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
-@keyframes marquee {
-  0% {
-    transform: translateX(100%);
+.app-content-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;   /* lets the row shrink below its natural height */
+  overflow: hidden;
+}
+
+.app-sidebar-slot {
+  display: none;
+  flex-shrink: 0;
+  width: var(--lb-sidebar-w);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;    /* prevents overflow past sidebar */
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-bottom-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  z-index: 40;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────────────── */
+
+@media (min-width: 768px) {
+  .app-sidebar-slot      { display: flex; }
+  .app-bottom-nav-mobile { display: none !important; }
+}
+
+@media (max-width: 767px) {
+  .app-sidebar-slot { display: none !important; }
+
+  /* Page wrappers that need bottom padding for the floating player + nav */
+  .app-page-scroll {
+    padding-bottom: calc(var(--lb-player-h) + var(--lb-bottomnav-h) + 16px);
   }
-  100% {
-    transform: translateX(-100%);
-  }
 }
 
-.marquee:hover .marquee-content {
-  animation-play-state: paused;
+@media (max-width: 640px) {
+  :root { font-size: 15px; }
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .marquee-content {
-    animation-duration: 6s;
-  }
+/* ─────────────────────────────────────────────────────────────────────
+   SCROLLBARS
+───────────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar           { width: 4px; height: 4px; }
+::-webkit-scrollbar-track     { background: transparent; }
+::-webkit-scrollbar-thumb     { background: rgba(255,255,255,0.10); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
+::-webkit-scrollbar-corner    { background: transparent; }
+*                              { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.10) transparent; }
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   TYPOGRAPHY
+───────────────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--lb-text-1);
 }
 
-/* Smooth slider styling for volume control */
+p     { line-height: 1.6; color: var(--lb-text-2); }
+a     { color: var(--lb-green); text-decoration: none; transition: color var(--lb-dur-fast) var(--lb-ease); }
+a:hover { color: var(--lb-green-bright); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   FOCUS
+───────────────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--lb-green);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FORM ELEMENTS
+───────────────────────────────────────────────────────────────────── */
+
+input, textarea {
+  background: var(--lb-surface-1);
+  border: 1px solid var(--lb-border-1);
+  border-radius: var(--lb-r-pill);
+  color: var(--lb-text-1);
+  font-family: inherit;
+  font-size: 14px;
+  transition:
+    border-color var(--lb-dur-fast) var(--lb-ease),
+    background   var(--lb-dur-fast) var(--lb-ease),
+    box-shadow   var(--lb-dur-fast) var(--lb-ease);
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--lb-border-focus);
+  background: rgba(255,255,255,0.07);
+  box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.12);
+}
+
+input::placeholder, textarea::placeholder { color: var(--lb-text-3); }
+
+/* Range */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -178,450 +280,352 @@ input[type="range"] {
   cursor: pointer;
   width: 100%;
 }
-
+input[type="range"]:focus { outline: none; }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: transparent;
+}
+input[type="range"]::-moz-range-track {
+  height: 4px; border-radius: 2px; background: transparent; border: none;
+}
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 12px; height: 12px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #10b981, #06d6a0);
+  background: #fff;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
-  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  margin-top: -4px;
+  transition: width var(--lb-dur-fast) var(--lb-ease), height var(--lb-dur-fast) var(--lb-ease), box-shadow var(--lb-dur-fast) var(--lb-ease);
 }
-
 input[type="range"]::-webkit-slider-thumb:hover {
-  width: 14px;
-  height: 14px;
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.6);
+  width: 14px; height: 14px;
+  box-shadow: 0 2px 12px rgba(29, 185, 84, 0.5);
 }
-
 input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #10b981, #06d6a0);
+  width: 12px; height: 12px;
+  border-radius: 50%; background: #fff; border: none;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: width var(--lb-dur-fast) var(--lb-ease), height var(--lb-dur-fast) var(--lb-ease);
+}
+input[type="range"]::-moz-range-thumb:hover { width: 14px; height: 14px; }
+
+/* Select */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: var(--lb-surface-1);
+  background-image: url("data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 5L7 9L11 5' stroke='rgba(255,255,255,0.4)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  border: 1px solid var(--lb-border-1);
+  border-radius: var(--lb-r-pill);
+  color: var(--lb-text-1);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 36px 8px 14px;
+  cursor: pointer;
+  transition: border-color var(--lb-dur-fast) var(--lb-ease);
+}
+select:focus {
+  outline: none;
+  border-color: var(--lb-border-focus);
+  box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.12);
+}
+option              { background: #111315; color: #fff; font-size: 14px; padding: 8px; }
+option:checked      { background: var(--lb-green); color: #000; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   BUTTONS
+───────────────────────────────────────────────────────────────────── */
+
+button {
+  font-family: inherit;
   cursor: pointer;
   border: none;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
-  transition: all 0.2s ease;
+  background: none;
+  color: inherit;
+  transition: opacity var(--lb-dur-fast) var(--lb-ease);
+}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   UTILITY / COMPONENT PRIMITIVES
+   These are design-system primitives used by many components.
+   One-off page styles do NOT belong here — use Tailwind in the JSX.
+───────────────────────────────────────────────────────────────────── */
+
+/* Glass surface */
+.lb-glass {
+  background: var(--lb-surface-1);
+  border: 1px solid var(--lb-border-1);
+  border-radius: var(--lb-r-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
-input[type="range"]::-moz-range-thumb:hover {
-  width: 14px;
-  height: 14px;
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.6);
+/* Gradient text */
+.lb-gradient-text {
+  background: linear-gradient(135deg, #fff 0%, var(--lb-green-bright) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-/* Track styling */
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: transparent;
+/* Pill chip (filter tabs, tags) */
+.lb-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: var(--lb-r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--lb-surface-1);
+  border: 1px solid var(--lb-border-1);
+  color: var(--lb-text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background   var(--lb-dur-fast) var(--lb-ease),
+    color        var(--lb-dur-fast) var(--lb-ease),
+    border-color var(--lb-dur-fast) var(--lb-ease);
+}
+.lb-chip:hover, .lb-chip.active {
+  background: var(--lb-green-dim);
+  color: var(--lb-green-bright);
+  border-color: rgba(29, 185, 84, 0.4);
 }
 
-input[type="range"]::-moz-range-track {
-  background: transparent;
-  border: none;
-}
-
-/* Focus states for accessibility */
-input[type="range"]:focus {
-  outline: none;
-}
-
-input[type="range"]:focus::-webkit-slider-thumb {
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.8);
-}
-
-input[type="range"]:focus::-moz-range-thumb {
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.8);
-}
-
-/* Player controls responsive adjustments */
-@media (max-width: 640px) {
-  .playerControls {
-    padding: 12px 16px;
-  }
-}
-
-/* Smooth transitions for button states */
-.playerControls button {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Hide scrollbar for progress bar container if needed */
-.playerControls::-webkit-scrollbar {
-  display: none;
-}
-
-/* Mobile PlayerControls Positioning - Move it up so it's visible */
-
-/* On mobile screens, adjust the player controls positioning */
-@media (max-width: 768px) {
-  .playerControls {
-    bottom: 70px !important; /* Lift it up above bottom nav */
-    height: auto;
-    padding: 8px 12px !important;
-  }
-
-  /* Ensure content doesn't hide under it */
-  .homeOnline,
-  main {
-    padding-bottom: 180px !important; /* Space for player + bottom nav */
-  }
-
-  /* Make player controls more compact on mobile */
-  .playerControls > div:first-child {
-    margin-bottom: 6px !important; /* Progress bar */
-  }
-
-  /* Smaller cover image on mobile */
-  .playerControls .w-12 {
-    width: 48px !important;
-    height: 48px !important;
-  }
-
-  /* Reduce font sizes for mobile */
-  .playerControls {
-    font-size: 0.75rem;
-  }
-}
-
-/* Extra small screens - lift even higher */
-@media (max-width: 480px) {
-  .playerControls {
-    bottom: 65px !important;
-    padding: 6px 8px !important;
-  }
-
-  .homeOnline,
-  main {
-    padding-bottom: 160px !important;
-  }
-}
-
-/* Ensure BottomNav stays at very bottom */
-.bottom-nav {
-  position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  z-index: 35 !important;
-}
-
-/* ============================================
-   NETFLIX/YOUTUBE TV STYLE SPLASH SCREEN
-   Add to your index.css or animations.css
-   ============================================ */
-
-/* Splash Screen Container */
-.splash-screen {
-  position: fixed;
-  inset: 0;
-  background: #000000;
-  display: flex;
+/* Primary CTA */
+.lb-btn-primary {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-  overflow: hidden;
-}
-
-/* Content Wrapper */
-.splash-content {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-}
-
-/* Logo Container */
-.splash-logo {
-  width: 200px;
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Logo SVG */
-.logo-svg {
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 0 40px rgba(16, 185, 129, 0.6));
-}
-
-/* App Name */
-.splash-app-name {
-  font-size: 32px;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: var(--lb-r-pill);
+  background: var(--lb-green);
+  color: #000;
+  font-family: 'Syne', sans-serif;
   font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 4px;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 20px rgba(29, 185, 84, 0.35);
+  transition:
+    background var(--lb-dur-fast) var(--lb-ease),
+    transform  var(--lb-dur-fast) var(--lb-ease),
+    box-shadow var(--lb-dur-fast) var(--lb-ease);
+}
+.lb-btn-primary:hover  { background: var(--lb-green-bright); transform: translateY(-1px); box-shadow: 0 8px 28px rgba(29, 185, 84, 0.5); }
+.lb-btn-primary:active { transform: scale(0.97); }
+
+/* Ghost */
+.lb-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 22px;
+  border-radius: var(--lb-r-pill);
+  background: var(--lb-surface-1);
+  border: 1px solid var(--lb-border-1);
+  color: var(--lb-text-1);
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  transition:
+    background   var(--lb-dur-fast) var(--lb-ease),
+    border-color var(--lb-dur-fast) var(--lb-ease);
+}
+.lb-btn-ghost:hover { background: var(--lb-surface-hover); border-color: var(--lb-border-2); }
+
+/* Icon button */
+.lb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--lb-surface-1);
+  border: 1px solid var(--lb-border-1);
+  color: var(--lb-text-2);
+  transition:
+    background var(--lb-dur-fast) var(--lb-ease),
+    color      var(--lb-dur-fast) var(--lb-ease),
+    transform  var(--lb-dur-fast) var(--lb-ease);
+}
+.lb-icon-btn:hover  { background: var(--lb-surface-hover); color: var(--lb-text-1); }
+.lb-icon-btn:active { transform: scale(0.9); }
+
+/* Badges */
+.lb-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  opacity: 0;
-  animation: fade-in-name 0.8s ease-out 1.2s forwards;
+  line-height: 1;
+}
+.lb-badge-new { background: linear-gradient(135deg, #FF4B4B, #FF2D55); color: #fff; }
+.lb-badge-hot { background: linear-gradient(135deg, #FF6B00, #FF4500); color: #fff; }
+.lb-badge-top { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; }
+
+/* Card (used by SongTile, AlbumCard, etc.) */
+.lb-card {
+  background: var(--lb-surface-1);
+  border: 1px solid var(--lb-border-1);
+  border-radius: var(--lb-r-md);
+  overflow: hidden;
+  transition:
+    transform    var(--lb-dur-mid) var(--lb-ease-spring),
+    box-shadow   var(--lb-dur-mid) var(--lb-ease),
+    border-color var(--lb-dur-mid) var(--lb-ease);
+  cursor: pointer;
+}
+.lb-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(29, 185, 84, 0.28);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(29, 185, 84, 0.07);
 }
 
-/* Background Gradient */
-.splash-bg-gradient {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    circle at center,
-    rgba(16, 185, 129, 0.15) 0%,
-    rgba(6, 78, 59, 0.1) 40%,
-    transparent 70%
-  );
-  animation: pulse-gradient 3s ease-in-out infinite;
-}
-
-/* ============================================
-   ANIMATION PHASES
-   ============================================ */
-
-/* Phase 1: ZOOM IN (Netflix/YouTube style) */
-.splash-zoom .splash-logo {
-  animation: zoom-in 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-/* Phase 2: HOLD */
-.splash-hold .splash-logo {
-  transform: scale(1);
-  animation: subtle-pulse 0.5s ease-in-out;
-}
-
-/* Phase 3: FADE OUT */
-.splash-fadeOut {
-  animation: fade-out-screen 0.7s ease-out forwards;
-}
-
-.splash-fadeOut .splash-logo {
-  animation: fade-out-logo 0.7s ease-out forwards;
-}
-
-/* ============================================
-   KEYFRAME ANIMATIONS
-   ============================================ */
-
-/* Zoom In (Netflix style - starts small, zooms to normal) */
-@keyframes zoom-in {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Subtle Pulse on Hold */
-@keyframes subtle-pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.02);
-  }
-}
-
-/* Fade In App Name */
-@keyframes fade-in-name {
-  0% {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Fade Out Screen */
-@keyframes fade-out-screen {
-  0% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-/* Fade Out Logo */
-@keyframes fade-out-logo {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1.1);
-    opacity: 0;
-  }
-}
-
-/* Background Gradient Pulse */
-@keyframes pulse-gradient {
-  0%, 100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-  }
-}
-
-/* ============================================
-   ALTERNATIVE STYLES
-   ============================================ */
-
-/* YouTube TV Style (Red accent) */
-.splash-screen.youtube-style {
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-}
-
-.splash-screen.youtube-style .logo-svg {
-  filter: drop-shadow(0 0 40px rgba(255, 0, 0, 0.6));
-}
-
-.splash-screen.youtube-style .splash-bg-gradient {
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 0, 0, 0.15) 0%,
-    rgba(139, 0, 0, 0.1) 40%,
-    transparent 70%
-  );
-}
-
-/* Netflix Style (Dramatic zoom with slight bounce) */
-.splash-zoom.netflix-style .splash-logo {
-  animation: netflix-zoom 2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-@keyframes netflix-zoom {
-  0% {
-    transform: scale(0.2);
-    opacity: 0;
-  }
-  60% {
-    opacity: 1;
-  }
-  80% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Spotify Style (Smooth scale with glow) */
-.splash-zoom.spotify-style .splash-logo {
-  animation: spotify-zoom 1.8s ease-out forwards;
-}
-
-@keyframes spotify-zoom {
-  0% {
-    transform: scale(0.5);
-    opacity: 0;
-    filter: drop-shadow(0 0 0px rgba(16, 185, 129, 0));
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-    filter: drop-shadow(0 0 40px rgba(16, 185, 129, 0.8));
-  }
-}
-
-/* ============================================
-   SOUND WAVE VISUALIZATION (Optional)
-   ============================================ */
-
-.splash-sound-waves {
-  position: absolute;
-  bottom: 60px;
+/* Section header row */
+.lb-section-header {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.lb-section-header h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.lb-section-dot       { width: 8px; height: 8px; border-radius: 50%; background: var(--lb-green); flex-shrink: 0; }
+.lb-section-count     { font-size: 12px; color: var(--lb-text-3); font-weight: 400; letter-spacing: 0.01em; }
+
+/* Toast */
+.lb-toast {
+  position: fixed;
+  bottom: calc(var(--lb-player-h) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: var(--lb-bg-elevated);
+  border: 1px solid var(--lb-border-2);
+  border-radius: var(--lb-r-pill);
+  padding: 10px 20px;
+  font-size: 13px;
+  color: var(--lb-text-1);
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  white-space: nowrap;
+  animation: lb-fade-up 0.3s var(--lb-ease-spring) both;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   SKELETON LOADER
+───────────────────────────────────────────────────────────────────── */
+
+.lb-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 1200px 100%;
+  animation: lb-shimmer 1.6s infinite linear;
+  border-radius: var(--lb-r-md);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   WAVEFORM — playing indicator (.lb-wave)
+   Usage: <span class="lb-wave"><span/><span/><span/></span>
+───────────────────────────────────────────────────────────────────── */
+
+.lb-wave {
+  display: inline-flex;
   align-items: flex-end;
-  height: 40px;
+  height: 15px;
+  gap: 2px;
 }
-
-.sound-bar {
-  width: 4px;
-  background: linear-gradient(to top, #10b981, #34d399);
+.lb-wave span {
+  display: block;
+  width: 3px;
   border-radius: 2px;
-  animation: wave-bounce 0.8s ease-in-out infinite;
+  background: var(--lb-green);
 }
+.lb-wave span:nth-child(1) { animation: lb-bar1 0.8s ease-in-out infinite; }
+.lb-wave span:nth-child(2) { animation: lb-bar2 0.8s ease-in-out infinite 0.12s; }
+.lb-wave span:nth-child(3) { animation: lb-bar3 0.8s ease-in-out infinite 0.24s; }
 
-.sound-bar:nth-child(1) { animation-delay: 0s; }
-.sound-bar:nth-child(2) { animation-delay: 0.1s; }
-.sound-bar:nth-child(3) { animation-delay: 0.2s; }
-.sound-bar:nth-child(4) { animation-delay: 0.3s; }
-.sound-bar:nth-child(5) { animation-delay: 0.4s; }
+/* Marquee (long title scroll in compact player) */
+.lb-marquee          { width: 100%; overflow: hidden; position: relative; }
+.lb-marquee-content  { display: inline-block; white-space: nowrap; animation: lb-marquee 10s linear infinite; padding-right: 3rem; }
+.lb-marquee:hover .lb-marquee-content { animation-play-state: paused; }
 
-@keyframes wave-bounce {
-  0%, 100% {
-    height: 10px;
-  }
-  50% {
-    height: 40px;
-  }
+/* ─────────────────────────────────────────────────────────────────────
+   ANIMATIONS
+───────────────────────────────────────────────────────────────────── */
+
+@keyframes lb-fade-up   { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes lb-fade-in   { from { opacity:0; } to { opacity:1; } }
+@keyframes lb-scale-in  { from { opacity:0; transform:scale(0.94); } to { opacity:1; transform:scale(1); } }
+@keyframes lb-shimmer   { 0% { background-position:-600px 0; } 100% { background-position:600px 0; } }
+@keyframes lb-spin      { to { transform:rotate(360deg); } }
+@keyframes lb-pulse-glow {
+  0%,100% { box-shadow:0 0 0 0   rgba(29,185,84,0); }
+  50%     { box-shadow:0 0 24px 4px rgba(29,185,84,0.35); }
 }
+@keyframes lb-bar1      { 0%,100%{height:3px}  50%{height:13px} }
+@keyframes lb-bar2      { 0%,100%{height:9px}  50%{height:3px}  }
+@keyframes lb-bar3      { 0%,100%{height:6px}  50%{height:15px} }
+@keyframes lb-marquee   { 0% { transform:translateX(100%); } 100% { transform:translateX(-100%); } }
 
-/* ============================================
-   RESPONSIVE DESIGN
-   ============================================ */
+/* Animation helpers */
+.lb-fade-up    { animation: lb-fade-up   0.4s var(--lb-ease-spring) both; }
+.lb-fade-in    { animation: lb-fade-in   0.3s var(--lb-ease) both; }
+.lb-scale-in   { animation: lb-scale-in  0.35s var(--lb-ease-spring) both; }
+.lb-spin       { animation: lb-spin      0.7s linear infinite; }
+.lb-pulse-glow { animation: lb-pulse-glow 2s ease-in-out infinite; }
 
-@media (max-width: 768px) {
-  .splash-logo {
-    width: 150px;
-    height: 150px;
-  }
+/* Staggered children reveal */
+.lb-stagger > *:nth-child(1)   { animation-delay: 0.05s; }
+.lb-stagger > *:nth-child(2)   { animation-delay: 0.10s; }
+.lb-stagger > *:nth-child(3)   { animation-delay: 0.15s; }
+.lb-stagger > *:nth-child(4)   { animation-delay: 0.20s; }
+.lb-stagger > *:nth-child(5)   { animation-delay: 0.25s; }
+.lb-stagger > *:nth-child(6)   { animation-delay: 0.30s; }
+.lb-stagger > *:nth-child(n+7) { animation-delay: 0.35s; }
 
-  .splash-app-name {
-    font-size: 24px;
-    letter-spacing: 3px;
-  }
-}
+/* ─────────────────────────────────────────────────────────────────────
+   SAFE AREAS (iOS notch / home bar)
+───────────────────────────────────────────────────────────────────── */
 
-@media (max-width: 480px) {
-  .splash-logo {
-    width: 120px;
-    height: 120px;
-  }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+.pt-safe { padding-top:    env(safe-area-inset-top, 0px); }
 
-  .splash-app-name {
-    font-size: 20px;
-    letter-spacing: 2px;
-  }
-}
-
-/* ============================================
+/* ─────────────────────────────────────────────────────────────────────
    ACCESSIBILITY
-   ============================================ */
+───────────────────────────────────────────────────────────────────── */
 
-/* Respect prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  .splash-zoom .splash-logo {
-    animation: fade-in-simple 1s ease-out forwards;
-  }
-
-  @keyframes fade-in-simple {
-    0% {
-      opacity: 0;
-    }
-    100% {
-      opacity: 1;
-    }
-  }
-
-  .splash-bg-gradient {
-    animation: none;
+  *, *::before, *::after {
+    animation-duration:        0.01ms !important;
+    animation-iteration-count: 1      !important;
+    transition-duration:       0.01ms !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   BACKDROP-FILTER FALLBACK (older Safari)
+───────────────────────────────────────────────────────────────────── */
+
+@supports not (backdrop-filter: blur(1px)) {
+  .lb-glass { background: rgba(8, 10, 12, 0.90); }
+}
+

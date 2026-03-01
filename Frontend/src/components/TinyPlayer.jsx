@@ -11,7 +11,7 @@ export default function TinyPlayer({
   onMuteToggle
 }) {
   return (
-    <div className="fixed bottom-[79px] left-1/2 -translate-x-1/2 z-40">
+    <div className="fixed bottom-[119px] left-1/2 -translate-x-1/2 z-40">
       <div className="tiny-player flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-900/90 to-teal-900/90 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl w-fit">
         {/* Cover Art */}
         <img

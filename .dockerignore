@@ -1,0 +1,20 @@
+# Dependencies — Docker installs these fresh inside the image
+node_modules/
+server/node_modules/
+
+# Build output — Dockerfile rebuilds this from source
+dist/
+
+# Environment — use docker-compose environment: or --env-file instead
+.env
+.env.*
+
+# Secrets — never bake into image
+cookies.json
+
+# Noise
+*.log
+.git/
+.gitignore
+README.md
+docker-compose.override.yml

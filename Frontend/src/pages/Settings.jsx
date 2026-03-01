@@ -1,562 +1,814 @@
-import React, { useEffect, useState } from 'react';
-import { FaUser, FaCamera, FaEnvelope, FaPhone, FaMapMarkerAlt, FaSave, FaHeart, FaDownload, FaWifi, FaSlidersH, FaBell, FaMoon, FaChartLine, FaNetworkWired, FaTrash, FaClipboard, FaFileImport, FaRedoAlt } from 'react-icons/fa';
-import { VERSION, BUILD_DATE } from '../version'; // create this file
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  FaUser, FaCamera, FaSave, FaDownload, FaWifi, FaSlidersH,
+  FaBell, FaMoon, FaShieldAlt, FaCheckCircle, FaExclamationCircle,
+  FaClipboard, FaFileImport, FaRedoAlt, FaTrash, FaEnvelope,
+  FaPhone, FaMapMarkerAlt, FaChartLine,
+} from 'react-icons/fa';
+import { VERSION, BUILD_DATE } from '../version';
 
-// Minimal toggle switch
-const Toggle = ({ checked, onChange, title }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    title={title}
-    onClick={() => onChange(!checked)}
-    className={`w-12 h-6 rounded-full p-0.5 flex items-center transition-all duration-200 
-    ${checked ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' : 'bg-white/20'}`}
-  >
-    <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 
-    ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
-  </button>
-);
+/* ─── scoped CSS ────────────────────────────────────────────────── */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-export default function Settings() {
-  const [activeTab, setActiveTab] = useState('profile');
+.set-root {
+  --s-green:        #1DB954;
+  --s-green-bright: #23E065;
+  --s-green-dim:    rgba(29,185,84,0.12);
+  --s-red:          #FF4466;
+  --s-amber:        #F59E0B;
+  --s-purple:       #A78BFA;
+  --s-blue:         #60A5FA;
+  --s-t1:           #FFFFFF;
+  --s-t2:           rgba(255,255,255,0.55);
+  --s-t3:           rgba(255,255,255,0.28);
+  --s-s1:           rgba(255,255,255,0.04);
+  --s-s2:           rgba(255,255,255,0.07);
+  --s-sh:           rgba(255,255,255,0.09);
+  --s-b1:           rgba(255,255,255,0.07);
+  --s-b2:           rgba(255,255,255,0.12);
+  --s-ease:         cubic-bezier(0.4,0,0.2,1);
+  --s-spring:       cubic-bezier(0.22,1,0.36,1);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.set-root *, .set-root *::before, .set-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  // Profile state
-  const [profileName, setProfileName] = useState(() => localStorage.getItem('lb:profileName') || 'Music Lover');
-  const [profileEmail, setProfileEmail] = useState(() => localStorage.getItem('lb:profileEmail') || '');
-  const [profilePhone, setProfilePhone] = useState(() => localStorage.getItem('lb:profilePhone') || '');
-  const [profileLocation, setProfileLocation] = useState(() => localStorage.getItem('lb:profileLocation') || '');
-  const [profileBio, setProfileBio] = useState(() => localStorage.getItem('lb:profileBio') || '');
-  const [profileAvatar, setProfileAvatar] = useState(() => localStorage.getItem('lb:profileAvatar') || '');
+/* ── shell ── */
+.set-shell {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; overflow: hidden;
+  position: relative;
+  overflowY: 'auto';
+}
+/* subtle ambient top glow */
+.set-ambient {
+  position: absolute; top: 0; left: 0; right: 0; height: 260px;
+  background: linear-gradient(180deg, rgba(29,185,84,0.07) 0%, transparent 100%);
+  pointer-events: none; z-index: 0;
+}
 
-  // Preferences state
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('lb:darkMode') === 'true');
-  const [notifications, setNotifications] = useState(() => localStorage.getItem('lb:notifications') === 'true');
-  const [notificationVolume, setNotificationVolume] = useState(() => Number(localStorage.getItem('lb:notificationVolume') || 80));
-  const [autoDownload, setAutoDownload] = useState(() => localStorage.getItem('lb:autoDownload') === 'true');
-  const [downloadQuality, setDownloadQuality] = useState(() => localStorage.getItem('lb:downloadQuality') || 'high');
-  const [onlyWifi, setOnlyWifi] = useState(() => localStorage.getItem('lb:onlyWifi') === 'true');
-  const [crossfade, setCrossfade] = useState(() => Number(localStorage.getItem('lb:crossfade') || 0));
-  const [gapless, setGapless] = useState(() => localStorage.getItem('lb:gapless') === 'true');
-  const [equalizer, setEqualizer] = useState(() => localStorage.getItem('lb:equalizer') === 'true');
-  const [eqPreset, setEqPreset] = useState(() => localStorage.getItem('lb:eqPreset') || 'flat');
-  const [maxConcurrentDownloads, setMaxConcurrentDownloads] = useState(() => Number(localStorage.getItem('lb:maxConcurrentDownloads') || 3));
-  const [privacyAnalytics, setPrivacyAnalytics] = useState(() => localStorage.getItem('lb:privacyAnalytics') === 'true');
-  const [allowRemoteControl, setAllowRemoteControl] = useState(() => localStorage.getItem('lb:allowRemoteControl') === 'true');
+.set-scroll {
+  flex: 1; overflow-y: auto; position: relative; z-index: 1;
+  padding: 32px 28px 40px;
+}
+.set-scroll::-webkit-scrollbar { width: 4px; }
+.set-scroll::-webkit-scrollbar-track { background: transparent; }
+.set-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
 
-  // Storage state
-  const [maxCacheMB, setMaxCacheMB] = useState(() => Number(localStorage.getItem('lb:maxCacheMB') || 200));
-  const [cacheSize, setCacheSize] = useState('12.4 MB');
-  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
+.set-inner { max-width: 720px; margin: 0 auto; }
 
-  // Save profile
-  const saveProfile = () => {
-    localStorage.setItem('lb:profileName', profileName);
-    localStorage.setItem('lb:profileEmail', profileEmail);
-    localStorage.setItem('lb:profilePhone', profilePhone);
-    localStorage.setItem('lb:profileLocation', profileLocation);
-    localStorage.setItem('lb:profileBio', profileBio);
-    localStorage.setItem('lb:profileAvatar', profileAvatar);
-    alert('Profile saved successfully!');
-  };
+/* ── header ── */
+.set-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 32px;
+}
+.set-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(32px,5vw,48px); font-weight: 800;
+  letter-spacing: -0.04em; color: var(--s-t1); line-height: 1;
+}
+.set-title span {
+  background: linear-gradient(135deg, #fff 0%, var(--s-green-bright) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.set-version-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 10px;
+  background: var(--s-s1); border: 1px solid var(--s-b1);
+  cursor: pointer; transition: background 0.15s var(--s-ease);
+  color: var(--s-t3); font-size: 11px; font-family: 'DM Sans', sans-serif;
+}
+.set-version-btn:hover { background: var(--s-s2); }
+.set-version-dot { color: var(--s-t3); opacity: 0.4; }
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => setProfileAvatar(event.target?.result);
-      reader.readAsDataURL(file);
-    }
-  };
+/* ── tabs ── */
+.set-tabs {
+  display: flex; gap: 2px;
+  background: var(--s-s1); border: 1px solid var(--s-b1);
+  border-radius: 14px; padding: 4px; margin-bottom: 28px;
+  max-width: 320px;
+}
+.set-tab {
+  flex: 1; padding: 10px 12px; border-radius: 10px;
+  font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+  cursor: pointer; transition: all 0.2s var(--s-ease);
+  color: var(--s-t3); background: none; border: none;
+  white-space: nowrap;
+}
+.set-tab:hover { color: var(--s-t2); }
+.set-tab.active { background: #fff; color: #000; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
 
-  // Persist preferences
-  useEffect(() => localStorage.setItem('lb:darkMode', darkMode), [darkMode]);
-  useEffect(() => localStorage.setItem('lb:notifications', notifications), [notifications]);
-  useEffect(() => localStorage.setItem('lb:autoDownload', autoDownload), [autoDownload]);
-  useEffect(() => localStorage.setItem('lb:onlyWifi', onlyWifi), [onlyWifi]);
-  useEffect(() => localStorage.setItem('lb:crossfade', String(crossfade)), [crossfade]);
-  useEffect(() => localStorage.setItem('lb:gapless', gapless), [gapless]);
-  useEffect(() => localStorage.setItem('lb:equalizer', equalizer), [equalizer]);
-  useEffect(() => localStorage.setItem('lb:eqPreset', eqPreset), [eqPreset]);
-  useEffect(() => localStorage.setItem('lb:maxConcurrentDownloads', String(maxConcurrentDownloads)), [maxConcurrentDownloads]);
-  useEffect(() => localStorage.setItem('lb:notificationVolume', String(notificationVolume)), [notificationVolume]);
-  useEffect(() => localStorage.setItem('lb:privacyAnalytics', privacyAnalytics), [privacyAnalytics]);
-  useEffect(() => localStorage.setItem('lb:allowRemoteControl', allowRemoteControl), [allowRemoteControl]);
-  useEffect(() => localStorage.setItem('lb:maxCacheMB', String(maxCacheMB)), [maxCacheMB]);
-  useEffect(() => localStorage.setItem('lb:downloadQuality', downloadQuality), [downloadQuality]);
+/* ── card ── */
+.set-card {
+  background: var(--s-s1); border: 1px solid var(--s-b1);
+  border-radius: 20px; overflow: hidden; margin-bottom: 14px;
+}
+.set-card-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 20px 12px; border-bottom: 1px solid var(--s-b1);
+}
+.set-card-icon { font-size: 14px; }
+.set-card-title {
+  font-family: 'Syne', sans-serif; font-weight: 700;
+  font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--s-t1);
+}
+.set-card-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 
-  // Network status
+/* accent colors per card */
+.set-card.emerald .set-card-icon { color: var(--s-green); }
+.set-card.purple  .set-card-icon { color: var(--s-purple); }
+.set-card.blue    .set-card-icon { color: var(--s-blue); }
+.set-card.red     .set-card-icon { color: var(--s-red); }
+.set-card.amber   .set-card-icon { color: var(--s-amber); }
+
+/* ── profile hero ── */
+.set-profile-hero {
+  background: var(--s-s1); border: 1px solid var(--s-b1);
+  border-radius: 20px; padding: 24px; margin-bottom: 14px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+@media (min-width: 520px) {
+  .set-profile-hero { flex-direction: row; align-items: center; }
+}
+.set-avatar-wrap {
+  position: relative; flex-shrink: 0;
+  width: 80px; height: 80px;
+}
+.set-avatar {
+  width: 80px; height: 80px; border-radius: 18px; overflow: hidden;
+  background: linear-gradient(135deg, rgba(29,185,84,0.2), rgba(35,224,101,0.1));
+  border: 2px solid var(--s-b2); box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+}
+.set-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.set-avatar-placeholder { color: rgba(255,255,255,0.2); font-size: 28px; }
+.set-avatar-upload {
+  position: absolute; bottom: -4px; right: -4px;
+  width: 28px; height: 28px; border-radius: 9px;
+  background: var(--s-green); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 4px 12px rgba(29,185,84,0.5);
+  transition: transform 0.15s var(--s-spring), background 0.15s;
+}
+.set-avatar-upload:hover { transform: scale(1.12); background: var(--s-green-bright); }
+.set-avatar-upload input { display: none; }
+.set-avatar-upload svg { color: #fff; font-size: 11px; }
+
+.set-profile-info { flex: 1; min-width: 0; }
+.set-profile-name {
+  font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+  letter-spacing: -0.03em; color: var(--s-t1); margin-bottom: 3px;
+}
+.set-profile-email { font-size: 13px; color: var(--s-t2); margin-bottom: 10px; }
+.set-profile-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.set-badge {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 9999px;
+  font-size: 11px; font-weight: 600; border: 1px solid;
+}
+.set-badge-premium { background: rgba(29,185,84,0.12); color: var(--s-green); border-color: rgba(29,185,84,0.25); }
+.set-badge-member  { background: var(--s-s1); color: var(--s-t3); border-color: var(--s-b1); }
+
+.set-save-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 12px;
+  font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+  cursor: pointer; transition: all 0.2s var(--s-spring);
+  flex-shrink: 0; align-self: flex-start;
+}
+.set-save-btn.unsaved {
+  background: var(--s-green); color: #000;
+  border: none; box-shadow: 0 4px 18px rgba(29,185,84,0.35);
+}
+.set-save-btn.unsaved:hover { background: var(--s-green-bright); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(29,185,84,0.45); }
+.set-save-btn.unsaved:active { transform: scale(0.96); }
+.set-save-btn.saved {
+  background: rgba(29,185,84,0.12); color: var(--s-green);
+  border: 1px solid rgba(29,185,84,0.25);
+}
+
+/* ── form grid ── */
+.set-form-grid {
+  display: grid; grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 520px) {
+  .set-form-grid { grid-template-columns: 1fr 1fr; }
+  .set-form-grid .set-span-2 { grid-column: span 2; }
+}
+.set-field-label {
+  display: block; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--s-t3); margin-bottom: 7px;
+}
+.set-input {
+  width: 100%; padding: 11px 14px;
+  background: var(--s-s2); border: 1px solid var(--s-b1);
+  border-radius: 12px; color: var(--s-t1); font-family: 'DM Sans', sans-serif;
+  font-size: 13px; outline: none;
+  transition: border-color 0.15s var(--s-ease), background 0.15s var(--s-ease);
+}
+.set-input:focus { border-color: rgba(29,185,84,0.4); background: var(--s-sh); }
+.set-input::placeholder { color: var(--s-t3); }
+.set-textarea { resize: none; }
+
+/* ── toggle ── */
+.set-toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.set-toggle-text { flex: 1; min-width: 0; }
+.set-toggle-label { font-size: 14px; font-weight: 500; color: var(--s-t1); margin-bottom: 2px; }
+.set-toggle-desc  { font-size: 12px; color: var(--s-t3); }
+.set-switch {
+  position: relative; width: 44px; height: 24px;
+  border-radius: 12px; border: none; cursor: pointer; flex-shrink: 0;
+  transition: background 0.25s var(--s-ease);
+}
+.set-switch.on  { background: var(--s-green); box-shadow: 0 0 12px rgba(29,185,84,0.35); }
+.set-switch.off { background: rgba(255,255,255,0.12); }
+.set-switch-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  transition: transform 0.25s var(--s-spring);
+}
+.set-switch.on  .set-switch-thumb { transform: translateX(20px); }
+
+/* ── slider ── */
+.set-slider-row { display: flex; flex-direction: column; gap: 10px; }
+.set-slider-top {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.set-slider-meta { display: flex; flex-direction: column; gap: 2px; }
+.set-slider-label { font-size: 14px; font-weight: 500; color: var(--s-t1); }
+.set-slider-desc  { font-size: 12px; color: var(--s-t3); }
+.set-slider-value {
+  font-size: 13px; font-weight: 700; color: var(--s-green);
+  font-variant-numeric: tabular-nums; font-family: 'Syne', sans-serif;
+}
+.set-slider-track {
+  position: relative; height: 6px;
+  background: rgba(255,255,255,0.08); border-radius: 3px;
+}
+.set-slider-fill {
+  position: absolute; left: 0; top: 0; height: 100%;
+  background: linear-gradient(to right, var(--s-green), var(--s-green-bright));
+  border-radius: inherit; pointer-events: none;
+  transition: width 0.1s linear;
+}
+.set-slider-thumb-dot {
+  position: absolute; top: 50%; transform: translate(-50%,-50%);
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--s-green);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  pointer-events: none; transition: left 0.1s linear;
+}
+.set-slider-input {
+  position: absolute; inset: -8px 0;
+  width: 100%; opacity: 0; cursor: pointer; height: calc(100% + 16px);
+}
+
+/* ── select ── */
+.set-select-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.set-select {
+  background: var(--s-s2); border: 1px solid var(--s-b1);
+  color: var(--s-t1); font-family: 'DM Sans', sans-serif;
+  font-size: 13px; padding: 8px 32px 8px 12px; border-radius: 10px;
+  outline: none; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='rgba(255,255,255,0.4)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  min-width: 110px; transition: border-color 0.15s var(--s-ease);
+}
+.set-select:focus { border-color: rgba(29,185,84,0.4); }
+.set-select option { background: #111315; }
+
+/* ── number input ── */
+.set-num-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.set-num-controls { display: flex; align-items: center; gap: 8px; }
+.set-num-btn {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: var(--s-s2); border: 1px solid var(--s-b1);
+  color: var(--s-t1); font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s;
+}
+.set-num-btn:hover { background: var(--s-sh); }
+.set-num-val {
+  font-size: 14px; font-weight: 600; color: var(--s-t1);
+  font-variant-numeric: tabular-nums; min-width: 28px; text-align: center;
+}
+
+/* ── info row (connection, cache, version) ── */
+.set-info-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background: rgba(255,255,255,0.025);
+  border-radius: 12px; border: 1px solid var(--s-b1);
+}
+.set-info-label { font-size: 14px; font-weight: 500; color: var(--s-t1); margin-bottom: 2px; }
+.set-info-sub   { font-size: 12px; color: var(--s-t3); }
+.set-info-val   { font-size: 13px; font-family: 'Syne', sans-serif; color: var(--s-t2); }
+.set-online-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.set-online-dot.on  { background: var(--s-green); box-shadow: 0 0 8px rgba(29,185,84,0.6); animation: setOnlinePulse 2s ease-in-out infinite; }
+.set-online-dot.off { background: var(--s-red); }
+@keyframes setOnlinePulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.set-status-text { font-size: 13px; font-weight: 600; }
+.set-status-text.on  { color: var(--s-green); }
+.set-status-text.off { color: var(--s-red); }
+
+/* ── cache clear btn ── */
+.set-clear-btn {
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  background: rgba(255,68,102,0.08); border: 1px solid rgba(255,68,102,0.2);
+  color: var(--s-red); font-size: 12px; font-weight: 600;
+  transition: background 0.15s, transform 0.1s;
+}
+.set-clear-btn:hover { background: rgba(255,68,102,0.16); transform: scale(1.02); }
+
+/* ── advanced action buttons ── */
+.set-actions-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+}
+.set-action-btn {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 12px 8px; border-radius: 12px; cursor: pointer;
+  font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+  transition: background 0.15s, transform 0.12s var(--s-spring);
+  border: 1px solid;
+}
+.set-action-btn:hover  { transform: translateY(-1px); }
+.set-action-btn:active { transform: scale(0.96); }
+.set-action-default { background: var(--s-s1); border-color: var(--s-b1); color: var(--s-t2); }
+.set-action-default:hover { background: var(--s-s2); color: var(--s-t1); }
+.set-action-danger  { background: rgba(255,68,102,0.08); border-color: rgba(255,68,102,0.2); color: var(--s-red); }
+.set-action-danger:hover  { background: rgba(255,68,102,0.15); }
+.set-action-note {
+  font-size: 12px; color: var(--s-t3); line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+/* ── toast ── */
+.set-toast {
+  position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+  z-index: 200; padding: 11px 20px; border-radius: 9999px;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  border: 1px solid; backdrop-filter: blur(20px);
+  animation: setToastIn 0.25s var(--s-spring) both;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  display: flex; align-items: center; gap: 8px;
+}
+.set-toast.success { background: rgba(29,185,84,0.15); border-color: rgba(29,185,84,0.3); color: #6EE7A0; }
+.set-toast.error   { background: rgba(255,68,102,0.12); border-color: rgba(255,68,102,0.25); color: #FCA5A5; }
+@keyframes setToastIn { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+`;
+
+/* ─── primitives ────────────────────────────────────────────────── */
+
+function Toggle({ checked, onChange, label, description }) {
+  return (
+    <div className="set-toggle-row">
+      {(label || description) && (
+        <div className="set-toggle-text">
+          {label && <p className="set-toggle-label">{label}</p>}
+          {description && <p className="set-toggle-desc">{description}</p>}
+        </div>
+      )}
+      <button
+        type="button" role="switch" aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`set-switch ${checked ? 'on' : 'off'}`}
+      >
+        <div className="set-switch-thumb" />
+      </button>
+    </div>
+  );
+}
+
+function Slider({ value, onChange, min = 0, max = 100, label, unit = '', description }) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="set-slider-row">
+      <div className="set-slider-top">
+        <div className="set-slider-meta">
+          <span className="set-slider-label">{label}</span>
+          {description && <span className="set-slider-desc">{description}</span>}
+        </div>
+        <span className="set-slider-value">{value}{unit}</span>
+      </div>
+      <div className="set-slider-track">
+        <div className="set-slider-fill" style={{ width: `${pct}%` }} />
+        <div className="set-slider-thumb-dot" style={{ left: `${pct}%` }} />
+        <input
+          type="range" min={min} max={max} value={value}
+          onChange={e => onChange(Number(e.target.value))}
+          className="set-slider-input"
+        />
+      </div>
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options, description }) {
+  return (
+    <div className="set-select-row">
+      <div className="set-toggle-text">
+        <p className="set-toggle-label">{label}</p>
+        {description && <p className="set-toggle-desc">{description}</p>}
+      </div>
+      <select value={value} onChange={e => onChange(e.target.value)} className="set-select">
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function NumberInput({ label, value, onChange, min, max, description }) {
+  return (
+    <div className="set-num-row">
+      <div className="set-toggle-text">
+        <p className="set-toggle-label">{label}</p>
+        {description && <p className="set-toggle-desc">{description}</p>}
+      </div>
+      <div className="set-num-controls">
+        <button className="set-num-btn" onClick={() => onChange(Math.max(min, value - 1))}>−</button>
+        <span className="set-num-val">{value}</span>
+        <button className="set-num-btn" onClick={() => onChange(Math.min(max, value + 1))}>+</button>
+      </div>
+    </div>
+  );
+}
+
+function Card({ title, icon, accent = 'emerald', children, note }) {
+  return (
+    <div className={`set-card ${accent}`}>
+      <div className="set-card-header">
+        <span className="set-card-icon">{icon}</span>
+        <h3 className="set-card-title">{title}</h3>
+      </div>
+      <div className="set-card-body">
+        {note && <p className="set-action-note">{note}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Toast({ message, type, onClose }) {
   useEffect(() => {
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
+    const t = setTimeout(onClose, 3000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div className={`set-toast ${type}`}>
+      {type === 'success' ? <FaCheckCircle /> : <FaExclamationCircle />}
+      {message}
+    </div>
+  );
+}
+
+/* ─── main ──────────────────────────────────────────────────────── */
+export default function Settings() {
+  const [tab,   setTab]   = useState('profile');
+  const [toast, setToast] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const showToast = useCallback((msg, type = 'success') => setToast({ message: msg, type }), []);
+
+  /* profile */
+  const [name,     setName]     = useState(() => localStorage.getItem('lb:profileName')     || 'Music Lover');
+  const [email,    setEmail]    = useState(() => localStorage.getItem('lb:profileEmail')    || '');
+  const [phone,    setPhone]    = useState(() => localStorage.getItem('lb:profilePhone')    || '');
+  const [location, setLocation] = useState(() => localStorage.getItem('lb:profileLocation') || '');
+  const [bio,      setBio]      = useState(() => localStorage.getItem('lb:profileBio')      || '');
+  const [avatar,   setAvatar]   = useState(() => localStorage.getItem('lb:profileAvatar')   || '');
+
+  /* playback */
+  const [crossfade,        setCrossfade]        = useState(() => Number(localStorage.getItem('lb:crossfade') || 0));
+  const [gapless,          setGapless]          = useState(() => localStorage.getItem('lb:gapless')    === 'true');
+  const [equalizer,        setEqualizer]        = useState(() => localStorage.getItem('lb:equalizer')  === 'true');
+  const [eqPreset,         setEqPreset]         = useState(() => localStorage.getItem('lb:eqPreset')   || 'flat');
+
+  /* downloads */
+  const [autoDownload,     setAutoDownload]     = useState(() => localStorage.getItem('lb:autoDownload')    === 'true');
+  const [downloadQuality,  setDownloadQuality]  = useState(() => localStorage.getItem('lb:downloadQuality') || 'high');
+  const [onlyWifi,         setOnlyWifi]         = useState(() => localStorage.getItem('lb:onlyWifi')        === 'true');
+  const [maxDownloads,     setMaxDownloads]      = useState(() => Number(localStorage.getItem('lb:maxConcurrentDownloads') || 3));
+
+  /* general */
+  const [darkMode,         setDarkMode]         = useState(() => localStorage.getItem('lb:darkMode')        === 'true');
+  const [notifications,    setNotifications]    = useState(() => localStorage.getItem('lb:notifications')   === 'true');
+  const [notifVolume,      setNotifVolume]      = useState(() => Number(localStorage.getItem('lb:notificationVolume') || 80));
+
+  /* privacy */
+  const [analytics,        setAnalytics]        = useState(() => localStorage.getItem('lb:privacyAnalytics')   === 'true');
+  const [remoteControl,    setRemoteControl]    = useState(() => localStorage.getItem('lb:allowRemoteControl') === 'true');
+
+  /* storage */
+  const [maxCache,         setMaxCache]         = useState(() => Number(localStorage.getItem('lb:maxCacheMB') || 200));
+  const [cacheSize]        = useState('12.4 MB');
+  const [isOnline,         setIsOnline]         = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
+
+  /* persist all */
+  useEffect(() => {
+    localStorage.setItem('lb:darkMode', darkMode);
+    if (darkMode) document.documentElement.classList.add('dark');
+    else          document.documentElement.classList.remove('dark');
+  }, [darkMode]);
+  useEffect(() => { localStorage.setItem('lb:notifications',           notifications);    }, [notifications]);
+  useEffect(() => { localStorage.setItem('lb:autoDownload',            autoDownload);     }, [autoDownload]);
+  useEffect(() => { localStorage.setItem('lb:onlyWifi',                onlyWifi);         }, [onlyWifi]);
+  useEffect(() => { localStorage.setItem('lb:crossfade',               String(crossfade));}, [crossfade]);
+  useEffect(() => { localStorage.setItem('lb:gapless',                 gapless);          }, [gapless]);
+  useEffect(() => { localStorage.setItem('lb:equalizer',               equalizer);        }, [equalizer]);
+  useEffect(() => { localStorage.setItem('lb:eqPreset',                eqPreset);         }, [eqPreset]);
+  useEffect(() => { localStorage.setItem('lb:maxConcurrentDownloads',  String(maxDownloads)); }, [maxDownloads]);
+  useEffect(() => { localStorage.setItem('lb:notificationVolume',      String(notifVolume)); }, [notifVolume]);
+  useEffect(() => { localStorage.setItem('lb:privacyAnalytics',        analytics);        }, [analytics]);
+  useEffect(() => { localStorage.setItem('lb:allowRemoteControl',      remoteControl);    }, [remoteControl]);
+  useEffect(() => { localStorage.setItem('lb:maxCacheMB',              String(maxCache)); }, [maxCache]);
+  useEffect(() => { localStorage.setItem('lb:downloadQuality',         downloadQuality);  }, [downloadQuality]);
+
+  useEffect(() => {
+    const on = () => setIsOnline(true), off = () => setIsOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  // Dark mode effect
-  useEffect(() => {
-    try {
-      if (darkMode) document.documentElement.classList.add('dark');
-      else document.documentElement.classList.remove('dark');
-    } catch (e) {}
-  }, [darkMode]);
-
-  // Cache clear
-  const clearCache = () => {
-    setCacheSize('0 MB');
-    try {
-      localStorage.removeItem('downloadedSongs');
-      localStorage.removeItem('lb:recentlyPlayed');
-    } catch (e) {}
+  const saveProfile = () => {
+    localStorage.setItem('lb:profileName',     name);
+    localStorage.setItem('lb:profileEmail',    email);
+    localStorage.setItem('lb:profilePhone',    phone);
+    localStorage.setItem('lb:profileLocation', location);
+    localStorage.setItem('lb:profileBio',      bio);
+    localStorage.setItem('lb:profileAvatar',   avatar);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    showToast('Profile saved!');
   };
 
-  // Export/Import
-  const exportSettingsToClipboard = () => {
-    const keys = [
-      'lb:darkMode','lb:notifications','lb:autoDownload','lb:downloadQuality','lb:onlyWifi',
+  const handleAvatar = (e) => {
+    const f = e.target.files?.[0];
+    if (f) { const r = new FileReader(); r.onload = ev => setAvatar(ev.target.result); r.readAsDataURL(f); }
+  };
+
+  const exportSettings = () => {
+    const keys = ['lb:darkMode','lb:notifications','lb:autoDownload','lb:downloadQuality','lb:onlyWifi',
       'lb:crossfade','lb:gapless','lb:maxCacheMB','lb:equalizer','lb:maxConcurrentDownloads',
-      'lb:notificationVolume','lb:privacyAnalytics','lb:allowRemoteControl','lb:eqPreset'
-    ];
-    const data = {};
-    keys.forEach(k => { try { data[k] = localStorage.getItem(k); } catch (e) {} });
-    try { navigator.clipboard.writeText(JSON.stringify(data)); alert('Settings copied to clipboard'); } 
-    catch (e) { alert('Copy failed'); }
+      'lb:notificationVolume','lb:privacyAnalytics','lb:allowRemoteControl','lb:eqPreset'];
+    const data = Object.fromEntries(keys.map(k => [k, localStorage.getItem(k)]));
+    try {
+      navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+      showToast('Settings copied to clipboard!');
+    } catch { showToast('Copy failed', 'error'); }
   };
 
-  const importSettingsFromPrompt = () => {
-    const raw = prompt('Paste settings JSON');
+  const importSettings = () => {
+    const raw = prompt('Paste settings JSON:');
     if (!raw) return;
     try {
       const obj = JSON.parse(raw);
-      Object.keys(obj).forEach(k => { localStorage.setItem(k, obj[k]); });
-      alert('Imported settings. Reload may be required.');
-    } catch (e) { alert('Invalid JSON'); }
+      Object.entries(obj).forEach(([k, v]) => localStorage.setItem(k, v));
+      showToast('Imported — refreshing…');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch { showToast('Invalid JSON', 'error'); }
   };
 
   const resetDefaults = () => {
-    setDarkMode(false);
-    setNotifications(true);
-    setAutoDownload(false);
-    setDownloadQuality('high');
-    setOnlyWifi(true);
-    setCrossfade(0);
-    setGapless(false);
-    setMaxCacheMB(200);
-    setEqualizer(false);
-    setMaxConcurrentDownloads(3);
-    setNotificationVolume(80);
-    setPrivacyAnalytics(false);
-    setAllowRemoteControl(false);
-    setEqPreset('flat');
-    const keys = [
-      'lb:darkMode','lb:notifications','lb:autoDownload','lb:downloadQuality','lb:onlyWifi',
-      'lb:crossfade','lb:gapless','lb:maxCacheMB','lb:equalizer','lb:maxConcurrentDownloads',
-      'lb:notificationVolume','lb:privacyAnalytics','lb:allowRemoteControl','lb:eqPreset'
-    ];
-    keys.forEach(k => localStorage.removeItem(k));
+    if (!window.confirm('Reset all settings to defaults?')) return;
+    setCrossfade(0); setGapless(false); setEqualizer(false); setEqPreset('flat');
+    setAutoDownload(false); setDownloadQuality('high'); setOnlyWifi(true); setMaxDownloads(3);
+    setDarkMode(false); setNotifications(true); setNotifVolume(80);
+    setAnalytics(false); setRemoteControl(false); setMaxCache(200);
+    showToast('Settings reset to defaults');
   };
 
+  const tabs = [
+    { key: 'profile',  label: 'Profile'  },
+    { key: 'playback', label: 'Playback' },
+    { key: 'storage',  label: 'Storage'  },
+  ];
+
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden">
-      {/* Subtle header gradient */}
-      <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-emerald-500/10 to-transparent pointer-events-none" />
+    <div className="set-root">
+      <style>{CSS}</style>
+      <div className="set-shell">
+        <div className="set-ambient" />
 
-      {/* Main content area */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-12 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Title and version */}
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-white text-3xl md:text-4xl font-bold tracking-tight">Settings</h1>
-            <div 
-              onClick={() => window.dispatchEvent(new CustomEvent('open-update-popup'))}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 cursor-pointer hover:bg-white/20 transition"
-            >
-              <span className="text-white/70 text-xs font-medium">v{VERSION}</span>
-              <span className="text-white/40 text-xs">•</span>
-              <span className="text-white/50 text-xs">{BUILD_DATE}</span>
-            </div>
-          </div>
+        <div className="set-scroll">
+          <div className="set-inner">
 
-          {/* Tabs */}
-          <div className="flex items-center justify-center gap-2 mb-10">
-            {['profile', 'preferences', 'storage'].map((tab) => (
+            {/* header */}
+            <div className="set-header">
+              <h1 className="set-title">Sett<span>ings</span></h1>
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-2.5 rounded-full text-sm font-medium capitalize transition-all ${
-                  activeTab === tab
-                    ? 'bg-white text-black shadow-lg'
-                    : 'text-white/70 hover:text-white hover:bg-white/10'
-                }`}
+                className="set-version-btn"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-update-popup'))}
               >
-                {tab}
+                <span>v{VERSION}</span>
+                <span className="set-version-dot">·</span>
+                <span>{BUILD_DATE}</span>
               </button>
-            ))}
-          </div>
+            </div>
 
-          {activeTab === 'profile' && (
-            <div className="space-y-6">
-              {/* Profile card */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8 shadow-xl">
-                <div className="flex flex-col md:flex-row items-center gap-8">
-                  {/* Avatar */}
-                  <div className="relative group">
-                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-emerald-500/30 to-teal-600/30 
-                    border-4 border-white/20 shadow-2xl overflow-hidden">
-                      {profileAvatar ? (
-                        <img src={profileAvatar} alt="Profile" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <FaUser className="text-white/60 text-3xl" />
-                        </div>
-                      )}
+            {/* tabs */}
+            <div className="set-tabs">
+              {tabs.map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`set-tab ${tab === t.key ? 'active' : ''}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Profile ── */}
+            {tab === 'profile' && (
+              <div>
+                {/* hero */}
+                <div className="set-profile-hero">
+                  <div className="set-avatar-wrap">
+                    <div className="set-avatar">
+                      {avatar
+                        ? <img src={avatar} alt="avatar" />
+                        : <FaUser className="set-avatar-placeholder" />}
                     </div>
-                    <label className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-gradient-to-r 
-                    from-emerald-500 to-emerald-600 flex items-center justify-center cursor-pointer 
-                    shadow-lg hover:scale-110 transition-transform">
-                      <FaCamera className="text-white text-xs" />
-                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                    <label className="set-avatar-upload">
+                      <FaCamera />
+                      <input type="file" accept="image/*" onChange={handleAvatar} />
                     </label>
                   </div>
 
-                  {/* Info */}
-                  <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-white text-2xl font-bold mb-1">{profileName}</h2>
-                    <p className="text-white/60 text-sm mb-3">{profileEmail || 'No email set'}</p>
-                    <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                      <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
-                        Premium
-                      </span>
-                      <span className="px-3 py-1 bg-white/10 text-white/70 text-xs rounded-full border border-white/20">
-                        Member since 2024
-                      </span>
+                  <div className="set-profile-info">
+                    <div className="set-profile-name">{name}</div>
+                    <div className="set-profile-email">{email || 'No email set'}</div>
+                    <div className="set-profile-badges">
+                      <span className="set-badge set-badge-premium">Premium</span>
+                      <span className="set-badge set-badge-member">Member since 2024</span>
                     </div>
                   </div>
 
                   <button
                     onClick={saveProfile}
-                    className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 
-                    hover:from-emerald-400 hover:to-emerald-500 text-white font-medium rounded-xl 
-                    shadow-lg hover:shadow-emerald-500/50 transition-all transform hover:scale-105 
-                    flex items-center gap-2"
+                    className={`set-save-btn ${saved ? 'saved' : 'unsaved'}`}
                   >
-                    <FaSave />
-                    Save
+                    {saved ? <FaCheckCircle /> : <FaSave />}
+                    {saved ? 'Saved!' : 'Save'}
                   </button>
                 </div>
-              </div>
 
-              {/* Personal info card */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8 shadow-xl">
-                <h3 className="text-white text-xl font-bold mb-6 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-emerald-500 rounded-full" />
-                  Personal Information
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-white/70 text-sm font-medium mb-2">
-                      <FaUser className="inline mr-2" /> Display Name
-                    </label>
-                    <input
-                      type="text"
-                      value={profileName}
-                      onChange={e => setProfileName(e.target.value)}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl 
-                      outline-none focus:bg-white/15 focus:border-emerald-400/50 transition-all"
-                      placeholder="Enter your name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/70 text-sm font-medium mb-2">
-                      <FaEnvelope className="inline mr-2" /> Email
-                    </label>
-                    <input
-                      type="email"
-                      value={profileEmail}
-                      onChange={e => setProfileEmail(e.target.value)}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl 
-                      outline-none focus:bg-white/15 focus:border-emerald-400/50 transition-all"
-                      placeholder="Enter your email"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/70 text-sm font-medium mb-2">
-                      <FaPhone className="inline mr-2" /> Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={profilePhone}
-                      onChange={e => setProfilePhone(e.target.value)}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl 
-                      outline-none focus:bg-white/15 focus:border-emerald-400/50 transition-all"
-                      placeholder="Enter your phone"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/70 text-sm font-medium mb-2">
-                      <FaMapMarkerAlt className="inline mr-2" /> Location
-                    </label>
-                    <input
-                      type="text"
-                      value={profileLocation}
-                      onChange={e => setProfileLocation(e.target.value)}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl 
-                      outline-none focus:bg-white/15 focus:border-emerald-400/50 transition-all"
-                      placeholder="Enter your location"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-white/70 text-sm font-medium mb-2">Bio</label>
-                    <textarea
-                      value={profileBio}
-                      onChange={e => setProfileBio(e.target.value)}
-                      rows={3}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl 
-                      outline-none focus:bg-white/15 focus:border-emerald-400/50 transition-all resize-none"
-                      placeholder="Tell us about yourself..."
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'preferences' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Playback */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-xl">
-                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                  <FaSlidersH className="text-emerald-400" /> Playback
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                {/* fields */}
+                <Card title="Personal Information" icon={<FaUser />} accent="emerald">
+                  <div className="set-form-grid">
                     <div>
-                      <div className="text-white text-sm">Crossfade</div>
-                      <div className="text-white/40 text-xs">{crossfade}s</div>
+                      <label className="set-field-label">Display Name</label>
+                      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" className="set-input" />
                     </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="12"
-                      value={crossfade}
-                      onChange={e => setCrossfade(Number(e.target.value))}
-                      className="w-24 accent-emerald-500"
-                    />
+                    <div>
+                      <label className="set-field-label">Email</label>
+                      <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="set-input" />
+                    </div>
+                    <div>
+                      <label className="set-field-label">Phone</label>
+                      <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 234 567 8900" className="set-input" />
+                    </div>
+                    <div>
+                      <label className="set-field-label">Location</label>
+                      <input value={location} onChange={e => setLocation(e.target.value)} placeholder="City, Country" className="set-input" />
+                    </div>
+                    <div className="set-span-2">
+                      <label className="set-field-label">Bio</label>
+                      <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Tell us about yourself…" className="set-input set-textarea" />
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Gapless Playback</span>
-                    <Toggle checked={gapless} onChange={setGapless} title="Gapless" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Equalizer</span>
-                    <Toggle checked={equalizer} onChange={setEqualizer} title="Equalizer" />
-                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* ── Playback ── */}
+            {tab === 'playback' && (
+              <div>
+                <Card title="Audio" icon={<FaSlidersH />} accent="emerald">
+                  <Slider label="Crossfade" value={crossfade} onChange={setCrossfade} min={0} max={12} unit="s" description="Blend between tracks" />
+                  <Toggle label="Gapless Playback" description="No silence between tracks" checked={gapless} onChange={setGapless} />
+                  <Toggle label="Equalizer" description="Apply EQ to audio output" checked={equalizer} onChange={setEqualizer} />
                   {equalizer && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-white text-sm">EQ Preset</span>
-                      <select
-                        value={eqPreset}
-                        onChange={e => setEqPreset(e.target.value)}
-                        className="bg-white/10 border border-white/20 text-white px-3 py-1 rounded-lg text-sm"
-                      >
-                        <option value="flat">Flat</option>
-                        <option value="bass">Bass Boost</option>
-                        <option value="vocal">Vocal</option>
-                        <option value="treble">Treble</option>
-                      </select>
-                    </div>
+                    <Select label="EQ Preset" value={eqPreset} onChange={setEqPreset}
+                      options={[
+                        { value: 'flat',   label: 'Flat'       },
+                        { value: 'bass',   label: 'Bass Boost' },
+                        { value: 'vocal',  label: 'Vocal'      },
+                        { value: 'treble', label: 'Treble'     },
+                      ]}
+                    />
                   )}
-                </div>
-              </div>
+                </Card>
 
-              {/* Downloads */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-xl">
-                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                  <FaDownload className="text-emerald-400" /> Downloads
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Auto-download</span>
-                    <Toggle checked={autoDownload} onChange={setAutoDownload} title="Auto-download" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Only on Wi‑Fi</span>
-                    <Toggle checked={onlyWifi} onChange={setOnlyWifi} title="Wi-Fi Only" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Quality</span>
-                    <select
-                      value={downloadQuality}
-                      onChange={e => setDownloadQuality(e.target.value)}
-                      className="bg-white/10 border border-white/20 text-white px-3 py-1 rounded-lg text-sm"
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Max Concurrent</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={maxConcurrentDownloads}
-                      onChange={e => setMaxConcurrentDownloads(Number(e.target.value))}
-                      className="w-16 px-2 py-1 rounded-lg bg-white/10 border border-white/20 text-white text-center"
-                    />
-                  </div>
-                </div>
-              </div>
+                <Card title="Downloads" icon={<FaDownload />} accent="purple">
+                  <Toggle label="Auto-download" description="Download favorited tracks automatically" checked={autoDownload} onChange={setAutoDownload} />
+                  <Toggle label="Wi-Fi only" description="Don't download on mobile data" checked={onlyWifi} onChange={setOnlyWifi} />
+                  <Select label="Quality" value={downloadQuality} onChange={setDownloadQuality}
+                    description="Higher quality uses more storage"
+                    options={[
+                      { value: 'low',    label: 'Low'    },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'high',   label: 'High'   },
+                    ]}
+                  />
+                  <NumberInput label="Max concurrent" value={maxDownloads} onChange={setMaxDownloads} min={1} max={10} description="Downloads running at once" />
+                </Card>
 
-              {/* General */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-xl">
-                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                  <FaMoon className="text-emerald-400" /> General
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Dark Mode</span>
-                    <Toggle checked={darkMode} onChange={setDarkMode} title="Dark Mode" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Notifications</span>
-                    <Toggle checked={notifications} onChange={setNotifications} title="Notifications" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Notification Volume</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={notificationVolume}
-                        onChange={e => setNotificationVolume(Number(e.target.value))}
-                        className="w-20 accent-emerald-500"
-                      />
-                      <span className="text-white/60 text-xs w-8">{notificationVolume}%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                <Card title="General" icon={<FaMoon />} accent="blue">
+                  <Toggle label="Dark mode" description="Use dark color scheme" checked={darkMode} onChange={setDarkMode} />
+                  <Toggle label="Notifications" description="Show playback notifications" checked={notifications} onChange={setNotifications} />
+                  {notifications && (
+                    <Slider label="Notification volume" value={notifVolume} onChange={setNotifVolume} unit="%" />
+                  )}
+                </Card>
 
-              {/* Privacy */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-xl">
-                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                  <FaChartLine className="text-emerald-400" /> Privacy
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Analytics</span>
-                    <Toggle checked={privacyAnalytics} onChange={setPrivacyAnalytics} title="Analytics" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">Remote Control</span>
-                    <Toggle checked={allowRemoteControl} onChange={setAllowRemoteControl} title="Remote Control" />
-                  </div>
-                </div>
+                <Card title="Privacy" icon={<FaShieldAlt />} accent="red">
+                  <Toggle label="Usage analytics" description="Help improve the app anonymously" checked={analytics} onChange={setAnalytics} />
+                  <Toggle label="Remote control" description="Allow controlling from other devices" checked={remoteControl} onChange={setRemoteControl} />
+                </Card>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeTab === 'storage' && (
-            <div className="space-y-6">
-              {/* Storage Management */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8 shadow-xl">
-                <h3 className="text-white text-xl font-bold mb-6 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-emerald-500 rounded-full" />
-                  Storage
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+            {/* ── Storage ── */}
+            {tab === 'storage' && (
+              <div>
+                <Card title="Storage" icon={<FaDownload />} accent="emerald">
+                  {/* cache */}
+                  <div className="set-info-row">
                     <div>
-                      <div className="text-white text-sm font-medium">Cache Size</div>
-                      <div className="text-white/40 text-xs">Temporary files</div>
+                      <p className="set-info-label">Cache Size</p>
+                      <p className="set-info-sub">Temporary files</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/60 text-sm font-mono">{cacheSize}</span>
-                      <button
-                        onClick={clearCache}
-                        className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 
-                        hover:from-red-400 hover:to-red-500 rounded-lg text-xs font-medium text-white"
-                      >
-                        Clear
-                      </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span className="set-info-val">{cacheSize}</span>
+                      <button className="set-clear-btn" onClick={() => showToast('Cache cleared')}>Clear</button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                    <div>
-                      <div className="text-white text-sm font-medium">Max Cache</div>
-                      <div className="text-white/40 text-xs">Storage limit (MB)</div>
-                    </div>
-                    <input
-                      type="number"
-                      min="50"
-                      max="5000"
-                      value={maxCacheMB}
-                      onChange={e => setMaxCacheMB(Number(e.target.value))}
-                      className="w-20 px-2 py-1 rounded-lg bg-white/10 border border-white/20 text-white text-center"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                    <div>
-                      <div className="text-white text-sm font-medium">Connection</div>
-                      <div className="text-white/40 text-xs">Network status</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                      <span className="text-white/60 text-sm">{isOnline ? 'Online' : 'Offline'}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                    <div>
-                      <div className="text-white text-sm font-medium">App Version</div>
-                      <div className="text-white/40 text-xs">Current release</div>
-                    </div>
-                    <span className="text-white/60 text-sm font-mono">{VERSION}</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Advanced */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8 shadow-xl">
-                <h3 className="text-white text-xl font-bold mb-6 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-emerald-500 rounded-full" />
-                  Advanced
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button
-                    onClick={exportSettingsToClipboard}
-                    className="px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 
-                    rounded-xl text-white text-sm font-medium transition-all flex items-center justify-center gap-2"
-                  >
-                    <FaClipboard /> Export
-                  </button>
-                  <button
-                    onClick={importSettingsFromPrompt}
-                    className="px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 
-                    rounded-xl text-white text-sm font-medium transition-all flex items-center justify-center gap-2"
-                  >
-                    <FaFileImport /> Import
-                  </button>
-                  <button
-                    onClick={resetDefaults}
-                    className="px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 
-                    hover:from-red-400 hover:to-red-500 rounded-xl text-white text-sm font-medium 
-                    transition-all flex items-center justify-center gap-2"
-                  >
-                    <FaRedoAlt /> Reset
-                  </button>
-                </div>
+                  <Slider label="Max cache size" value={maxCache} onChange={setMaxCache} min={50} max={5000} unit=" MB" description="Storage limit for offline content" />
+
+                  {/* connection */}
+                  <div className="set-info-row">
+                    <div>
+                      <p className="set-info-label">Connection</p>
+                      <p className="set-info-sub">Current network status</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className={`set-online-dot ${isOnline ? 'on' : 'off'}`} />
+                      <span className={`set-status-text ${isOnline ? 'on' : 'off'}`}>
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* version */}
+                  <div className="set-info-row">
+                    <div>
+                      <p className="set-info-label">App Version</p>
+                      <p className="set-info-sub">Built on {BUILD_DATE}</p>
+                    </div>
+                    <span className="set-info-val">v{VERSION}</span>
+                  </div>
+                </Card>
+
+                <Card
+                  title="Advanced"
+                  icon={<FaSlidersH />}
+                  accent="amber"
+                  note="Export your settings to back them up, or import from another device."
+                >
+                  <div className="set-actions-grid">
+                    <button onClick={exportSettings} className="set-action-btn set-action-default">
+                      <FaClipboard style={{ fontSize: 11 }} /> Export
+                    </button>
+                    <button onClick={importSettings} className="set-action-btn set-action-default">
+                      <FaFileImport style={{ fontSize: 11 }} /> Import
+                    </button>
+                    <button onClick={resetDefaults} className="set-action-btn set-action-danger">
+                      <FaRedoAlt style={{ fontSize: 11 }} /> Reset
+                    </button>
+                  </div>
+                </Card>
               </div>
-            </div>
-          )}
+            )}
+
+          </div>
         </div>
+
+        {/* toast */}
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </div>
   );

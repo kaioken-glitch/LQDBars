@@ -8,11 +8,7 @@ class YouTubeConverter {
   // Search for YouTube videos
   async searchVideos(query, maxResults = 20) {
     try {
-      if (!this.apiKey || this.apiKey === 'your_youtube_api_key_here') {
-        console.warn('YouTube API key not configured');
-        return [];
-      }
-
+      
       const response = await fetch(
         `${this.baseUrl}/search?part=snippet&type=video&videoCategoryId=10&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${this.apiKey}`
       );

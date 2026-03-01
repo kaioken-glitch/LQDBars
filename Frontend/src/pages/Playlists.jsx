@@ -1,926 +1,716 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowLeft, faChevronDown, faThLarge, faList, faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
-import { FaStar, FaHeart, FaSearch, FaPlay, FaPlus, FaMusic, FaTimes, FaFolderOpen, FaYoutube, FaRandom } from 'react-icons/fa';
-import { usePlayer } from '../context/PlayerContext';
+import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
+import {
+  FaSearch, FaPlay, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
+  FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
+  FaLink, FaStar, FaHeart,
+} from 'react-icons/fa';
 import TinyPlayer from '../components/TinyPlayer';
-import SongTile from '../components/SongTile';
-import musicApi from '../utils/musicApi';
-import { 
-  selectFolderForImport, 
-  loadSongsFromFolder,
-  getSavedFolders,
-  deleteFolder,
-  checkLocalFileSupport 
-} from '../utils/localstoragehandler';
-import { createPlaylistFromFiles } from '../utils/audioloader';
-import { fetchYouTubePlaylist, fetchVideoDurations } from '../utils/youtubePlaylist';
+import { usePlayer } from '../context/PlayerContext';
 
-const STORAGE_KEY = 'music_player_playlists';
-const MOCK_STATES_KEY = 'music_player_mock_states';
+/* ── STORAGE ── */
+const LS     = 'lb:playlists';
+const loadPL = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
+const savePL = d => { try { localStorage.setItem(LS, JSON.stringify(d)); } catch (_) {} };
 
-// Helper to format total seconds into a readable string
-const formatTotalDuration = (totalSeconds) => {
-  if (!totalSeconds || totalSeconds === 0) return '0 min';
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours} hr ${minutes} min`;
-  }
-  return `${minutes} min`;
-};
+/* ── YOUTUBE PLAYLIST IMPORT ──
+   Uses Piped API (open-source, no API key, CORS-safe).
+   Playback is handled by PlayerContext via YouTube IFrame Player API.
+───────────────────────────────────────────────────────────────────── */
+function extractPlaylistId(input) {
+  if (!input) return null;
+  const m1 = input.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  if (m1) return m1[1];
+  if (/^[A-Za-z0-9_-]{10,}$/.test(input.trim())) return input.trim();
+  return null;
+}
 
-export default function Playlists() {
-  const [userPlaylists, setUserPlaylists] = useState([]);
-  const [showDetailView, setShowDetailView] = useState(false);
-  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const [mockSongStates, setMockSongStates] = useState({});
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
-  const [viewMode, setViewMode] = useState('grid');
-  
-  const [showImportDropdown, setShowImportDropdown] = useState(false);
-  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [youtubeImportLoading, setYoutubeImportLoading] = useState(false);
-  const [youtubeImportError, setYoutubeImportError] = useState('');
-
-  const [localFolders, setLocalFolders] = useState([]);
-  const [importLoading, setImportLoading] = useState(false);
-  const [supportCheck, setSupportCheck] = useState(checkLocalFileSupport());
-  const [importError, setImportError] = useState('');
-
-  const {
-    currentSong,
-    isPlaying,
-    setIsPlaying,
-    playPrev,
-    playNext,
-    isMuted,
-    toggleMute,
-    setPlayerSongs,
-  } = usePlayer();
-
-  // Load from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setUserPlaylists(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to parse stored playlists', e);
-      }
-    }
-    const storedStates = localStorage.getItem(MOCK_STATES_KEY);
-    if (storedStates) {
-      try {
-        setMockSongStates(JSON.parse(storedStates));
-      } catch (e) {
-        console.error('Failed to parse mock states', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userPlaylists));
-  }, [userPlaylists]);
-
-  useEffect(() => {
-    localStorage.setItem(MOCK_STATES_KEY, JSON.stringify(mockSongStates));
-  }, [mockSongStates]);
-
-  useEffect(() => {
-    const loadFolders = async () => {
-      try {
-        const folders = await getSavedFolders();
-        setLocalFolders(folders);
-      } catch (error) {
-        console.error('Error loading folders:', error);
-      }
-    };
-    loadFolders();
-  }, []);
-
-  const handleImportLocalFolder = async () => {
-    setImportLoading(true);
-    setImportError('');
+async function fetchYTPlaylist(playlistId) {
+  const PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://api.piped.yt',
+  ];
+  let lastErr = null;
+  for (const base of PIPED_INSTANCES) {
     try {
-      const dirHandle = await selectFolderForImport();
-      const songs = await loadSongsFromFolder(dirHandle);
-      if (songs.length > 0) {
-        const newPlaylist = await createPlaylistFromFiles(
-          songs, 
-          dirHandle.name, 
-          `Local songs from ${dirHandle.name}`
-        );
-        setUserPlaylists(prev => [...prev, newPlaylist]);
-        const folders = await getSavedFolders();
-        setLocalFolders(folders);
-      } else {
-        setImportError('No audio files found in selected folder');
-      }
-    } catch (error) {
-      console.error('Import error:', error);
-      setImportError(error.message || 'Error importing folder');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  const handleImportYouTube = async () => {
-    if (!youtubeUrl.trim()) {
-      setYoutubeImportError('Please enter a YouTube playlist URL');
-      return;
-    }
-    const playlistId = extractYouTubePlaylistId(youtubeUrl);
-    if (!playlistId) {
-      setYoutubeImportError('Invalid YouTube playlist URL');
-      return;
-    }
-    setYoutubeImportLoading(true);
-    setYoutubeImportError('');
-    try {
-      const videos = await fetchYouTubePlaylist(playlistId);
-      if (videos.length === 0) {
-        setYoutubeImportError('No videos found in playlist');
-        return;
-      }
-      const videoIds = videos.map(v => v.id);
-      const durations = await fetchVideoDurations(videoIds);
-      let totalSeconds = 0;
-      const songs = videos.map(v => {
-        const duration = durations[v.id] || 0;
-        totalSeconds += duration;
-        const minutes = Math.floor(duration / 60);
-        const seconds = Math.floor(duration % 60);
-        const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      const res = await fetch(`${base}/playlists/${playlistId}`, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`Piped returned ${res.status}`);
+      const data = await res.json();
+      const songs = (data.relatedStreams || []).map(v => {
+        const videoId = v.url?.split('v=')?.[1] || '';
         return {
-          id: v.id,
-          name: v.title,
-          artist: v.channel,
-          duration: formattedDuration,
-          cover: v.thumbnail,
-          audio: null,
-          youtubeId: v.id,
-          source: 'youtube',
+          id:        `yt_${videoId}_${Date.now()}_${Math.random()}`,
+          name:      v.title || 'Untitled',
+          artist:    v.uploaderName || 'YouTube',
+          cover:     v.thumbnail || '',
+          source:    'youtube',
+          youtubeId: videoId,
+          audio:     `https://www.youtube.com/watch?v=${videoId}`,
+          duration:  v.duration > 0 ? formatDuration(v.duration) : '',
         };
       });
-      const newPlaylist = {
-        id: `youtube-${Date.now()}`,
-        name: `YouTube Playlist (${new Date().toLocaleDateString()})`,
-        description: `Imported from YouTube • ${videos.length} videos`,
-        cover: videos[0]?.thumbnail || '/default-cover.png',
-        songs: songs,
-        songCount: videos.length,
-        duration: formatTotalDuration(totalSeconds),
-        isCustom: true,
-        isYouTube: true,
-      };
-      setUserPlaylists(prev => [...prev, newPlaylist]);
-      setShowYouTubeModal(false);
-      setYoutubeUrl('');
-    } catch (error) {
-      console.error('YouTube import error:', error);
-      setYoutubeImportError(error.message || 'Failed to import playlist');
-    } finally {
-      setYoutubeImportLoading(false);
+      if (!songs.length) throw new Error('No playable tracks found in this playlist.');
+      return songs;
+    } catch (e) {
+      lastErr = e;
     }
-  };
+  }
+  throw new Error(`Could not fetch playlist. ${lastErr?.message || ''}`);
+}
 
-  const extractYouTubePlaylistId = (url) => {
-    const patterns = [
-      /[?&]list=([^&]+)/,
-      /youtube\.com\/playlist\?list=([^&]+)/,
-      /youtu\.be\/.*[?&]list=([^&]+)/,
-    ];
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return match[1];
-    }
-    return null;
-  };
+function formatDuration(seconds) {
+  if (!seconds || seconds < 0) return '';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
-  const handleRemoveLocalFolder = async (folderName) => {
-    try {
-      await deleteFolder(folderName);
-      setUserPlaylists(prev => prev.filter(p => p.folderName !== folderName));
-      const folders = await getSavedFolders();
-      setLocalFolders(folders);
-    } catch (error) {
-      console.error('Error removing folder:', error);
-      setImportError('Error removing folder');
-    }
-  };
+/* ── CSS (unchanged) ── */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
 
-  const handleCreatePlaylist = () => {
-    if (newPlaylistName.trim()) {
-      const newPlaylist = {
-        id: `custom-${Date.now()}`,
-        name: newPlaylistName,
-        description: newPlaylistDesc || 'Custom playlist',
-        songCount: 0,
-        duration: '0 min',
-        cover: '/default-cover.png',
-        songs: [],
-        isCustom: true
-      };
-      setUserPlaylists(prev => [...prev, newPlaylist]);
-      setNewPlaylistName('');
-      setNewPlaylistDesc('');
-      setShowCreateModal(false);
-    }
-  };
+.pl-root {
+  --g:      #1DB954;
+  --g2:     #23E065;
+  --gdim:   rgba(29,185,84,0.14);
+  --gglow:  rgba(29,185,84,0.28);
+  --yt:     #FF0000;
+  --yt-dim: rgba(255,0,0,0.12);
+  --s1:     rgba(255,255,255,0.04);
+  --s2:     rgba(255,255,255,0.07);
+  --sh:     rgba(255,255,255,0.09);
+  --b1:     rgba(255,255,255,0.07);
+  --b2:     rgba(255,255,255,0.13);
+  --t1:     #fff;
+  --t2:     rgba(255,255,255,0.55);
+  --t3:     rgba(255,255,255,0.28);
+  --ease:   cubic-bezier(0.4,0,0.2,1);
+  --spring: cubic-bezier(0.22,1,0.36,1);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--t1);
+}
+.pl-root *, .pl-root *::before, .pl-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.pl-root button { font-family: inherit; cursor: pointer; border: none; background: none; }
+.pl-shell { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.pl-header { flex-shrink: 0; padding: 28px 28px 0; background: linear-gradient(180deg, rgba(29,185,84,0.06) 0%, transparent 100%); }
+.pl-header-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+.pl-title-block { flex: 1; min-width: 0; }
+.pl-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--g); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pl-eyebrow-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--g); }
+.pl-title { font-family: 'Syne', sans-serif; font-size: clamp(34px,5vw,58px); font-weight: 800; letter-spacing: -.045em; line-height: 1; background: linear-gradient(135deg, #fff 35%, var(--g2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.pl-subtitle { font-size: 12px; color: var(--t3); margin-top: 5px; }
+.pl-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pl-search-wrap { position: relative; }
+.pl-search-ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--t3); font-size: 12px; pointer-events: none; }
+.pl-search { padding: 9px 14px 9px 36px; width: 200px; background: var(--s1); border: 1px solid var(--b1); border-radius: 9999px; color: var(--t1); font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none; transition: border-color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease); }
+.pl-search::placeholder { color: var(--t3); }
+.pl-search:focus { border-color: rgba(29,185,84,.5); background: var(--s2); box-shadow: 0 0 0 3px rgba(29,185,84,.10); }
+.pl-import-wrap { position: relative; }
+.pl-import-btn { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 9999px; background: var(--s1); border: 1px solid var(--b1); color: var(--t2); font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 13px; transition: background .15s var(--ease), color .15s var(--ease), border-color .15s; }
+.pl-import-btn:hover { background: var(--s2); color: var(--t1); border-color: var(--b2); }
+.pl-import-btn svg { transition: transform .2s var(--spring); }
+.pl-import-btn.open svg.chevron { transform: rotate(180deg); }
+.pl-import-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 220px; background: #0D0F11; border: 1px solid var(--b2); border-radius: 16px; padding: 6px; box-shadow: 0 20px 60px rgba(0,0,0,.7); animation: plDropIn .2s var(--spring) both; }
+@keyframes plDropIn { from{opacity:0;transform:translateY(-8px) scale(.97)} to{opacity:1;transform:none} }
+.pl-import-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; font-size: 13px; color: var(--t2); transition: background .14s, color .14s; width: 100%; text-align: left; }
+.pl-import-item:hover { background: var(--s2); color: var(--t1); }
+.pl-import-item .icon-wrap { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.pl-import-item.local .icon-wrap { background: rgba(96,165,250,.12); color: #60A5FA; }
+.pl-import-item.youtube .icon-wrap { background: var(--yt-dim); color: var(--yt); }
+.pl-import-item-label { font-size: 13px; font-weight: 500; }
+.pl-import-item-sub { font-size: 10px; color: var(--t3); margin-top: 1px; }
+.pl-import-sep { height: 1px; background: var(--b1); margin: 4px 0; }
+.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: var(--g); color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.35); transition: background .15s var(--ease), transform .15s var(--spring), box-shadow .15s var(--ease); }
+.pl-new-btn:hover { background: var(--g2); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(29,185,84,.5); }
+.pl-new-btn:active { transform: scale(.96); }
+.pl-divider { height: 1px; background: var(--b1); margin: 18px 0 0; }
+.pl-content { flex: 1; overflow-y: auto; padding: 24px 28px 40px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
+.pl-content::-webkit-scrollbar { width: 4px; }
+.pl-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(148px,1fr)); gap: 16px; }
+@media(min-width:500px)  { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(158px,1fr)); gap:18px; } }
+@media(min-width:768px)  { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:20px; } }
+@media(min-width:1024px) { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:24px; } }
+.pl-card { position: relative; background: var(--s1); border: 1px solid var(--b1); border-radius: 18px; overflow: hidden; cursor: pointer; transition: transform .24s var(--spring), border-color .22s var(--ease), box-shadow .22s var(--ease); animation: plUp .38s var(--spring) both; }
+@keyframes plUp { from{opacity:0;transform:translateY(18px) scale(.97)} to{opacity:1;transform:none} }
+.pl-card:hover { transform: translateY(-6px) scale(1.025); border-color: rgba(29,185,84,.28); box-shadow: 0 24px 56px rgba(0,0,0,.55), 0 0 32px rgba(29,185,84,.07); }
+.pl-card:nth-child(1){animation-delay:.03s} .pl-card:nth-child(2){animation-delay:.06s} .pl-card:nth-child(3){animation-delay:.09s} .pl-card:nth-child(n+4){animation-delay:.12s}
+.pl-source-badge { position: absolute; top: 8px; left: 8px; z-index: 3; display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; font-size: 9px; font-weight: 700; letter-spacing: .06em; backdrop-filter: blur(8px); }
+.pl-source-badge.yt { background: rgba(0,0,0,.6); color: var(--yt); border: 1px solid rgba(255,0,0,.2); }
+.pl-art { position: relative; width: 100%; padding-top: 100%; background: var(--gdim); }
+.pl-art-mosaic { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+.pl-art-single { position: absolute; inset: 0; overflow: hidden; }
+.pl-art-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: rgba(29,185,84,.3); background: linear-gradient(135deg, rgba(29,185,84,.1), rgba(0,0,0,.2)); }
+.pl-art-mosaic img, .pl-art-single img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .55s var(--ease); }
+.pl-card:hover .pl-art-mosaic img, .pl-card:hover .pl-art-single img { transform: scale(1.07); }
+.pl-art-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0%, transparent 55%); opacity: 0; transition: opacity .22s var(--ease); display: flex; align-items: center; justify-content: center; }
+.pl-card:hover .pl-art-overlay { opacity: 1; }
+.pl-art-play { width: 46px; height: 46px; border-radius: 50%; background: var(--g); color: #000; font-size: 15px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 22px rgba(29,185,84,.5); transform: scale(.82) translateY(4px); transition: transform .22s var(--spring), background .15s var(--ease); }
+.pl-card:hover .pl-art-play { transform: scale(1) translateY(0); }
+.pl-art-play:hover { background: var(--g2); }
+.pl-del-badge { position: absolute; top: 8px; right: 8px; z-index: 3; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.1); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--t2); opacity: 0; transition: opacity .18s var(--ease), background .15s var(--ease); }
+.pl-card:hover .pl-del-badge { opacity: 1; }
+.pl-del-badge:hover { background: rgba(220,40,40,.7); color: #fff; }
+.pl-card-info { padding: 13px 15px 15px; }
+.pl-card-name { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.pl-card-count { font-size: 11px; color: var(--t3); }
+.pl-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 55vh; gap: 16px; text-align: center; }
+.pl-empty-icon { width: 80px; height: 80px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); display: flex; align-items: center; justify-content: center; font-size: 30px; color: var(--t3); }
+.pl-empty h3 { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: var(--t1); letter-spacing: -.025em; }
+.pl-empty p { font-size: 14px; color: var(--t3); max-width: 290px; line-height: 1.6; }
+.pl-create-overlay { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.65); backdrop-filter: blur(14px); display: flex; align-items: center; justify-content: center; animation: plFadeIn .22s var(--ease); }
+@keyframes plFadeIn { from{opacity:0} to{opacity:1} }
+.pl-create-box { width: min(420px,93vw); background: #0D0F11; border: 1px solid var(--b2); border-radius: 24px; padding: 30px; box-shadow: 0 36px 90px rgba(0,0,0,.75); animation: plScaleIn .3s var(--spring); }
+@keyframes plScaleIn { from{opacity:0;transform:scale(.9)} to{opacity:1;transform:none} }
+.pl-create-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.pl-create-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: var(--t1); letter-spacing: -.02em; }
+.pl-create-close { width: 32px; height: 32px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t2); font-size: 12px; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
+.pl-create-close:hover { background: var(--sh); color: var(--t1); }
+.pl-create-label { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--t3); margin-bottom: 9px; }
+.pl-create-input { width: 100%; padding: 13px 16px; background: var(--s1); border: 1px solid var(--b1); border-radius: 13px; color: var(--t1); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color .18s, background .18s; margin-bottom: 24px; }
+.pl-create-input::placeholder { color: var(--t3); }
+.pl-create-input:focus { border-color: rgba(29,185,84,.5); background: var(--s2); }
+.pl-create-submit { width: 100%; padding: 14px; background: var(--g); border-radius: 13px; color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 4px 18px rgba(29,185,84,.35); transition: background .15s, transform .15s var(--spring); }
+.pl-create-submit:hover:not(:disabled) { background: var(--g2); transform: translateY(-1px); }
+.pl-create-submit:active { transform: scale(.97); }
+.pl-create-submit:disabled { opacity: .4; cursor: not-allowed; }
+.pl-yt-modal-overlay { position: fixed; inset: 0; z-index: 75; background: rgba(0,0,0,.7); backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; animation: plFadeIn .22s var(--ease); }
+.pl-yt-modal { width: min(480px,95vw); background: #0D0F11; border: 1px solid var(--b2); border-radius: 24px; padding: 0; box-shadow: 0 40px 100px rgba(0,0,0,.8); overflow: hidden; animation: plScaleIn .3s var(--spring); }
+.pl-yt-modal-top { padding: 24px 28px 20px; background: linear-gradient(135deg, rgba(255,0,0,.08), transparent); border-bottom: 1px solid var(--b1); }
+.pl-yt-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.pl-yt-modal-title-wrap { display: flex; align-items: center; gap: 10px; }
+.pl-yt-modal-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--yt-dim); display: flex; align-items: center; justify-content: center; color: var(--yt); font-size: 16px; }
+.pl-yt-modal-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--t1); letter-spacing: -.02em; }
+.pl-yt-close { width: 32px; height: 32px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t2); display: flex; align-items: center; justify-content: center; font-size: 12px; transition: background .15s, color .15s; }
+.pl-yt-close:hover { background: var(--sh); color: var(--t1); }
+.pl-yt-field { margin-bottom: 14px; }
+.pl-yt-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; }
+.pl-yt-input-wrap { position: relative; }
+.pl-yt-input-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--t3); font-size: 13px; pointer-events: none; }
+.pl-yt-input { width: 100%; padding: 12px 14px 12px 40px; background: var(--s1); border: 1px solid var(--b1); border-radius: 12px; color: var(--t1); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color .18s, background .18s; }
+.pl-yt-input::placeholder { color: var(--t3); }
+.pl-yt-input:focus { border-color: rgba(255,0,0,.4); background: var(--s2); }
+.pl-yt-body { padding: 20px 28px 24px; }
+.pl-yt-info-note { font-size: 12px; color: var(--t3); line-height: 1.6; padding: 10px 14px; background: rgba(255,255,255,.02); border: 1px solid var(--b1); border-radius: 10px; margin-bottom: 16px; }
+.pl-yt-progress { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: rgba(255,0,0,.06); border: 1px solid rgba(255,0,0,.15); border-radius: 12px; margin-bottom: 14px; font-size: 13px; color: var(--t2); animation: plFadeIn .2s var(--ease); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pl-yt-spinner { animation: spin .8s linear infinite; color: var(--yt); font-size: 14px; }
+.pl-yt-error { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; background: rgba(255,60,60,.07); border: 1px solid rgba(255,60,60,.2); border-radius: 12px; margin-bottom: 14px; font-size: 12px; color: rgba(255,120,120,0.9); line-height: 1.6; animation: plFadeIn .2s var(--ease); }
+.pl-yt-error-icon { flex-shrink: 0; margin-top: 2px; }
+.pl-yt-import-btn { width: 100%; padding: 14px; background: var(--yt); border-radius: 12px; color: #fff; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 4px 18px rgba(255,0,0,.25); transition: background .15s, transform .15s var(--spring), opacity .15s; }
+.pl-yt-import-btn:hover:not(:disabled) { background: #cc0000; transform: translateY(-1px); }
+.pl-yt-import-btn:active { transform: scale(.97); }
+.pl-yt-import-btn:disabled { opacity: .45; cursor: not-allowed; }
+.pl-modal { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; animation: plFadeIn .28s var(--spring) both; }
+.pl-modal-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 50% at 20% -10%, rgba(29,185,84,.22) 0%, transparent 60%), linear-gradient(180deg, rgba(4,28,16,.95) 0%, #07080A 50%); }
+.pl-modal-grain { position: absolute; inset: 0; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-size: 200px; opacity: .022; mix-blend-mode: screen; }
+.pl-modal-bar { position: relative; z-index: 2; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-bottom: 1px solid var(--b1); background: rgba(0,0,0,.22); backdrop-filter: blur(24px); }
+.pl-modal-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.pl-modal-btn:hover { background: var(--sh); }
+.pl-modal-btn:active { transform: scale(.9); }
+.pl-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 30px 20px; }
+@media(min-width:560px) { .pl-hero { flex-direction: row; align-items: flex-end; padding: 32px 40px 24px; } }
+.pl-hero-art { position: relative; flex-shrink: 0; width: 148px; height: 148px; border-radius: 20px; overflow: hidden; box-shadow: 0 28px 64px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
+@media(min-width:560px) { .pl-hero-art { width: 185px; height: 185px; } }
+.pl-hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl-hero-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg, rgba(29,185,84,.18), rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
+.pl-hero-glow { position: absolute; inset: -14px; border-radius: 30px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(14px); animation: heroGlowPL 3.5s ease-in-out infinite; }
+@keyframes heroGlowPL { 0%,100%{opacity:.7;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+.pl-hero-info { flex: 1; min-width: 0; }
+.pl-hero-tag { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--g); margin-bottom: 9px; }
+.pl-hero-tag-bar { width: 3px; height: 18px; border-radius: 2px; background: var(--g); }
+.pl-hero-title { font-family: 'Syne', sans-serif; font-size: clamp(26px,4.5vw,50px); font-weight: 800; letter-spacing: -.04em; color: var(--t1); line-height: 1.04; margin-bottom: 5px; }
+.pl-hero-count { font-size: 12px; color: var(--t3); margin-bottom: 22px; }
+.pl-hero-actions { display: flex; align-items: center; gap: 12px; }
+.pl-hero-play { width: 56px; height: 56px; border-radius: 50%; background: var(--g); color: #000; font-size: 19px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 28px rgba(29,185,84,.45); transition: transform .18s var(--spring), background .15s; }
+.pl-hero-play:hover { background: var(--g2); transform: scale(1.09); }
+.pl-hero-play:active { transform: scale(.93); }
+.pl-hero-shuffle { width: 42px; height: 42px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t2); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
+.pl-hero-shuffle:hover { background: var(--sh); color: var(--t1); }
+.pl-tracks { position: relative; z-index: 2; flex: 1; overflow-y: auto; padding: 0 22px 36px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
+.pl-tracks::-webkit-scrollbar { width: 4px; }
+.pl-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
+.pl-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 0 12px 14px; }
+.pl-track-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .14s, border-color .14s; }
+.pl-track-row:hover { background: var(--s2); border-color: var(--b1); }
+.pl-track-row.active { background: rgba(29,185,84,.09); border-color: rgba(29,185,84,.2); }
+.pl-track-num { width: 24px; text-align: center; font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pl-track-row.active .pl-track-num { color: var(--g); }
+.pl-track-thumb { width: 40px; height: 40px; border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.pl-track-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl-track-meta { flex: 1; min-width: 0; }
+.pl-track-name { font-size: 13px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; transition: color .14s; }
+.pl-track-row:hover .pl-track-name, .pl-track-row.active .pl-track-name { color: var(--g); }
+.pl-track-artist { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pl-tracks-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 10px; color: var(--t3); font-size: 14px; text-align: center; }
+.pl-track-row:hover .pl-track-actions { opacity: 1 !important; }
+.pl-track-row.active .pl-track-actions { opacity: 1 !important; }
+`;
 
-  const handleRemovePlaylist = (playlistId) => {
-    setUserPlaylists(prev => prev.filter(p => p.id !== playlistId));
-  };
+const FB = 'https://placehold.co/200x200/061408/112208?text=\u266a';
 
-  const handlePlaylistPlay = (playlist) => {
-    setSelectedPlaylist(playlist);
-    setShowDetailView(true);
-  };
-
-  const handleBackFromDetail = () => {
-    setShowDetailView(false);
-    setSelectedPlaylist(null);
-  };
-
-  const handlePlaySongFromPlaylist = (songIndex) => {
-    if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
-      try {
-        const validSongs = selectedPlaylist.songs.filter(song => 
-          song.audio || song.url || song.audioUrl || song.src || song.youtubeId
-        );
-        if (validSongs.length === 0) {
-          console.error('No valid songs found in playlist');
-          return;
+/* ── PLAYLIST CARD ── */
+const PlaylistCard = memo(({ pl, onOpen, onPlay, onDelete }) => {
+  const covers   = (pl.songs || []).slice(0, 4).map(s => s.cover || FB);
+  const hasCover = covers.length > 0;
+  const isYT     = pl.source === 'youtube';
+  return (
+    <div className="pl-card" onClick={() => onOpen(pl)}>
+      {isYT && (
+        <div className="pl-source-badge yt">
+          <FaYoutube style={{ fontSize: 10 }} /> YT
+        </div>
+      )}
+      <div className="pl-art">
+        {!hasCover
+          ? <div className="pl-art-empty"><FaListUl /></div>
+          : covers.length === 1
+            ? <div className="pl-art-single"><img src={covers[0]} alt={pl.name} onError={e => { e.target.src = FB; }} /></div>
+            : <div className="pl-art-mosaic">{covers.map((c, i) => <img key={i} src={c} alt="" onError={e => { e.target.src = FB; }} />)}</div>
         }
-        let adjustedIndex = songIndex;
-        if (validSongs.length < selectedPlaylist.songs.length) {
-          const selectedSong = selectedPlaylist.songs[songIndex];
-          adjustedIndex = validSongs.findIndex(s => s.id === selectedSong?.id);
-          if (adjustedIndex === -1) adjustedIndex = 0;
-        }
-        setPlayerSongs(validSongs, adjustedIndex);
-        setTimeout(() => setIsPlaying(true), 100);
-      } catch (error) {
-        console.error('Error playing song:', error);
-      }
-    }
-  };
+        <div className="pl-art-overlay">
+          <button className="pl-art-play" onClick={e => { e.stopPropagation(); if ((pl.songs || []).length) onPlay(pl.songs); }} aria-label={`Play ${pl.name}`}>
+            <FaPlay style={{ marginLeft: 2 }} />
+          </button>
+        </div>
+        <button className="pl-del-badge" onClick={e => { e.stopPropagation(); onDelete(pl.id); }} aria-label="Delete playlist">
+          <FaTrash />
+        </button>
+      </div>
+      <div className="pl-card-info">
+        <div className="pl-card-name">{pl.name}</div>
+        <div className="pl-card-count">{(pl.songs || []).length} songs</div>
+      </div>
+    </div>
+  );
+});
 
-  const handlePlayPlaylist = () => {
-    if (selectedPlaylist?.songs && selectedPlaylist.songs.length > 0) {
-      handlePlaySongFromPlaylist(0);
-    }
-  };
-
-  const updateMockSongState = (songId, updates) => {
-    setMockSongStates(prev => ({
-      ...prev,
-      [songId]: {
-        ...prev[songId],
-        ...updates
-      }
-    }));
-  };
-
-  const handleSearch = async (searchQuery) => {
-    setQuery(searchQuery);
-    if (searchQuery.trim()) {
-      try {
-        const apiResults = await musicApi.searchTracks(searchQuery, 10);
-        setResults(apiResults && apiResults.length > 0 ? apiResults : []);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      }
-    } else {
-      setResults([]);
-    }
-  };
+/* ── CREATE MODAL ── */
+const CreateModal = memo(({ onClose, onCreate }) => {
+  const [name, setName] = useState('');
+  const submit = useCallback(() => {
+    const t = name.trim();
+    if (!t) return;
+    onCreate(t); onClose();
+  }, [name, onCreate, onClose]);
 
   return (
-    <div className="playlists w-full h-full flex flex-col items-center justify-start overflow-x-hidden pb-20">
-      {!showDetailView ? (
-        <>
-          {/* Header Section (unchanged) */}
-          <div className="head w-full max-w-[1600px] px-4 md:px-6 lg:px-8 pt-6 pb-4">
-            {/* ... (header content – same as before) ... */}
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                <div className="relative flex items-center w-full md:w-80">
-                  <FaSearch className="absolute left-4 text-white/50 text-sm" />
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={e => handleSearch(e.target.value)}
-                    placeholder="Search playlists..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-white/10 border border-white/20 text-white 
-                    outline-none rounded-full font-medium text-sm backdrop-blur-xl 
-                    placeholder:text-white/50 focus:bg-white/15 focus:border-emerald-400/50 transition-all"
-                  />
-                  {query && results.length > 0 && (
-                    <div className="absolute left-0 top-12 w-full bg-gradient-to-b from-emerald-600 
-                    to-emerald-700 rounded-2xl shadow-2xl z-50 overflow-hidden border border-white/10 backdrop-blur-xl">
-                      {results.slice(0, 5).map((song, i) => (
-                        <div
-                          key={song.id || i}
-                          className="px-4 py-3 text-white hover:bg-white/10 cursor-pointer text-sm 
-                          flex items-center gap-3 transition-all"
-                          onClick={() => setQuery(song.name)}
-                        >
-                          <img src={song.cover} alt={song.name} className="w-8 h-8 rounded object-cover" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold truncate">{song.name}</p>
-                            <p className="text-white/70 text-xs truncate">{song.artist}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+    <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 70 }}>
+      <div className="pl-create-overlay" onClick={onClose}>
+        <div className="pl-create-box" onClick={e => e.stopPropagation()}>
+          <div className="pl-create-header">
+            <span className="pl-create-title">New Playlist</span>
+            <button className="pl-create-close" onClick={onClose}><FaTimes /></button>
+          </div>
+          <div className="pl-create-label">Playlist Name</div>
+          <input
+            className="pl-create-input" type="text" value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
+            placeholder="My Playlist\u2026" autoFocus maxLength={60}
+          />
+          <button className="pl-create-submit" onClick={submit} disabled={!name.trim()}>
+            Create Playlist
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
 
-                <div className="hidden md:block">
-                  <TinyPlayer
-                    song={currentSong}
-                    isPlaying={isPlaying}
-                    onPlayPause={() => setIsPlaying(p => !p)}
-                    onPrev={playPrev}
-                    onNext={playNext}
-                    isMuted={isMuted}
-                    onMuteToggle={toggleMute}
-                  />
-                </div>
+/* ── YOUTUBE IMPORT MODAL — no API key, no conversion server ── */
+const YouTubeImportModal = memo(({ onClose, onImport }) => {
+  const [url,     setUrl]     = useState('');
+  const [plName,  setPlName]  = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+
+  const handleImport = useCallback(async () => {
+    const plId = extractPlaylistId(url.trim());
+    if (!plId) { setError('Paste a valid YouTube playlist URL or ID.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const songs = await fetchYTPlaylist(plId);
+      const name  = plName.trim() || `YouTube Playlist (${songs.length} tracks)`;
+      onImport(name, songs);
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [url, plName, onImport, onClose]);
+
+  return (
+    <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 75 }}>
+      <div className="pl-yt-modal-overlay" onClick={onClose}>
+        <div className="pl-yt-modal" onClick={e => e.stopPropagation()}>
+          <div className="pl-yt-modal-top">
+            <div className="pl-yt-modal-header">
+              <div className="pl-yt-modal-title-wrap">
+                <div className="pl-yt-modal-icon"><FaYoutube /></div>
+                <span className="pl-yt-modal-title">Import from YouTube</span>
               </div>
-
-              <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h1 className="text-white text-4xl md:text-5xl font-bold tracking-tight">Your Playlists</h1>
-                  <p className="text-white/60 text-sm md:text-base mt-2">
-                    {userPlaylists.length} {userPlaylists.length === 1 ? 'playlist' : 'playlists'} • 
-                    {userPlaylists.reduce((acc, p) => acc + p.songCount, 0)} songs
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center bg-white/10 backdrop-blur-xl rounded-full p-1 border border-white/20">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${
-                        viewMode === 'grid' 
-                          ? 'bg-emerald-500 text-white shadow-lg' 
-                          : 'text-white/60 hover:text-white hover:bg-white/10'
-                      }`}
-                      title="Grid view"
-                    >
-                      <FontAwesomeIcon icon={faThLarge} className="text-sm" />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${
-                        viewMode === 'list' 
-                          ? 'bg-emerald-500 text-white shadow-lg' 
-                          : 'text-white/60 hover:text-white hover:bg-white/10'
-                      }`}
-                      title="List view"
-                    >
-                      <FontAwesomeIcon icon={faList} className="text-sm" />
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 
-                    to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-full 
-                    font-semibold transition-all shadow-lg hover:shadow-emerald-500/50"
-                  >
-                    <FaPlus /> Create
-                  </button>
-
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowImportDropdown(!showImportDropdown)}
-                      className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 
-                      to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white rounded-full 
-                      font-semibold transition-all shadow-lg hover:shadow-purple-500/50"
-                    >
-                      <FaFolderOpen /> Import
-                      <FontAwesomeIcon icon={faChevronDown} className="text-sm" />
-                    </button>
-
-                    {showImportDropdown && (
-                      <div className="absolute right-0 mt-2 w-56 bg-gradient-to-b from-purple-600 
-                      to-purple-700 rounded-2xl shadow-2xl z-50 backdrop-blur-xl border border-white/10 
-                      overflow-hidden">
-                        <button
-                          onClick={() => {
-                            setShowImportDropdown(false);
-                            handleImportLocalFolder();
-                          }}
-                          disabled={importLoading}
-                          className="w-full px-4 py-3 text-left text-white hover:bg-white/20 
-                          transition-all flex items-center gap-3"
-                        >
-                          <FaFolderOpen className="text-purple-200" />
-                          <span className="flex-1">Local Folder</span>
-                          {importLoading && <span className="text-xs animate-pulse">...</span>}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowImportDropdown(false);
-                            setShowYouTubeModal(true);
-                          }}
-                          className="w-full px-4 py-3 text-left text-white hover:bg-white/20 
-                          transition-all flex items-center gap-3"
-                        >
-                          <FaYoutube className="text-red-300" />
-                          <span className="flex-1">YouTube Playlist</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <button className="pl-yt-close" onClick={onClose}><FaTimes /></button>
+            </div>
+            <div className="pl-yt-field">
+              <div className="pl-yt-label">Playlist URL or ID</div>
+              <div className="pl-yt-input-wrap">
+                <FaLink className="pl-yt-input-ico" />
+                <input
+                  className="pl-yt-input"
+                  type="text" value={url}
+                  onChange={e => { setUrl(e.target.value); setError(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleImport(); if (e.key === 'Escape') onClose(); }}
+                  placeholder="https://youtube.com/playlist?list=PL..."
+                  autoFocus
+                />
               </div>
-
-              {importError && (
-                <div className="mt-3 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
-                  {importError}
-                </div>
-              )}
+            </div>
+            <div className="pl-yt-field">
+              <div className="pl-yt-label">Playlist Name (optional)</div>
+              <div className="pl-yt-input-wrap">
+                <FaListUl className="pl-yt-input-ico" style={{ fontSize: 11 }} />
+                <input
+                  className="pl-yt-input"
+                  type="text" value={plName}
+                  onChange={e => setPlName(e.target.value)}
+                  placeholder="Leave blank to auto-name"
+                  maxLength={60}
+                />
+              </div>
             </div>
           </div>
-
-          {/* Playlists Grid/List (unchanged) */}
-          <div className="w-full max-w-[1600px] px-4 md:px-6 lg:px-8 mt-6 flex-1 overflow-y-auto">
-            {userPlaylists.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-96 text-center">
-                <FaMusic className="text-white/40 text-6xl mb-4" />
-                <h3 className="text-white text-2xl font-bold mb-2">No playlists yet</h3>
-                <p className="text-white/60 max-w-md mb-6">
-                  Create your first playlist or import local music to get started.
-                </p>
-              </div>
-            ) : viewMode === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6 pb-8">
-                {userPlaylists.map((playlist) => (
-                  <div 
-                    key={playlist.id} 
-                    className="group relative bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl 
-                    rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer 
-                    border border-white/10 hover:border-emerald-400/30 hover:scale-[1.02] overflow-hidden"
-                  >
-                    <div className="aspect-square bg-gradient-to-br from-purple-500/40 to-indigo-600/40 
-                    rounded-t-2xl flex items-center justify-center overflow-hidden relative">
-                      <img 
-                        src={playlist.cover} 
-                        alt={playlist.name} 
-                        className="w-full h-full object-cover" 
-                        onError={(e) => { e.target.src = '/default-cover.png'; }}
-                      />
-                      {playlist.isYouTube && (
-                        <div className="absolute top-2 left-2 bg-red-600/80 rounded-full p-1">
-                          <FaYoutube className="text-white text-xs" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4">
-                      <h3 className="text-white font-bold text-base mb-1 truncate">{playlist.name}</h3>
-                      <p className="text-white/60 text-xs mb-1 truncate">{playlist.description}</p>
-                      <p className="text-white/50 text-xs mb-3">
-                        {playlist.songCount} songs • {playlist.duration}
-                      </p>
-                      <button 
-                        className="w-11 h-11 flex items-center justify-center rounded-full bg-gradient-to-r 
-                        from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
-                        transition-all shadow-lg hover:shadow-emerald-500/50 ml-auto transform 
-                        hover:scale-110 active:scale-95"
-                        onClick={() => handlePlaylistPlay(playlist)}
-                      >
-                        <FaPlay className="text-white text-sm ml-0.5" />
-                      </button>
-                    </div>
-                    {(playlist.isCustom || playlist.isLocal || playlist.isYouTube) && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (playlist.isLocal) {
-                            handleRemoveLocalFolder(playlist.folderName || playlist.name);
-                          } else {
-                            handleRemovePlaylist(playlist.id);
-                          }
-                        }}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity
-                        w-8 h-8 flex items-center justify-center rounded-full bg-red-500/80 hover:bg-red-600 
-                        shadow-lg"
-                        title="Delete playlist"
-                      >
-                        <FaTimes className="text-white text-sm" />
-                      </button>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent 
-                    opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 pb-8">
-                {userPlaylists.map((playlist) => (
-                  <div
-                    key={playlist.id}
-                    className="group relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 
-                    hover:border-emerald-400/30 transition-all duration-300 cursor-pointer overflow-hidden"
-                    onClick={() => handlePlaylistPlay(playlist)}
-                  >
-                    <div className="flex items-center p-4 gap-4">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-purple-500/40 to-indigo-600/40">
-                        <img 
-                          src={playlist.cover} 
-                          alt={playlist.name} 
-                          className="w-full h-full object-cover" 
-                          onError={(e) => { e.target.src = '/default-cover.png'; }}
-                        />
-                        {playlist.isYouTube && (
-                          <div className="absolute top-2 left-2 bg-red-600/80 rounded-full p-1">
-                            <FaYoutube className="text-white text-xs" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-white font-bold text-lg truncate">{playlist.name}</h3>
-                        <p className="text-white/60 text-sm truncate">{playlist.description}</p>
-                        <p className="text-white/50 text-xs mt-1">
-                          {playlist.songCount} songs • {playlist.duration}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button 
-                          className="w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-r 
-                          from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
-                          transition-all shadow-lg hover:shadow-emerald-500/50 transform hover:scale-110"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePlaylistPlay(playlist);
-                          }}
-                        >
-                          <FaPlay className="text-white text-sm ml-0.5" />
-                        </button>
-                        {(playlist.isCustom || playlist.isLocal || playlist.isYouTube) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (playlist.isLocal) {
-                                handleRemoveLocalFolder(playlist.folderName || playlist.name);
-                              } else {
-                                handleRemovePlaylist(playlist.id);
-                              }
-                            }}
-                            className="w-10 h-10 flex items-center justify-center rounded-full bg-red-500/80 
-                            hover:bg-red-600 transition-all shadow-lg opacity-70 hover:opacity-100"
-                            title="Delete playlist"
-                          >
-                            <FaTimes className="text-white text-sm" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+          <div className="pl-yt-body">
+            <div className="pl-yt-info-note">
+              Paste any public YouTube playlist URL. Songs play instantly via the YouTube player \u2014 no API key or server needed.
+            </div>
+            {loading && (
+              <div className="pl-yt-progress">
+                <FaSpinner className="pl-yt-spinner" />
+                <span>Fetching playlist tracks\u2026</span>
               </div>
             )}
-          </div>
-        </>
-      ) : (
-        /* Detail View - Playlist Songs List (Redesigned to match HomeOnline) */
-        <div className="detailView w-full h-full flex flex-col overflow-hidden">
-          {/* Full-screen gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/90 via-slate-900 to-black" />
-          
-          {/* Sticky Glass Header */}
-          <div className="sticky top-0 z-20 w-full px-4 md:px-6 py-3 backdrop-blur-2xl bg-black/30 border-b border-white/10">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={handleBackFromDetail}
-                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 
-                backdrop-blur-xl hover:bg-white/20 transition-all border border-white/20 
-                hover:border-white/30 shadow-lg hover:scale-105 active:scale-95"
-              >
-                <FontAwesomeIcon icon={faChevronLeft} className="text-white text-base" />
-              </button>
-              <div className="flex items-center gap-2">
-                <button className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all">
-                  <FaHeart className="text-white/80 hover:text-red-500 text-base" />
-                </button>
-                <button className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all">
-                  <FontAwesomeIcon icon={faEllipsisH} className="text-white/80 text-base" />
-                </button>
+            {error && (
+              <div className="pl-yt-error">
+                <FaExclamationTriangle className="pl-yt-error-icon" />
+                <span>{error}</span>
               </div>
-            </div>
-          </div>
-
-          {/* Hero Section */}
-          <div className="relative z-10 px-4 md:px-6 py-6 md:py-8 flex flex-col md:flex-row items-start md:items-end gap-6">
-            <div className="relative group flex-shrink-0">
-              <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-3xl blur-2xl opacity-40 group-hover:opacity-60 transition" />
-              <div className="relative">
-                <img
-                  src={selectedPlaylist?.cover || '/default-cover.png'}
-                  alt={selectedPlaylist?.name}
-                  className="w-36 h-36 md:w-48 md:h-48 rounded-2xl object-cover shadow-2xl border-2 border-white/20 backdrop-blur-sm"
-                  onError={(e) => e.target.src = '/default-cover.png'}
-                />
-                {selectedPlaylist?.isYouTube && (
-                  <div className="absolute -top-2 -right-2 bg-red-600/90 backdrop-blur-sm rounded-full p-1.5 shadow-xl">
-                    <FaYoutube className="text-white text-xs" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
-                <span className="w-1 h-3 bg-emerald-500 rounded-full" />
-                <span>{selectedPlaylist?.isYouTube ? 'YOUTUBE PLAYLIST' : 'YOUR PLAYLIST'}</span>
-              </div>
-              
-              <h1 className="text-white text-4xl md:text-6xl font-black tracking-tight leading-tight break-words">
-                {selectedPlaylist?.name}
-              </h1>
-              
-              <p className="text-white/70 text-base md:text-lg max-w-2xl">
-                {selectedPlaylist?.description}
-              </p>
-              
-              <div className="flex items-center gap-4 text-sm text-white/60">
-                <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                    <path d="M12 6v6l4 2"/>
-                  </svg>
-                  {selectedPlaylist?.songCount} songs
-                </span>
-                <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
-                    <path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
-                  </svg>
-                  {selectedPlaylist?.duration}
-                </span>
-              </div>
-
-              {/* Icon-only action buttons */}
-              <div className="flex items-center gap-4 pt-3">
-                <button
-                  onClick={handlePlayPlaylist}
-                  className="w-14 h-14 flex items-center justify-center rounded-full bg-gradient-to-r 
-                  from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 
-                  text-white shadow-xl hover:shadow-emerald-500/50 transform hover:scale-105 transition-all"
-                  aria-label="Play all songs"
-                >
-                  <FaPlay className="text-white text-xl ml-1" />
-                </button>
-                <button 
-                  className="w-30 h-10 flex items-center pl-4 justify-start rounded-full bg-white/10 
-                  backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-all 
-                  text-white/80 hover:text-white gap-3"
-                  aria-label="Shuffle"
-                >
-                  <FaRandom className="text-sm" />
-                  Shuffle
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Tracklist */}
-          <div className="relative z-10 flex-1 px-4 md:px-6 py-4 overflow-y-auto">
-            <div className="w-full max-w-5xl mx-auto">
-              <h2 className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 px-2">
-                TRACKS · {selectedPlaylist?.songs?.length || 0}
-              </h2>
-              
-              <div className="flex flex-col gap-1">
-                {selectedPlaylist?.songs?.map((song, index) => {
-                  const songId = song.id || `song-${index}`;
-                  const isFavorite = mockSongStates[songId]?.favorite || false;
-                  const isLiked = mockSongStates[songId]?.liked || false;
-
-                  return (
-                    <div
-                      key={songId}
-                      className="group flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 
-                      hover:bg-white/10 transition-all cursor-pointer border border-transparent 
-                      hover:border-white/10 backdrop-blur-sm"
-                      onClick={() => handlePlaySongFromPlaylist(index)}
-                    >
-                      <span className="text-white/40 group-hover:text-white/60 text-xs w-6 text-center font-mono">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      
-                      <div className="relative w-9 h-9 rounded-md overflow-hidden shadow-md flex-shrink-0">
-                        <img src={song.cover} alt={song.name} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate group-hover:text-emerald-400 transition-colors">
-                          {song.name}
-                        </p>
-                        <p className="text-white/50 text-xs truncate">{song.artist}</p>
-                      </div>
-
-                      <span className="text-white/40 text-xs font-mono hidden md:block">
-                        {song.duration}
-                      </span>
-
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateMockSongState(songId, { favorite: !isFavorite });
-                          }}
-                        >
-                          <FaStar className={`text-xs ${isFavorite ? 'text-yellow-400' : 'text-white/40'}`} />
-                        </button>
-                        <button
-                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateMockSongState(songId, { liked: !isLiked });
-                          }}
-                        >
-                          <FaHeart className={`text-xs ${isLiked ? 'text-red-500' : 'text-white/40'}`} />
-                        </button>
-                        <button
-                          className="w-7 h-7 flex items-center justify-center rounded-full bg-emerald-500/80 
-                          hover:bg-emerald-500 transition-all shadow-md"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePlaySongFromPlaylist(index);
-                          }}
-                        >
-                          <FaPlay className="text-white text-[10px] ml-0.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            )}
+            <button
+              className="pl-yt-import-btn"
+              onClick={handleImport}
+              disabled={loading || !url.trim()}
+            >
+              {loading ? 'Importing\u2026' : 'Import Playlist'}
+            </button>
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  );
+});
 
-      {/* Create Playlist Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl shadow-2xl 
-          max-w-md w-full border border-white/10 p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white text-2xl font-bold">Create Playlist</h2>
-              <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setNewPlaylistName('');
-                  setNewPlaylistDesc('');
-                }}
-                className="text-white/60 hover:text-white transition-colors"
-              >
-                <FaTimes className="text-xl" />
-              </button>
+/* ── IMPORT DROPDOWN ── */
+const ImportDropdown = memo(({ onLocalImport, onYouTubeImport }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="pl-import-wrap" ref={ref}>
+      <button
+        className={`pl-import-btn ${open ? 'open' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        aria-label="Import playlist"
+      >
+        <FaPlus style={{ fontSize: 11 }} />
+        Import
+        <FaChevronDown className="chevron" style={{ fontSize: 10 }} />
+      </button>
+      {open && (
+        <div className="pl-import-menu">
+          <button className="pl-import-item local" onClick={() => { setOpen(false); onLocalImport(); }}>
+            <div className="icon-wrap"><FaFolder /></div>
+            <div>
+              <div className="pl-import-item-label">From Device</div>
+              <div className="pl-import-item-sub">Select local audio files</div>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-white text-sm font-semibold block mb-2">Playlist Name *</label>
-                <input
-                  type="text"
-                  value={newPlaylistName}
-                  onChange={(e) => setNewPlaylistName(e.target.value)}
-                  placeholder="My Awesome Playlist"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl 
-                  text-white placeholder:text-white/40 focus:outline-none focus:border-emerald-400/50
-                  focus:bg-white/15 transition-all"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="text-white text-sm font-semibold block mb-2">Description</label>
-                <textarea
-                  value={newPlaylistDesc}
-                  onChange={(e) => setNewPlaylistDesc(e.target.value)}
-                  placeholder="What's this playlist about?"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl 
-                  text-white placeholder:text-white/40 focus:outline-none focus:border-emerald-400/50
-                  focus:bg-white/15 transition-all resize-none h-24"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setNewPlaylistName('');
-                    setNewPlaylistDesc('');
-                  }}
-                  className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl
-                  font-semibold transition-all border border-white/20"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreatePlaylist}
-                  disabled={!newPlaylistName.trim()}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600
-                  hover:from-emerald-400 hover:to-emerald-500 text-white rounded-xl font-semibold
-                  transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                >
-                  Create
-                </button>
-              </div>
+          </button>
+          <div className="pl-import-sep" />
+          <button className="pl-import-item youtube" onClick={() => { setOpen(false); onYouTubeImport(); }}>
+            <div className="icon-wrap"><FaYoutube /></div>
+            <div>
+              <div className="pl-import-item-label">YouTube Playlist</div>
+              <div className="pl-import-item-sub">Import via playlist URL</div>
             </div>
-          </div>
+          </button>
         </div>
       )}
+    </div>
+  );
+});
 
-      {/* YouTube Import Modal */}
-      {showYouTubeModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl shadow-2xl 
-          max-w-md w-full border border-white/10 p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white text-2xl font-bold flex items-center gap-2">
-                <FaYoutube className="text-red-500" /> Import YouTube Playlist
-              </h2>
-              <button
-                onClick={() => {
-                  setShowYouTubeModal(false);
-                  setYoutubeUrl('');
-                  setYoutubeImportError('');
-                }}
-                className="text-white/60 hover:text-white transition-colors"
-              >
-                <FaTimes className="text-xl" />
+/* ── MAIN ── */
+export default function Playlists() {
+  const {
+    currentSong, isPlaying, playNext, playPrev, setIsPlaying,
+    isMuted, toggleMute, setPlayerSongs,
+  } = usePlayer();
+
+  const [mockSongStates, setMockSongStates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lb:mock_states') || '{}'); } catch { return {}; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('lb:mock_states', JSON.stringify(mockSongStates)); } catch (_) {}
+  }, [mockSongStates]);
+
+  const updateMockSongState = useCallback((songId, updates) => {
+    setMockSongStates(prev => ({ ...prev, [songId]: { ...prev[songId], ...updates } }));
+  }, []);
+
+  const [playlists,    setPlaylists]    = useState(loadPL);
+  const [query,        setQuery]        = useState('');
+  const [showCreate,   setShowCreate]   = useState(false);
+  const [showYTImport, setShowYTImport] = useState(false);
+  const [selected,     setSelected]     = useState(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => { savePL(playlists); }, [playlists]);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return playlists;
+    const q = query.toLowerCase();
+    return playlists.filter(p => p.name?.toLowerCase().includes(q));
+  }, [playlists, query]);
+
+  const createPlaylist = useCallback((name) => {
+    setPlaylists(prev => [{ id: `pl_${Date.now()}`, name, songs: [], createdAt: Date.now() }, ...prev]);
+  }, []);
+
+  const deletePlaylist = useCallback((id) => {
+    setPlaylists(prev => prev.filter(p => p.id !== id));
+    setSelected(s => s?.id === id ? null : s);
+  }, []);
+
+  const playList = useCallback((songs, idx = 0) => {
+    if (!songs || songs.length === 0) return;
+    try {
+      const validSongs = songs.filter(s => s.audio || s.url || s.audioUrl || s.src || s.youtubeId);
+      if (!validSongs.length) { console.error('No valid songs to play'); return; }
+      let adjustedIdx = idx;
+      if (validSongs.length < songs.length) {
+        const target = songs[idx];
+        adjustedIdx = target ? validSongs.findIndex(s => s.id === target.id) : 0;
+        if (adjustedIdx === -1) adjustedIdx = 0;
+      }
+      setPlayerSongs(validSongs, adjustedIdx);
+      setTimeout(() => setIsPlaying(true), 100);
+    } catch (err) {
+      console.error('Error playing songs:', err);
+    }
+  }, [setPlayerSongs, setIsPlaying]);
+
+  const shuffleList = useCallback((songs) => {
+    playList([...songs].sort(() => Math.random() - 0.5));
+  }, [playList]);
+
+  const handleLocalImport = useCallback(() => { fileInputRef.current?.click(); }, []);
+
+  const handleFilesChosen = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const supported = files.filter(f => f.type.startsWith('audio/') || /\.(mp3|flac|wav|aac|ogg|m4a|opus)$/i.test(f.name));
+    if (!supported.length) return;
+    const songs = supported.map(f => ({
+      id:     `local_${Date.now()}_${Math.random()}`,
+      name:   f.name.replace(/\.[^/.]+$/, ''),
+      artist: 'Local File',
+      cover:  '',
+      audio:  URL.createObjectURL(f),
+      source: 'local',
+    }));
+    setPlaylists(prev => [{
+      id: `pl_${Date.now()}`,
+      name: `Local Import (${songs.length} tracks)`,
+      songs,
+      source: 'local',
+      createdAt: Date.now(),
+    }, ...prev]);
+    e.target.value = '';
+  }, []);
+
+  /* Songs saved as-is — PlayerContext handles YouTube playback via IFrame API */
+  const handleYTImport = useCallback((name, songs) => {
+    setPlaylists(prev => [{
+      id: `pl_${Date.now()}`,
+      name,
+      songs,
+      source: 'youtube',
+      createdAt: Date.now(),
+    }, ...prev]);
+  }, []);
+
+  return (
+    <div className="pl-root" style={{ width: '100%', height: '100%' }}>
+      <style>{CSS}</style>
+      <input
+        ref={fileInputRef} type="file" multiple
+        accept="audio/*,.mp3,.flac,.wav,.aac,.ogg,.m4a,.opus"
+        style={{ display: 'none' }}
+        onChange={handleFilesChosen}
+      />
+      <div className="pl-shell">
+        <div className="pl-header">
+          <div className="pl-header-top">
+            <div className="pl-title-block">
+              <div className="pl-eyebrow"><span className="pl-eyebrow-dot" /> Your Music</div>
+              <h1 className="pl-title">Playlists</h1>
+              <p className="pl-subtitle">{playlists.length} playlist{playlists.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="pl-header-actions">
+              <div className="pl-search-wrap">
+                <FaSearch className="pl-search-ico" />
+                <input
+                  className="pl-search" type="text" value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search playlists\u2026"
+                />
+              </div>
+              <div style={{ display: 'none' }} className="pl-tiny">
+                <TinyPlayer song={currentSong} isPlaying={isPlaying}
+                  onPlayPause={() => setIsPlaying(p => !p)}
+                  onPrev={playPrev} onNext={playNext}
+                  isMuted={isMuted} onMuteToggle={toggleMute} />
+              </div>
+              <ImportDropdown onLocalImport={handleLocalImport} onYouTubeImport={() => setShowYTImport(true)} />
+              <button className="pl-new-btn" onClick={() => setShowCreate(true)}>
+                <FaPlus style={{ fontSize: 11 }} /> New Playlist
               </button>
             </div>
+          </div>
+          <div className="pl-divider" />
+        </div>
+        <style>{`@media(min-width:768px){.pl-tiny{display:block !important}}`}</style>
+        <div className="pl-content">
+          {filtered.length === 0 ? (
+            <div className="pl-empty">
+              <div className="pl-empty-icon"><FaListUl /></div>
+              <h3>{playlists.length === 0 ? 'No playlists yet' : 'No results'}</h3>
+              <p>{playlists.length === 0 ? 'Create a new playlist or import from YouTube.' : 'Try a different search term.'}</p>
+            </div>
+          ) : (
+            <div className="pl-grid">
+              {filtered.map(pl => (
+                <PlaylistCard key={pl.id} pl={pl} onOpen={setSelected} onPlay={playList} onDelete={deletePlaylist} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-white text-sm font-semibold block mb-2">
-                  YouTube Playlist URL
-                </label>
-                <input
-                  type="text"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  placeholder="https://youtube.com/playlist?list=..."
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl 
-                  text-white placeholder:text-white/40 focus:outline-none focus:border-emerald-400/50
-                  focus:bg-white/15 transition-all"
-                  autoFocus
-                />
-                {youtubeImportError && (
-                  <p className="mt-2 text-red-400 text-sm">{youtubeImportError}</p>
-                )}
+      {showCreate   && <CreateModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
+      {showYTImport && <YouTubeImportModal onClose={() => setShowYTImport(false)} onImport={handleYTImport} />}
+
+      {selected && (
+        <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+          <div className="pl-modal">
+            <div className="pl-modal-bg" />
+            <div className="pl-modal-grain" />
+            <div className="pl-modal-bar">
+              <button className="pl-modal-btn" onClick={() => setSelected(null)}>
+                <FontAwesomeIcon icon={faChevronLeft} />
+              </button>
+              <button className="pl-modal-btn">
+                <FontAwesomeIcon icon={faEllipsisH} />
+              </button>
+            </div>
+            <div className="pl-hero">
+              <div className="pl-hero-art">
+                <div className="pl-hero-glow" />
+                {selected.songs?.length > 0
+                  ? <img src={selected.songs[0]?.cover || FB} alt={selected.name} onError={e => { e.target.src = FB; }} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  : <div className="pl-hero-art-empty"><FaListUl /></div>
+                }
               </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    setShowYouTubeModal(false);
-                    setYoutubeUrl('');
-                    setYoutubeImportError('');
-                  }}
-                  className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl
-                  font-semibold transition-all border border-white/20"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleImportYouTube}
-                  disabled={youtubeImportLoading}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600
-                  hover:from-red-400 hover:to-red-500 text-white rounded-xl font-semibold
-                  transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg
-                  flex items-center justify-center gap-2"
-                >
-                  {youtubeImportLoading ? (
+              <div className="pl-hero-info">
+                <div className="pl-hero-tag"><span className="pl-hero-tag-bar" /> Playlist</div>
+                <h1 className="pl-hero-title">{selected.name}</h1>
+                <p className="pl-hero-count">{(selected.songs || []).length} songs</p>
+                <div className="pl-hero-actions">
+                  {(selected.songs || []).length > 0 && (
                     <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      Importing...
-                    </>
-                  ) : (
-                    <>
-                      <FaYoutube /> Import
+                      <button className="pl-hero-play" onClick={() => playList(selected.songs)} aria-label="Play all">
+                        <FaPlay style={{ marginLeft: 2 }} />
+                      </button>
+                      <button className="pl-hero-shuffle" onClick={() => shuffleList(selected.songs)}>
+                        <FaRandom />
+                      </button>
                     </>
                   )}
-                </button>
+                </div>
               </div>
+            </div>
+            <div className="pl-tracks">
+              {!(selected.songs || []).length ? (
+                <div className="pl-tracks-empty">
+                  <FaListUl style={{ fontSize: 30, color: 'rgba(255,255,255,.15)', marginBottom: 6 }} />
+                  <p>This playlist is empty</p>
+                </div>
+              ) : (
+                <>
+                  <div className="pl-tracks-label">Tracks \u00b7 {selected.songs.length}</div>
+                  {selected.songs.map((song, i) => {
+                    const songId = song.id || `song-${i}`;
+                    const isFav  = mockSongStates[songId]?.favorite || false;
+                    const isLiked = mockSongStates[songId]?.liked || false;
+                    return (
+                      <div
+                        key={songId}
+                        className={`pl-track-row${currentSong?.id === song.id ? ' active' : ''}`}
+                        onClick={() => playList(selected.songs, i)}
+                        role="button"
+                      >
+                        <span className="pl-track-num">{String(i + 1).padStart(2, '0')}</span>
+                        <div className="pl-track-thumb">
+                          <img src={song.cover || FB} alt={song.name} onError={e => { e.target.src = FB; }} />
+                        </div>
+                        <div className="pl-track-meta">
+                          <div className="pl-track-name">{song.name}</div>
+                          <div className="pl-track-artist">{song.artist || 'Unknown'}</div>
+                        </div>
+                        <span className="pl-track-dur">{song.formattedDuration || song.duration || ''}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, opacity: 0 }} className="pl-track-actions">
+                          <button
+                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'transparent' }}
+                            onClick={e => { e.stopPropagation(); updateMockSongState(songId, { favorite: !isFav }); }}
+                          >
+                            <FaStar style={{ fontSize: 11, color: isFav ? '#facc15' : 'rgba(255,255,255,.3)' }} />
+                          </button>
+                          <button
+                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'transparent' }}
+                            onClick={e => { e.stopPropagation(); updateMockSongState(songId, { liked: !isLiked }); }}
+                          >
+                            <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.3)' }} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
         </div>
