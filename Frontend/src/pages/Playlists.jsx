@@ -4,30 +4,62 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart,
+  FaLink, FaStar, FaHeart, FaMinus,
 } from 'react-icons/fa';
-import TinyPlayer from '../components/TinyPlayer';
 import { usePlayer } from '../context/PlayerContext';
+import { usePlaylists } from '../hooks/useplaylists';
+import { useToast } from '../components/Toast';
 
 /* ── STORAGE ── */
 const LS     = 'lb:playlists';
 const loadPL = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
 const savePL = d => { try { localStorage.setItem(LS, JSON.stringify(d)); } catch (_) {} };
 
-/* ══════════════════════════════════════════════════════════════════════════
-   YOUTUBE PLAYLIST IMPORT
-   Strategy:
-     Tier 1 — YouTube Data API v3 (uses VITE_YOUTUBE_API_KEY, fast & reliable)
-     Tier 2 — Race 8 Piped community mirrors in parallel (no API key needed)
-   kavin.rocks excluded from Piped list — consistently unreliable in 2025/26.
-══════════════════════════════════════════════════════════════════════════ */
+/* ── YOUTUBE PLAYLIST IMPORT ──
+   Uses Piped API (open-source, no API key, CORS-safe).
+   Playback is handled by PlayerContext via YouTube IFrame Player API.
+───────────────────────────────────────────────────────────────────── */
 function extractPlaylistId(input) {
   if (!input) return null;
-  const m = input.match(/[?&]list=([A-Za-z0-9_-]+)/);
-  if (m) return m[1];
-  if (/^PL[A-Za-z0-9_-]{10,}$/.test(input.trim())) return input.trim();
-  if (/^[A-Za-z0-9_-]{24,}$/.test(input.trim())) return input.trim();
+  const m1 = input.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  if (m1) return m1[1];
+  if (/^[A-Za-z0-9_-]{10,}$/.test(input.trim())) return input.trim();
   return null;
+}
+
+async function fetchYTPlaylist(playlistId) {
+  const PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://api.piped.yt',
+  ];
+  let lastErr = null;
+  for (const base of PIPED_INSTANCES) {
+    try {
+      const res = await fetch(`${base}/playlists/${playlistId}`, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`Piped returned ${res.status}`);
+      const data = await res.json();
+      const songs = (data.relatedStreams || []).map(v => {
+        const videoId = v.url?.split('v=')?.[1] || '';
+        return {
+          id:        `yt_${videoId}_${Date.now()}_${Math.random()}`,
+          name:      v.title || 'Untitled',
+          artist:    v.uploaderName || 'YouTube',
+          cover:     v.thumbnail || '',
+          source:    'youtube',
+          youtubeId: videoId,
+          audio:     `https://www.youtube.com/watch?v=${videoId}`,
+          duration:  v.duration > 0 ? formatDuration(v.duration) : '',
+        };
+      });
+      if (!songs.length) throw new Error('No playable tracks found in this playlist.');
+      return songs;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Could not fetch playlist. ${lastErr?.message || ''}`);
 }
 
 function formatDuration(seconds) {
@@ -37,159 +69,7 @@ function formatDuration(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-/* ── Tier 1: YouTube Data API v3 ────────────────────────────────────────── */
-async function fetchViaYouTubeAPI(playlistId) {
-  const key = import.meta.env.VITE_YOUTUBE_API_KEY || '';
-  if (!key) throw new Error('NO_API_KEY');
-
-  const songs     = [];
-  let   pageToken = '';
-  let   fetched   = 0;
-  const MAX_ITEMS = 200;
-
-  do {
-    const url = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
-    url.searchParams.set('part',       'snippet,contentDetails');
-    url.searchParams.set('playlistId', playlistId);
-    url.searchParams.set('maxResults', '50');
-    url.searchParams.set('key',        key);
-    if (pageToken) url.searchParams.set('pageToken', pageToken);
-
-    const res = await fetch(url.toString());
-    if (res.status === 404) throw new Error('Playlist not found or is private.');
-    if (res.status === 403) throw new Error('API quota exceeded or the playlist is private.');
-    if (!res.ok)            throw new Error(`YouTube API error ${res.status}`);
-
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message || 'YouTube API error');
-
-    for (const item of data.items || []) {
-      const snip    = item.snippet || {};
-      const videoId = snip.resourceId?.videoId || item.contentDetails?.videoId;
-      if (!videoId) continue;
-      if (snip.title === 'Private video' || snip.title === 'Deleted video') continue;
-
-      const thumb = snip.thumbnails?.high?.url
-                 || snip.thumbnails?.medium?.url
-                 || snip.thumbnails?.default?.url
-                 || '';
-      songs.push({
-        id:        `yt_${videoId}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        name:      snip.title || 'Untitled',
-        artist:    snip.videoOwnerChannelTitle || snip.channelTitle || 'YouTube',
-        cover:     thumb,
-        source:    'youtube',
-        youtubeId: videoId,
-        audio:     `https://www.youtube.com/watch?v=${videoId}`,
-        duration:  '',
-      });
-    }
-
-    pageToken = data.nextPageToken || '';
-    fetched  += (data.items || []).length;
-  } while (pageToken && fetched < MAX_ITEMS);
-
-  if (!songs.length) throw new Error('Playlist is empty or all videos are private/deleted.');
-  return songs;
-}
-
-/* ── Tier 2: Race Piped mirrors ─────────────────────────────────────────── */
-async function fetchViaPiped(playlistId) {
-  // Working instances early 2026 — kavin.rocks omitted (unreliable/down)
-  const INSTANCES = [
-    'https://pipedapi.moomoo.me',
-    'https://pipedapi.syncpundit.io',
-    'https://piped-api.garudalinux.org',
-    'https://api.piped.projectsegfau.lt',
-    'https://pipedapi.adminforge.de',
-    'https://piped-api.privacy.com.de',
-    'https://pipedapi.tokhmi.xyz',
-    'https://api.piped.yt',
-  ];
-
-  const tryInstance = (base) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    return fetch(`${base}/playlists/${playlistId}`, {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    }).then(res => {
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    }).then(data => {
-      clearTimeout(timer);
-      const streams = data.relatedStreams || [];
-      if (!streams.length) throw new Error('empty');
-      return streams.map(v => {
-        const videoId = v.url?.split('v=')[1]?.split('&')[0] || '';
-        return {
-          id:        `yt_${videoId}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-          name:      v.title || 'Untitled',
-          artist:    v.uploaderName || 'YouTube',
-          cover:     v.thumbnail || '',
-          source:    'youtube',
-          youtubeId: videoId,
-          audio:     `https://www.youtube.com/watch?v=${videoId}`,
-          duration:  v.duration > 0 ? formatDuration(v.duration) : '',
-        };
-      }).filter(s => s.youtubeId);
-    }).catch(e => { clearTimeout(timer); throw e; });
-  };
-
-  // Stagger requests 300ms apart so we don't slam all instances simultaneously
-  return new Promise((resolve, reject) => {
-    let settled  = false;
-    let failures = 0;
-    const total  = INSTANCES.length;
-
-    INSTANCES.forEach((base, i) => {
-      setTimeout(() => {
-        if (settled) return;
-        tryInstance(base)
-          .then(songs => { if (!settled) { settled = true; resolve(songs); } })
-          .catch(() => {
-            failures++;
-            if (failures === total && !settled) {
-              settled = true;
-              reject(new Error(
-                'All Piped instances failed. The playlist may be private, or check your internet connection and try again.'
-              ));
-            }
-          });
-      }, i * 300);
-    });
-  });
-}
-
-/* ── Main fetch (Tier 1 → Tier 2) ─────────────────────────────────────── */
-async function fetchYTPlaylist(playlistId) {
-  try {
-    const songs = await fetchViaYouTubeAPI(playlistId);
-    console.log(`[Playlists] YouTube API v3: imported ${songs.length} tracks`);
-    return songs;
-  } catch (e) {
-    // Surface hard errors immediately — don't bother trying Piped
-    if (e.message !== 'NO_API_KEY' && (
-      e.message.includes('private') ||
-      e.message.includes('not found') ||
-      e.message.includes('quota') ||
-      e.message.includes('empty')
-    )) throw e;
-
-    if (e.message !== 'NO_API_KEY') {
-      console.warn('[Playlists] YouTube API failed, falling back to Piped:', e.message);
-    } else {
-      console.info('[Playlists] No API key — using Piped mirrors');
-    }
-  }
-
-  const songs = await fetchViaPiped(playlistId);
-  console.log(`[Playlists] Piped: imported ${songs.length} tracks`);
-  return songs;
-}
-
-/* ── CSS ── */
+/* ── CSS (unchanged) ── */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
 
@@ -231,8 +111,8 @@ const CSS = `
 .pl-search::placeholder { color: var(--t3); }
 .pl-search:focus { border-color: rgba(29,185,84,.5); background: var(--s2); box-shadow: 0 0 0 3px rgba(29,185,84,.10); }
 .pl-import-wrap { position: relative; }
-.pl-import-btn { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 9999px; background: var(--s1); border: 1px solid var(--b1); color: var(--t2); font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 13px; transition: background .15s var(--ease), color .15s var(--ease), border-color .15s; }
-.pl-import-btn:hover { background: var(--s2); color: var(--t1); border-color: var(--b2); }
+.pl-import-btn { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 9999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: var(--t1); font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px; transition: background .15s var(--ease), color .15s var(--ease), border-color .15s; }
+.pl-import-btn:hover { background: rgba(255,255,255,0.14); color: #fff; border-color: rgba(255,255,255,0.35); }
 .pl-import-btn svg { transition: transform .2s var(--spring); }
 .pl-import-btn.open svg.chevron { transform: rotate(180deg); }
 .pl-import-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 220px; background: #0D0F11; border: 1px solid var(--b2); border-radius: 16px; padding: 6px; box-shadow: 0 20px 60px rgba(0,0,0,.7); animation: plDropIn .2s var(--spring) both; }
@@ -245,7 +125,7 @@ const CSS = `
 .pl-import-item-label { font-size: 13px; font-weight: 500; }
 .pl-import-item-sub { font-size: 10px; color: var(--t3); margin-top: 1px; }
 .pl-import-sep { height: 1px; background: var(--b1); margin: 4px 0; }
-.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: var(--g); color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.35); transition: background .15s var(--ease), transform .15s var(--spring), box-shadow .15s var(--ease); }
+.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: var(--g); color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.45); letter-spacing: 0.01em; transition: background .15s var(--ease), transform .15s var(--spring), box-shadow .15s var(--ease); }
 .pl-new-btn:hover { background: var(--g2); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(29,185,84,.5); }
 .pl-new-btn:active { transform: scale(.96); }
 .pl-divider { height: 1px; background: var(--b1); margin: 18px 0 0; }
@@ -333,8 +213,8 @@ const CSS = `
 .pl-modal-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
 .pl-modal-btn:hover { background: var(--sh); }
 .pl-modal-btn:active { transform: scale(.9); }
-.pl-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 30px 20px; }
-@media(min-width:560px) { .pl-hero { flex-direction: row; align-items: flex-end; padding: 32px 40px 24px; } }
+.pl-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 24px 24px 16px; }
+@media(min-width:560px) { .pl-hero { flex-direction: row; align-items: flex-end; padding: 28px 32px 20px; } }
 .pl-hero-art { position: relative; flex-shrink: 0; width: 148px; height: 148px; border-radius: 20px; overflow: hidden; box-shadow: 0 28px 64px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
 @media(min-width:560px) { .pl-hero-art { width: 185px; height: 185px; } }
 .pl-hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -371,6 +251,26 @@ const CSS = `
 .pl-tracks-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 10px; color: var(--t3); font-size: 14px; text-align: center; }
 .pl-track-row:hover .pl-track-actions { opacity: 1 !important; }
 .pl-track-row.active .pl-track-actions { opacity: 1 !important; }
+
+/* ── Minus (remove) button on track rows in detail view ── */
+.pl-track-remove {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,80,80,0.0);
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.pl-track-row:hover .pl-track-remove {
+  color: rgba(255,80,80,0.6);
+}
+.pl-track-remove:hover {
+  background: rgba(255,50,50,0.12) !important;
+  color: #ff6666 !important;
+}
 `;
 
 const FB = 'https://placehold.co/200x200/061408/112208?text=\u266a';
@@ -433,7 +333,7 @@ const CreateModal = memo(({ onClose, onCreate }) => {
             className="pl-create-input" type="text" value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
-            placeholder="My Playlist…" autoFocus maxLength={60}
+            placeholder="My Playlist\u2026" autoFocus maxLength={60}
           />
           <button className="pl-create-submit" onClick={submit} disabled={!name.trim()}>
             Create Playlist
@@ -444,38 +344,29 @@ const CreateModal = memo(({ onClose, onCreate }) => {
   );
 });
 
-/* ── YOUTUBE IMPORT MODAL ── */
+/* ── YOUTUBE IMPORT MODAL — no API key, no conversion server ── */
 const YouTubeImportModal = memo(({ onClose, onImport }) => {
   const [url,     setUrl]     = useState('');
   const [plName,  setPlName]  = useState('');
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
-  const [status,  setStatus]  = useState('');
 
   const handleImport = useCallback(async () => {
     const plId = extractPlaylistId(url.trim());
-    if (!plId) { setError('Paste a valid YouTube playlist URL or ID (starts with PL…).'); return; }
+    if (!plId) { setError('Paste a valid YouTube playlist URL or ID.'); return; }
     setLoading(true);
     setError('');
-    setStatus('Connecting…');
     try {
-      // Show which tier is being used
-      const hasKey = !!import.meta.env.VITE_YOUTUBE_API_KEY;
-      setStatus(hasKey ? 'Fetching via YouTube API…' : 'Fetching via Piped mirrors…');
       const songs = await fetchYTPlaylist(plId);
-      setStatus(`Got ${songs.length} tracks — saving…`);
       const name  = plName.trim() || `YouTube Playlist (${songs.length} tracks)`;
       onImport(name, songs);
       onClose();
     } catch (e) {
       setError(e.message);
-      setStatus('');
     } finally {
       setLoading(false);
     }
   }, [url, plName, onImport, onClose]);
-
-  const hasKey = !!import.meta.env.VITE_YOUTUBE_API_KEY;
 
   return (
     <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 75 }}>
@@ -498,7 +389,7 @@ const YouTubeImportModal = memo(({ onClose, onImport }) => {
                   type="text" value={url}
                   onChange={e => { setUrl(e.target.value); setError(''); }}
                   onKeyDown={e => { if (e.key === 'Enter') handleImport(); if (e.key === 'Escape') onClose(); }}
-                  placeholder="https://youtube.com/playlist?list=PL…"
+                  placeholder="https://youtube.com/playlist?list=PL..."
                   autoFocus
                 />
               </div>
@@ -519,15 +410,12 @@ const YouTubeImportModal = memo(({ onClose, onImport }) => {
           </div>
           <div className="pl-yt-body">
             <div className="pl-yt-info-note">
-              {hasKey
-                ? '✓ YouTube API key detected — imports will be fast and reliable.'
-                : 'No API key found — will use community Piped mirrors (may be slower). Add VITE_YOUTUBE_API_KEY to your .env for best results.'}
-              {' '}Playlist must be public.
+              Paste any public YouTube playlist URL. Songs play instantly via the YouTube player \u2014 no API key or server needed.
             </div>
             {loading && (
               <div className="pl-yt-progress">
                 <FaSpinner className="pl-yt-spinner" />
-                <span>{status || 'Fetching playlist tracks…'}</span>
+                <span>Fetching playlist tracks\u2026</span>
               </div>
             )}
             {error && (
@@ -541,7 +429,7 @@ const YouTubeImportModal = memo(({ onClose, onImport }) => {
               onClick={handleImport}
               disabled={loading || !url.trim()}
             >
-              {loading ? 'Importing…' : 'Import Playlist'}
+              {loading ? 'Importing\u2026' : 'Import Playlist'}
             </button>
           </div>
         </div>
@@ -566,6 +454,7 @@ const ImportDropdown = memo(({ onLocalImport, onYouTubeImport }) => {
       <button
         className={`pl-import-btn ${open ? 'open' : ''}`}
         onClick={() => setOpen(o => !o)}
+        aria-label="Import playlist"
       >
         <FaPlus style={{ fontSize: 11 }} />
         Import
@@ -597,16 +486,19 @@ const ImportDropdown = memo(({ onLocalImport, onYouTubeImport }) => {
 /* ── MAIN ── */
 export default function Playlists() {
   const {
-    currentSong, isPlaying, playNext, playPrev, setIsPlaying,
-    isMuted, toggleMute, setPlayerSongs,
+    currentSong, isPlaying, setIsPlaying, setPlayerSongs,
   } = usePlayer();
+  const { removeSongFromPlaylist } = usePlaylists();
+  const { show: showToast } = useToast();
 
   const [mockSongStates, setMockSongStates] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lb:mock_states') || '{}'); } catch { return {}; }
   });
+
   useEffect(() => {
     try { localStorage.setItem('lb:mock_states', JSON.stringify(mockSongStates)); } catch (_) {}
   }, [mockSongStates]);
+
   const updateMockSongState = useCallback((songId, updates) => {
     setMockSongStates(prev => ({ ...prev, [songId]: { ...prev[songId], ...updates } }));
   }, []);
@@ -636,17 +528,41 @@ export default function Playlists() {
   }, []);
 
   const playList = useCallback((songs, idx = 0) => {
-    if (!songs?.length) return;
-    const valid = songs.filter(s => s.audio || s.url || s.audioUrl || s.src || s.youtubeId);
-    if (!valid.length) return;
-    const i = valid.findIndex(s => s.id === songs[idx]?.id);
-    setPlayerSongs(valid, i < 0 ? 0 : i);
-    setTimeout(() => setIsPlaying(true), 100);
+    if (!songs || songs.length === 0) return;
+    try {
+      const validSongs = songs.filter(s => s.audio || s.url || s.audioUrl || s.src || s.youtubeId);
+      if (!validSongs.length) { console.error('No valid songs to play'); return; }
+      let adjustedIdx = idx;
+      if (validSongs.length < songs.length) {
+        const target = songs[idx];
+        adjustedIdx = target ? validSongs.findIndex(s => s.id === target.id) : 0;
+        if (adjustedIdx === -1) adjustedIdx = 0;
+      }
+      setPlayerSongs(validSongs, adjustedIdx);
+      setTimeout(() => setIsPlaying(true), 100);
+    } catch (err) {
+      console.error('Error playing songs:', err);
+    }
   }, [setPlayerSongs, setIsPlaying]);
 
   const shuffleList = useCallback((songs) => {
     playList([...songs].sort(() => Math.random() - 0.5));
   }, [playList]);
+
+  const handleRemoveSong = useCallback((playlistId, songId, songName) => {
+    removeSongFromPlaylist(playlistId, songId);
+    // Also sync local state so UI updates immediately
+    setPlaylists(prev => prev.map(p => {
+      if (p.id !== playlistId) return p;
+      return { ...p, songs: p.songs.filter(s => s.id !== songId) };
+    }));
+    // Keep selected in sync
+    setSelected(prev => {
+      if (!prev || prev.id !== playlistId) return prev;
+      return { ...prev, songs: prev.songs.filter(s => s.id !== songId) };
+    });
+    showToast(`Removed from playlist ✓`, 'error');
+  }, [removeSongFromPlaylist, showToast]);
 
   const handleLocalImport = useCallback(() => { fileInputRef.current?.click(); }, []);
 
@@ -664,15 +580,23 @@ export default function Playlists() {
       source: 'local',
     }));
     setPlaylists(prev => [{
-      id: `pl_${Date.now()}`, name: `Local Import (${songs.length} tracks)`,
-      songs, source: 'local', createdAt: Date.now(),
+      id: `pl_${Date.now()}`,
+      name: `Local Import (${songs.length} tracks)`,
+      songs,
+      source: 'local',
+      createdAt: Date.now(),
     }, ...prev]);
     e.target.value = '';
   }, []);
 
+  /* Songs saved as-is — PlayerContext handles YouTube playback via IFrame API */
   const handleYTImport = useCallback((name, songs) => {
     setPlaylists(prev => [{
-      id: `pl_${Date.now()}`, name, songs, source: 'youtube', createdAt: Date.now(),
+      id: `pl_${Date.now()}`,
+      name,
+      songs,
+      source: 'youtube',
+      createdAt: Date.now(),
     }, ...prev]);
   }, []);
 
@@ -699,15 +623,10 @@ export default function Playlists() {
                 <input
                   className="pl-search" type="text" value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search playlists…"
+                  placeholder="Search playlists\u2026"
                 />
               </div>
-              <div style={{ display: 'none' }} className="pl-tiny">
-                <TinyPlayer song={currentSong} isPlaying={isPlaying}
-                  onPlayPause={() => setIsPlaying(p => !p)}
-                  onPrev={playPrev} onNext={playNext}
-                  isMuted={isMuted} onMuteToggle={toggleMute} />
-              </div>
+
               <ImportDropdown onLocalImport={handleLocalImport} onYouTubeImport={() => setShowYTImport(true)} />
               <button className="pl-new-btn" onClick={() => setShowCreate(true)}>
                 <FaPlus style={{ fontSize: 11 }} /> New Playlist
@@ -716,7 +635,6 @@ export default function Playlists() {
           </div>
           <div className="pl-divider" />
         </div>
-        <style>{`@media(min-width:768px){.pl-tiny{display:block !important}}`}</style>
         <div className="pl-content">
           {filtered.length === 0 ? (
             <div className="pl-empty">
@@ -765,7 +683,7 @@ export default function Playlists() {
                 <div className="pl-hero-actions">
                   {(selected.songs || []).length > 0 && (
                     <>
-                      <button className="pl-hero-play" onClick={() => playList(selected.songs)}>
+                      <button className="pl-hero-play" onClick={() => playList(selected.songs)} aria-label="Play all">
                         <FaPlay style={{ marginLeft: 2 }} />
                       </button>
                       <button className="pl-hero-shuffle" onClick={() => shuffleList(selected.songs)}>
@@ -784,16 +702,17 @@ export default function Playlists() {
                 </div>
               ) : (
                 <>
-                  <div className="pl-tracks-label">Tracks · {selected.songs.length}</div>
+                  <div className="pl-tracks-label">Tracks \u00b7 {selected.songs.length}</div>
                   {selected.songs.map((song, i) => {
-                    const songId  = song.id || `song-${i}`;
-                    const isFav   = mockSongStates[songId]?.favorite || false;
+                    const songId = song.id || `song-${i}`;
+                    const isFav  = mockSongStates[songId]?.favorite || false;
                     const isLiked = mockSongStates[songId]?.liked || false;
                     return (
                       <div
                         key={songId}
                         className={`pl-track-row${currentSong?.id === song.id ? ' active' : ''}`}
                         onClick={() => playList(selected.songs, i)}
+                        role="button"
                       >
                         <span className="pl-track-num">{String(i + 1).padStart(2, '0')}</span>
                         <div className="pl-track-thumb">
@@ -816,6 +735,13 @@ export default function Playlists() {
                             onClick={e => { e.stopPropagation(); updateMockSongState(songId, { liked: !isLiked }); }}
                           >
                             <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.3)' }} />
+                          </button>
+                          <button
+                            className="pl-track-remove"
+                            onClick={e => { e.stopPropagation(); handleRemoveSong(selected.id, songId, song.name); }}
+                            title="Remove from playlist"
+                          >
+                            <FaMinus style={{ fontSize: 9 }} />
                           </button>
                         </div>
                       </div>

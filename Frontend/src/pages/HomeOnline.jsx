@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
-import { FaSearch, FaStar, FaHeart, FaPlay, FaRandom, FaPause, FaSpinner } from 'react-icons/fa';
+import { usePlaylists } from '../hooks/useplaylists';
+import { useToast } from '../components/Toast';
+import { FaSearch, FaStar, FaHeart, FaPlay, FaRandom, FaPause, FaSpinner, FaPlus, FaDownload, FaShareAlt, FaListUl } from 'react-icons/fa';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCircleArrowDown, faChevronLeft, faEllipsisH, faCompactDisc, faBolt } from '@fortawesome/free-solid-svg-icons';
 import { fetchSongs, patchSong as apiPatchSong } from '../services/api';
@@ -173,6 +175,47 @@ const STYLES = `
 
   /* Search input override */
   .ho-search:focus { outline:none; border-color: rgba(29,185,84,.5) !important; box-shadow: 0 0 0 3px rgba(29,185,84,.12); }
+
+/* ── Song action dropdowns ── */
+.lb-dropdown {
+  position: absolute;
+  right: 0; top: calc(100% + 6px);
+  z-index: 200;
+  min-width: 200px;
+  background: #111416;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.8);
+  animation: lb-drop-in 0.18s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes lb-drop-in {
+  from { opacity:0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity:1; transform: none; }
+}
+.lb-dropdown-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 9px;
+  font-size: 13px; font-weight: 500;
+  color: rgba(255,255,255,0.75);
+  cursor: pointer; border: none; background: transparent;
+  width: 100%; text-align: left;
+  transition: background 0.12s, color 0.12s;
+  font-family: 'DM Sans', sans-serif;
+}
+.lb-dropdown-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.lb-dropdown-sep { height: 1px; background: rgba(255,255,255,0.07); margin: 4px 0; }
+.lb-dropdown-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: rgba(255,255,255,0.28);
+  padding: 6px 12px 4px;
+}
+.lb-dropdown-icon {
+  width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0;
+  background: rgba(255,255,255,0.06);
+}
 `;
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -277,6 +320,120 @@ const MusicCard = memo(({ item, isActive, isPlaying, onPlay, onClick, loadingId 
   );
 });
 
+/* ── Outside-click hook ── */
+function useOutsideClick(ref, handler) {
+  useEffect(() => {
+    const listener = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
+    document.addEventListener('mousedown', listener);
+    return () => document.removeEventListener('mousedown', listener);
+  }, [ref, handler]);
+}
+
+/* ── Dots menu for detail header ── */
+const DotsMenu = memo(({ song, onAddToQueue }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const { show: showToast } = useToast();
+  useOutsideClick(ref, () => setOpen(false));
+
+  const handleShare = useCallback(() => {
+    const ytId = song?.youtubeId || song?.id?.replace('yt_', '');
+    const url = ytId
+      ? `https://www.youtube.com/watch?v=${ytId}`
+      : `https://www.youtube.com/results?search_query=${encodeURIComponent((song?.name||'') + ' ' + (song?.artist||''))}`;
+    navigator.clipboard.writeText(url)
+      .then(() => showToast('YouTube link copied!', 'info'))
+      .catch(() => showToast('Could not copy link', 'error'));
+    setOpen(false);
+  }, [song, showToast]);
+
+  const handleAddToLibrary = useCallback(() => {
+    try {
+      const LS_KEY = 'lb:library_songs';
+      const existing = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      if (existing.some(s => s.id === song?.id)) {
+        showToast('Already in Library', 'info');
+      } else {
+        localStorage.setItem(LS_KEY, JSON.stringify([...existing, { ...song, savedAt: Date.now() }]));
+        showToast('Added to Library ✓', 'success');
+      }
+    } catch { showToast('Could not save to Library', 'error'); }
+    setOpen(false);
+  }, [song, showToast]);
+
+  const handleQueue = useCallback(() => {
+    onAddToQueue?.();
+    showToast('Added to queue ✓', 'success');
+    setOpen(false);
+  }, [onAddToQueue, showToast]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button className="lb-icon-btn" onClick={() => setOpen(o => !o)}>
+        <FontAwesomeIcon icon={faEllipsisH} style={{ fontSize: 14 }} />
+      </button>
+      {open && (
+        <div className="lb-dropdown">
+          <button className="lb-dropdown-item" onClick={handleQueue}>
+            <span className="lb-dropdown-icon"><FaListUl /></span> Add to Queue
+          </button>
+          <button className="lb-dropdown-item" onClick={handleAddToLibrary}>
+            <span className="lb-dropdown-icon"><FaDownload /></span> Add to Library
+          </button>
+          <div className="lb-dropdown-sep" />
+          <button className="lb-dropdown-item" onClick={handleShare}>
+            <span className="lb-dropdown-icon"><FaShareAlt /></span> Copy YouTube Link
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
+
+/* ── Plus button on track row — add to playlist ── */
+const AddToPlaylistBtn = memo(({ song }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const { playlists, addSongToPlaylist } = usePlaylists();
+  const { show: showToast } = useToast();
+  useOutsideClick(ref, () => setOpen(false));
+
+  const handle = useCallback((pl) => {
+    addSongToPlaylist(pl.id, song);
+    showToast(`Added to ${pl.name} ✓`, 'success');
+    setOpen(false);
+  }, [song, addSongToPlaylist, showToast]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: open ? 'rgba(29,185,84,0.15)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: open ? 'var(--lb-green)' : 'var(--lb-text-3)', transition: 'background 0.15s, color 0.15s' }}
+        title="Add to playlist"
+      >
+        <FaPlus style={{ fontSize: 10 }} />
+      </button>
+      {open && (
+        <div className="lb-dropdown">
+          {playlists.length === 0 ? (
+            <div style={{ padding: '10px 14px', fontSize: 12, color: 'rgba(255,255,255,0.35)', textAlign: 'center' }}>No playlists yet</div>
+          ) : (
+            <>
+              <div className="lb-dropdown-label">Add to playlist</div>
+              {playlists.map(pl => (
+                <button key={pl.id} className="lb-dropdown-item" onClick={() => handle(pl)}>
+                  <span className="lb-dropdown-icon"><FaListUl /></span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.name}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const TrackRow = memo(({ song, index, isActive, isPlaying, onPlay, isFav, isLiked, onFav, onLike }) => (
   <div className={`ho-track${isActive ? ' active' : ''}`} onClick={onPlay}>
     <span style={{ width: 28, textAlign: 'center', fontSize: 12, color: 'var(--lb-text-3)', flexShrink: 0 }}>
@@ -302,6 +459,7 @@ const TrackRow = memo(({ song, index, isActive, isPlaying, onPlay, isFav, isLike
         style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <FaHeart style={{ fontSize: 11, color: isLiked ? '#FF4455' : 'var(--lb-text-3)' }} />
       </button>
+      <AddToPlaylistBtn song={song} />
     </div>
   </div>
 ));
@@ -353,6 +511,7 @@ export default function HomeOnline() {
    * Gives the user immediate visual feedback that a click was registered.
    */
   const [loadingId, setLoadingId]           = useState(null);
+  const { show: showToast } = useToast();
 
   /**
    * ytSongRef — holds the current YouTube song while it plays.
@@ -528,6 +687,17 @@ export default function HomeOnline() {
     setTimeout(() => setSelectedItem(null), 300);
   }, []);
 
+  const addToQueue = useCallback((song) => {
+    if (!song) return;
+    setPlayerSongs(prev => {
+      const without = (Array.isArray(prev) ? prev : []).filter(s => s.id !== song.id);
+      const idx = Math.max(0, (currentIndex ?? 0) + 1);
+      const next = [...without];
+      next.splice(idx, 0, { ...song });
+      return next;
+    });
+  }, [setPlayerSongs, currentIndex]);
+
   /* ── Track meta ── */
   const toggleFav = useCallback((id, current) => {
     setTrackStates(p => ({ ...p, [id]: { ...p[id], fav: !current } }));
@@ -589,9 +759,9 @@ export default function HomeOnline() {
             <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 14 }} />
           </button>
           <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 15 }}>{title}</span>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
             <button className="lb-icon-btn"><FaHeart style={{ fontSize: 14 }} /></button>
-            <button className="lb-icon-btn"><FontAwesomeIcon icon={faEllipsisH} style={{ fontSize: 14 }} /></button>
+            <DotsMenu song={selectedItem} onAddToQueue={() => addToQueue(selectedItem)} />
           </div>
         </div>
 
