@@ -43,3 +43,5 @@ Thumbs.db
 # Dockerfile and docker-compose.yml should be committed
 # but not local overrides
 docker-compose.override.yml
+
+# case senstive 
