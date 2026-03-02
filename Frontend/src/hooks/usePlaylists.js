@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-
+//just a random comment
 const LS_KEY = 'lb:playlists';
 const load = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } };
 const save = (data) => { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {} };
