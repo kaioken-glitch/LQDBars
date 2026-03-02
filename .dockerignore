@@ -1,6 +1,6 @@
 # Dependencies — Docker installs these fresh inside the image
 node_modules/
-server/node_modules/
+Backend/node_modules/
 
 # Build output — Dockerfile rebuilds this from source
 dist/
