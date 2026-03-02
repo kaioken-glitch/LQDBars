@@ -7,7 +7,8 @@ import {
   FaLink, FaStar, FaHeart, FaMinus,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
-import { usePlaylists } from '../hooks/useplaylists';
+import { usePlaylists, notifyAll as notifyPlaylistHook } from '../hooks/usePlaylists';
+import { fetchPlaylistWithDurations } from '../utils/youtubePlaylist';
 import { useToast } from '../components/Toast';
 
 /* ── STORAGE ── */
@@ -28,22 +29,29 @@ function extractPlaylistId(input) {
 }
 
 async function fetchYTPlaylist(playlistId) {
+  // ── Phase 1: Try Piped instances (no API key required) ──
   const PIPED_INSTANCES = [
     'https://pipedapi.kavin.rocks',
     'https://api.piped.yt',
+    'https://piped-api.garudalinux.org',
+    'https://pipedapi.leptons.xyz',
   ];
-  let lastErr = null;
+
   for (const base of PIPED_INSTANCES) {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       const res = await fetch(`${base}/playlists/${playlistId}`, {
         headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
       });
-      if (!res.ok) throw new Error(`Piped returned ${res.status}`);
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`Piped ${res.status}`);
       const data = await res.json();
       const songs = (data.relatedStreams || []).map(v => {
-        const videoId = v.url?.split('v=')?.[1] || '';
+        const videoId = v.url?.split('v=')?.[1]?.split('&')?.[0] || '';
         return {
-          id:        `yt_${videoId}_${Date.now()}_${Math.random()}`,
+          id:        `yt_${videoId}`,
           name:      v.title || 'Untitled',
           artist:    v.uploaderName || 'YouTube',
           cover:     v.thumbnail || '',
@@ -52,14 +60,34 @@ async function fetchYTPlaylist(playlistId) {
           audio:     `https://www.youtube.com/watch?v=${videoId}`,
           duration:  v.duration > 0 ? formatDuration(v.duration) : '',
         };
-      });
-      if (!songs.length) throw new Error('No playable tracks found in this playlist.');
+      }).filter(s => s.youtubeId); // drop any with missing video IDs
+      if (!songs.length) throw new Error('No playable tracks found.');
       return songs;
-    } catch (e) {
-      lastErr = e;
+    } catch (_) {
+      // try next instance
     }
   }
-  throw new Error(`Could not fetch playlist. ${lastErr?.message || ''}`);
+
+  // ── Phase 2: Fall back to YouTube Data API v3 ──
+  try {
+    const videos = await fetchPlaylistWithDurations(playlistId);
+    if (!videos.length) throw new Error('Playlist is empty or private.');
+    return videos.map(v => ({
+      id:               `yt_${v.id}`,
+      name:             v.title  || 'Untitled',
+      artist:           v.channel || 'YouTube',
+      cover:            v.thumbnail || '',
+      source:           'youtube',
+      youtubeId:        v.id,
+      audio:            `https://www.youtube.com/watch?v=${v.id}`,
+      duration:         v.duration || '',
+      formattedDuration: v.duration || '',
+    }));
+  } catch (ytErr) {
+    throw new Error(
+      `Could not load playlist. Piped servers are unavailable and YouTube API fallback failed: ${ytErr.message}`
+    );
+  }
 }
 
 function formatDuration(seconds) {
@@ -510,7 +538,12 @@ export default function Playlists() {
   const [selected,     setSelected]     = useState(null);
   const fileInputRef = useRef(null);
 
-  useEffect(() => { savePL(playlists); }, [playlists]);
+  useEffect(() => {
+    savePL(playlists);
+    // Notify usePlaylists hook instances (e.g. AddToPlaylistBtn in HomeOnline)
+    // so they see the latest playlists without needing a page reload.
+    notifyPlaylistHook(playlists);
+  }, [playlists]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return playlists;

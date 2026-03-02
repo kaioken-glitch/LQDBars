@@ -17,6 +17,29 @@ export function PlayerProvider({ children }) {
   const [shuffledOrder, setShuffledOrder] = useState([]);
   const [showBackgroundDetail, setShowBackgroundDetail] = useState(false);
 
+  // ── Library songs — persisted to localStorage ──
+  const [librarySongs, setLibrarySongsRaw] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lb:library_songs') || '[]'); } catch { return []; }
+  });
+
+  const setLibrarySongs = useCallback((updater) => {
+    setLibrarySongsRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try { localStorage.setItem('lb:library_songs', JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  }, []);
+
+  const addToLibrary = useCallback((song) => {
+    if (!song) return;
+    setLibrarySongsRaw(prev => {
+      if (prev.some(s => s.id === song.id)) return prev; // no duplicates
+      const next = [...prev, { ...song, savedAt: Date.now() }];
+      try { localStorage.setItem('lb:library_songs', JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  }, []);
+
   const audioRef = useRef(new Audio());
   const youtubePlayerRef = useRef(null);
   const playerTypeRef = useRef('audio');
@@ -30,12 +53,10 @@ export function PlayerProvider({ children }) {
 
   const needsYouTubePlayer = useCallback((song) => {
     if (!song) return false;
-    return song.source === 'youtube' || 
-           song.youtubeId ||
-           song.streamUrl?.includes('youtube.com') || 
-           song.streamUrl?.includes('youtu.be') ||
-           song.audio?.includes('youtube.com') ||
-           song.audio?.includes('youtu.be');
+    // Only route through YouTube player if we have a usable youtubeId or explicit source flag.
+    // Checking audio URL for youtube.com is unreliable when we store YT URLs as audio field.
+    const hasYtId = song.youtubeId && /^[A-Za-z0-9_-]{1,}$/.test(song.youtubeId);
+    return song.source === 'youtube' || hasYtId;
   }, []);
 
   const extractYouTubeId = useCallback((url) => {
@@ -91,12 +112,15 @@ export function PlayerProvider({ children }) {
     playerTypeRef.current = useYouTube ? 'youtube' : 'audio';
 
     if (useYouTube) {
-      const videoId = currentSong.youtubeId || 
-                     extractYouTubeId(currentSong.streamUrl) || 
+      const videoId = currentSong.youtubeId ||
+                     extractYouTubeId(currentSong.streamUrl) ||
                      extractYouTubeId(currentSong.audio);
 
-      if (!videoId) {
-        console.error('No YouTube video ID found for song:', currentSong);
+      // Validate videoId before touching YT player — invalid id causes an uncaught
+      // Error that crashes the entire PlayerProvider tree.
+      if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        console.error('Invalid or missing YouTube video ID:', videoId, 'for song:', currentSong?.name);
+        setIsPlaying(false);
         return;
       }
 
@@ -116,7 +140,7 @@ export function PlayerProvider({ children }) {
           return;
         }
 
-        youtubePlayerRef.current = new window.YT.Player('youtube-player-container', {
+        try { youtubePlayerRef.current = new window.YT.Player('youtube-player-container', {
           height: '0',
           width: '0',
           videoId: videoId,
@@ -158,6 +182,11 @@ export function PlayerProvider({ children }) {
           },
         });
 
+        } catch (ytErr) {
+          console.error('YT.Player init failed:', ytErr);
+          setIsPlaying(false);
+          return;
+        }
         if (timeUpdateInterval.current) clearInterval(timeUpdateInterval.current);
         timeUpdateInterval.current = setInterval(() => {
           if (youtubePlayerRef.current && youtubePlayerRef.current.getCurrentTime) {
@@ -359,7 +388,7 @@ export function PlayerProvider({ children }) {
         setIsPlaying(false);
       }
     };
-    const handleError = (e) => {
+    const handleError = () => {
       console.error('Audio error:', audio.error);
       if (songs.length > 0 && currentIndex < songs.length - 1) {
         setCurrentIndex(prev => prev + 1);
@@ -421,6 +450,10 @@ export function PlayerProvider({ children }) {
     showBackgroundDetail,
     setShowBackgroundDetail,
     toggleBackgroundDetail,
+    // ── Library ──
+    librarySongs,
+    setLibrarySongs,
+    addToLibrary,
   };
 
   return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
-import { usePlaylists } from '../hooks/useplaylists';
+import { usePlaylists, LIBRARY_PLAYLIST_ID } from '../hooks/usePlaylists';
 import { useToast } from '../components/Toast';
 import { FaSearch, FaStar, FaHeart, FaPlay, FaRandom, FaPause, FaSpinner, FaPlus, FaDownload, FaShareAlt, FaListUl } from 'react-icons/fa';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -334,6 +334,8 @@ const DotsMenu = memo(({ song, onAddToQueue }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const { show: showToast } = useToast();
+  const { addToLibrary } = usePlaylists();
+
   useOutsideClick(ref, () => setOpen(false));
 
   const handleShare = useCallback(() => {
@@ -348,18 +350,34 @@ const DotsMenu = memo(({ song, onAddToQueue }) => {
   }, [song, showToast]);
 
   const handleAddToLibrary = useCallback(() => {
+    if (!song) return;
     try {
-      const LS_KEY = 'lb:library_songs';
-      const existing = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-      if (existing.some(s => s.id === song?.id)) {
+      // Build a clean, re-playable song object.
+      // Backend stream URLs are temp files — persist as source:'youtube' using youtubeId
+      // so PlayerContext routes through the YouTube iframe player on replay.
+      const rawYtId = song.youtubeId || null;
+      const ytId = rawYtId && /^[A-Za-z0-9_-]{11}$/.test(rawYtId) ? rawYtId : null;
+      const ytUrl = ytId ? 'https://www.youtube.com/watch?v=' + ytId : null;
+      const librarySong = {
+        ...song,
+        source:    ytId ? 'youtube' : song.source,
+        youtubeId: ytId || song.youtubeId,
+        audio:     ytUrl || song.audio,
+        url:       ytUrl || song.url,
+        src:       ytUrl || song.src,
+        streamUrl: ytUrl || song.streamUrl,
+        album:     song.album || song.artist || 'YouTube',
+      };
+      // addToLibrary (from usePlaylists hook) handles duplicate detection internally
+      const wasAdded = addToLibrary(librarySong);
+      if (wasAdded === false) {
         showToast('Already in Library', 'info');
       } else {
-        localStorage.setItem(LS_KEY, JSON.stringify([...existing, { ...song, savedAt: Date.now() }]));
         showToast('Added to Library ✓', 'success');
       }
     } catch { showToast('Could not save to Library', 'error'); }
     setOpen(false);
-  }, [song, showToast]);
+  }, [song, addToLibrary, showToast]);
 
   const handleQueue = useCallback(() => {
     onAddToQueue?.();
@@ -394,7 +412,9 @@ const DotsMenu = memo(({ song, onAddToQueue }) => {
 const AddToPlaylistBtn = memo(({ song }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const { playlists, addSongToPlaylist } = usePlaylists();
+  const { playlists: allPlaylists, addSongToPlaylist } = usePlaylists();
+  // Never show the hidden __library__ playlist in the add-to-playlist dropdown
+  const playlists = allPlaylists.filter(p => !p._hidden);
   const { show: showToast } = useToast();
   useOutsideClick(ref, () => setOpen(false));
 
