@@ -200,33 +200,40 @@ const CSS = `
   .tp-btn:active { transform: scale(0.82); }
 
   /* Play/Pause — the hero button */
-  .tp-play {
-    width: 36px; height: 36px;
-    background: #1DB954;
-    color: #000;
-    box-shadow:
-      0 4px 16px rgba(29,185,84,0.45),
-      0 0 0 0 rgba(29,185,84,0.3);
-    transition:
-      transform 0.12s cubic-bezier(0.34,1.56,0.64,1),
-      background 0.15s,
-      box-shadow 0.2s;
-  }
-  .tp-play:hover {
-    background: #23E065;
-    box-shadow: 0 6px 22px rgba(29,185,84,0.6), 0 0 0 4px rgba(29,185,84,0.15);
-    color: #000;
-  }
-  .tp-play:active { transform: scale(0.86); }
+  /* Play/Pause — the hero button */
+.tp-play {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.35),
+    0 0 0 1px rgba(255,255,255,0.12);
+  transition:
+    transform 0.12s cubic-bezier(0.34,1.56,0.64,1),
+    background 0.15s,
+    box-shadow 0.2s,
+    color 0.15s;
+}
+.tp-play:hover {
+  background: #1DB954;
+  color: #000;
+  box-shadow: 0 6px 22px rgba(29,185,84,0.6), 0 0 0 4px rgba(29,185,84,0.15);
+}
+.tp-play:active {
+  background: #23E065;
+  color: #000;
+  transform: scale(0.86);
+}
 
-  /* Playing pulse on the play button */
-  .tp-root.playing .tp-play {
-    animation: tp-play-pulse 2.4s ease-in-out infinite;
-  }
-  @keyframes tp-play-pulse {
-    0%,100% { box-shadow: 0 4px 16px rgba(29,185,84,0.45), 0 0 0 0   rgba(29,185,84,0.15); }
-    50%      { box-shadow: 0 4px 20px rgba(29,185,84,0.55), 0 0 0 5px rgba(29,185,84,0);    }
-  }
+/* Playing pulse on the play button */
+.tp-root.playing .tp-play {
+  background: rgba(255,255,255,0.15);
+  animation: tp-play-pulse 2.4s ease-in-out infinite;
+}
+@keyframes tp-play-pulse {
+  0%,100% { box-shadow: 0 4px 16px rgba(0,0,0,0.35), 0 0 0 0   rgba(255,255,255,0.1); }
+  50%      { box-shadow: 0 4px 20px rgba(0,0,0,0.4),  0 0 0 5px rgba(255,255,255,0);  }
+}
 
   /* Separator dot */
   .tp-sep {
