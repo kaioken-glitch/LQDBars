@@ -4,7 +4,7 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart, FaMinus,
+  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylists, notifyAll as notifyPlaylistHook } from '../hooks/usePlaylists';
@@ -280,6 +280,29 @@ const CSS = `
 .pl-track-row:hover .pl-track-actions { opacity: 1 !important; }
 .pl-track-row.active .pl-track-actions { opacity: 1 !important; }
 
+/* ── Playlist detail DotsMenu dropdown ── */
+.pl-dots-wrap { position: relative; }
+.pl-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 80;
+  width: 210px; background: #0D0F11; border: 1px solid rgba(255,255,255,.13);
+  border-radius: 14px; padding: 6px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.75);
+  animation: plDropIn .18s cubic-bezier(0.22,1,0.36,1) both;
+}
+.pl-dropdown-label {
+  font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: rgba(255,255,255,.28); padding: 6px 12px 4px;
+}
+.pl-dropdown-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; border-radius: 9px;
+  font-size: 13px; color: rgba(255,255,255,.7);
+  transition: background .13s, color .13s; text-align: left;
+}
+.pl-dropdown-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+.pl-dropdown-icon { width: 18px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(255,255,255,.4); flex-shrink: 0; }
+.pl-dropdown-sep { height: 1px; background: rgba(255,255,255,.07); margin: 4px 0; }
+
 /* ── Minus (remove) button on track rows in detail view ── */
 .pl-track-remove {
   width: 26px; height: 26px;
@@ -511,6 +534,79 @@ const ImportDropdown = memo(({ onLocalImport, onYouTubeImport }) => {
   );
 });
 
+/* ── PLAYLIST DETAIL DOTS MENU ── */
+function useOutsideClickPL(ref, handler) {
+  useEffect(() => {
+    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
+  }, [ref, handler]);
+}
+
+const PlaylistDotsMenu = memo(({ playlist }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const { addToLibrary } = usePlaylists();
+  const { show: showToast } = useToast();
+  useOutsideClickPL(ref, () => setOpen(false));
+
+  const toLibrarySong = (s) => {
+    const ytId = s.youtubeId && /^[A-Za-z0-9_-]{11}$/.test(s.youtubeId) ? s.youtubeId : null;
+    const ytUrl = ytId ? 'https://www.youtube.com/watch?v=' + ytId : null;
+    return {
+      ...s,
+      source:    ytId ? 'youtube' : s.source,
+      youtubeId: ytId || s.youtubeId,
+      audio:     ytUrl || s.audio,
+      url:       ytUrl || s.url,
+      src:       ytUrl || s.src,
+      streamUrl: ytUrl || s.streamUrl,
+      album:     s.album || playlist?.name || 'Playlist',
+    };
+  };
+
+  const handleAddAllToLibrary = useCallback(() => {
+    const songs = playlist?.songs || [];
+    if (!songs.length) { showToast('Playlist is empty', 'info'); setOpen(false); return; }
+    let added = 0;
+    songs.forEach(s => { if (addToLibrary(toLibrarySong(s)) !== false) added++; });
+    if (added === 0) showToast('All songs already in Library', 'info');
+    else if (added < songs.length) showToast(`${added} of ${songs.length} added to Library ✓`, 'success');
+    else showToast(`${added} song${added !== 1 ? 's' : ''} added to Library ✓`, 'success');
+    setOpen(false);
+  }, [playlist, addToLibrary, showToast]);
+
+  const handleShare = useCallback(() => {
+    const name = playlist?.name || 'playlist';
+    navigator.clipboard.writeText(window.location.href)
+      .then(() => showToast('Link copied!', 'info'))
+      .catch(() => showToast('Could not copy link', 'error'));
+    setOpen(false);
+  }, [playlist, showToast]);
+
+  return (
+    <div className="pl-dots-wrap" ref={ref}>
+      <button className="pl-modal-btn" onClick={() => setOpen(o => !o)} aria-label="More options">
+        <FontAwesomeIcon icon={faEllipsisH} />
+      </button>
+      {open && (
+        <div className="pl-dropdown">
+          <div className="pl-dropdown-label">Playlist Actions</div>
+          <button className="pl-dropdown-item" onClick={handleAddAllToLibrary}>
+            <span className="pl-dropdown-icon"><FaDownload /></span>
+            Add all to Library
+          </button>
+          <div className="pl-dropdown-sep" />
+          <button className="pl-dropdown-item" onClick={handleShare}>
+            <span className="pl-dropdown-icon"><FaShareAlt /></span>
+            Copy Link
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
+
 /* ── MAIN ── */
 export default function Playlists() {
   const {
@@ -546,9 +642,11 @@ export default function Playlists() {
   }, [playlists]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return playlists;
+    // Never show the hidden __library__ playlist in the Playlists grid
+    const visible = playlists.filter(p => !p._hidden);
+    if (!query.trim()) return visible;
     const q = query.toLowerCase();
-    return playlists.filter(p => p.name?.toLowerCase().includes(q));
+    return visible.filter(p => p.name?.toLowerCase().includes(q));
   }, [playlists, query]);
 
   const createPlaylist = useCallback((name) => {
@@ -697,9 +795,7 @@ export default function Playlists() {
               <button className="pl-modal-btn" onClick={() => setSelected(null)}>
                 <FontAwesomeIcon icon={faChevronLeft} />
               </button>
-              <button className="pl-modal-btn">
-                <FontAwesomeIcon icon={faEllipsisH} />
-              </button>
+              <PlaylistDotsMenu playlist={selected} />
             </div>
             <div className="pl-hero">
               <div className="pl-hero-art">

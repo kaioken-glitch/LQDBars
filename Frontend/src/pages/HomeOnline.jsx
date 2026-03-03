@@ -330,7 +330,7 @@ function useOutsideClick(ref, handler) {
 }
 
 /* ── Dots menu for detail header ── */
-const DotsMenu = memo(({ song, onAddToQueue }) => {
+const DotsMenu = memo(({ song, songList, onAddToQueue }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const { show: showToast } = useToast();
@@ -349,35 +349,44 @@ const DotsMenu = memo(({ song, onAddToQueue }) => {
     setOpen(false);
   }, [song, showToast]);
 
+  const toLibrarySong = (s) => {
+    const ytId = s.youtubeId && /^[A-Za-z0-9_-]{11}$/.test(s.youtubeId) ? s.youtubeId : null;
+    const ytUrl = ytId ? 'https://www.youtube.com/watch?v=' + ytId : null;
+    return {
+      ...s,
+      source:    ytId ? 'youtube' : s.source,
+      youtubeId: ytId || s.youtubeId,
+      audio:     ytUrl || s.audio,
+      url:       ytUrl || s.url,
+      src:       ytUrl || s.src,
+      streamUrl: ytUrl || s.streamUrl,
+      album:     s.album || s.artist || 'YouTube',
+    };
+  };
+
   const handleAddToLibrary = useCallback(() => {
-    if (!song) return;
     try {
-      // Build a clean, re-playable song object.
-      // Backend stream URLs are temp files — persist as source:'youtube' using youtubeId
-      // so PlayerContext routes through the YouTube iframe player on replay.
-      const rawYtId = song.youtubeId || null;
-      const ytId = rawYtId && /^[A-Za-z0-9_-]{11}$/.test(rawYtId) ? rawYtId : null;
-      const ytUrl = ytId ? 'https://www.youtube.com/watch?v=' + ytId : null;
-      const librarySong = {
-        ...song,
-        source:    ytId ? 'youtube' : song.source,
-        youtubeId: ytId || song.youtubeId,
-        audio:     ytUrl || song.audio,
-        url:       ytUrl || song.url,
-        src:       ytUrl || song.src,
-        streamUrl: ytUrl || song.streamUrl,
-        album:     song.album || song.artist || 'YouTube',
-      };
-      // addToLibrary (from usePlaylists hook) handles duplicate detection internally
-      const wasAdded = addToLibrary(librarySong);
-      if (wasAdded === false) {
-        showToast('Already in Library', 'info');
+      // If a songList is provided (detail view), add all songs in the list.
+      // Otherwise fall back to the single header song.
+      const targets = (songList && songList.length > 0) ? songList : (song ? [song] : []);
+      if (!targets.length) { setOpen(false); return; }
+
+      let added = 0;
+      targets.forEach(s => {
+        const result = addToLibrary(toLibrarySong(s));
+        if (result !== false) added++;
+      });
+
+      if (added === 0) {
+        showToast(targets.length === 1 ? 'Already in Library' : 'All songs already in Library', 'info');
+      } else if (added < targets.length) {
+        showToast(`${added} of ${targets.length} added to Library ✓`, 'success');
       } else {
-        showToast('Added to Library ✓', 'success');
+        showToast(targets.length === 1 ? 'Added to Library ✓' : `${added} songs added to Library ✓`, 'success');
       }
     } catch { showToast('Could not save to Library', 'error'); }
     setOpen(false);
-  }, [song, addToLibrary, showToast]);
+  }, [song, songList, addToLibrary, showToast]);
 
   const handleQueue = useCallback(() => {
     onAddToQueue?.();
@@ -781,7 +790,7 @@ export default function HomeOnline() {
           <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 15 }}>{title}</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
             <button className="lb-icon-btn"><FaHeart style={{ fontSize: 14 }} /></button>
-            <DotsMenu song={selectedItem} onAddToQueue={() => addToQueue(selectedItem)} />
+            <DotsMenu song={selectedItem} songList={songList} onAddToQueue={() => addToQueue(selectedItem)} />
           </div>
         </div>
 

@@ -7,16 +7,19 @@ import Playlists from './pages/Playlists';
 import Recent from './pages/Recent';
 import Settings from './pages/Settings';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './components/Toast';
 import MobilePlayer from './components/MobilePlayer';
 import BottomNav from './components/BottomNav';
 import TinyPlayer from './components/TinyPlayer';
 import SplashScreen from './utils/Splashscreen';
+import Login from './pages/Login';           // you'll create this
 import './index.css';
 
 /* ─── Mobile floating TinyPlayer ─────────────────────────────────────────
    Fixed pill that floats above BottomNav on mobile.
    Must be INSIDE <PlayerProvider> to access usePlayer().
-   Hidden on desktop via CSS — Playlists renders its own TinyPlayer there.
+   Hidden on desktop via CSS.
 ─────────────────────────────────────────────────────────────────────── */
 function MobileTinyPlayer({ active }) {
   const {
@@ -24,7 +27,6 @@ function MobileTinyPlayer({ active }) {
     playNext, playPrev, isMuted, toggleMute,
   } = usePlayer();
 
-  // Hide on Home — HomeOnline has its own full-screen player UI
   if (!currentSong || active === 'Home') return null;
 
   return (
@@ -42,9 +44,10 @@ function MobileTinyPlayer({ active }) {
   );
 }
 
-/* ─── Inner app (needs PlayerProvider context) ───────────────────────── */
+/* ─── Inner app (needs PlayerProvider + AuthProvider context) ────────── */
 function AppInner() {
   const [active, setActive] = useState('Home');
+  const { user, loading } = useAuth();
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -75,7 +78,24 @@ function AppInner() {
     };
   }, []);
 
+  // Keep Render backend warm — ping every 10 minutes to prevent spin-down
+  useEffect(() => {
+    const backendUrl = import.meta.env.VITE_API_URL;
+    if (!backendUrl) return;
+    const id = setInterval(() => {
+      fetch(`${backendUrl}/health`).catch(() => {});
+    }, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   function renderPage() {
+    // Auth loading — show nothing (AuthProvider already blocks children until ready)
+    if (loading) return null;
+
+    // Not logged in — show Login page regardless of which tab is active
+    if (!user) return <Login onSuccess={() => setActive('Home')} />;
+
+    // Logged in — render normally
     switch (active) {
       case 'Home':            return isOnline ? <HomeOnline /> : <Home />;
       case 'Library':         return <Library />;
@@ -99,10 +119,12 @@ function AppInner() {
         {/* Content row: Sidebar + Page */}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-          {/* Sidebar — desktop only */}
-          <div className="sidebar-slot" style={{ display: 'none', flexShrink: 0 }}>
-            <Sidebar active={active} setActive={setActive} />
-          </div>
+          {/* Sidebar — desktop only, hide when not logged in */}
+          {user && (
+            <div className="sidebar-slot" style={{ display: 'none', flexShrink: 0 }}>
+              <Sidebar active={active} setActive={setActive} />
+            </div>
+          )}
 
           {/* Page */}
           <div style={{
@@ -113,15 +135,17 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom bar */}
-        <div className="bottom-slot" style={{ flexShrink: 0 }}>
-          {active !== 'Home' && <MobilePlayer />}
-          <BottomNav active={active} setActive={setActive} />
-        </div>
+        {/* Bottom bar — hide when not logged in */}
+        {user && (
+          <div className="bottom-slot" style={{ flexShrink: 0 }}>
+            {active !== 'Home' && <MobilePlayer />}
+            <BottomNav active={active} setActive={setActive} />
+          </div>
+        )}
       </div>
 
       {/* ── Mobile TinyPlayer — fixed above BottomNav, mobile only ── */}
-      <MobileTinyPlayer active={active} />
+      {user && <MobileTinyPlayer active={active} />}
 
       <style>{`
         /* Desktop */
@@ -134,13 +158,6 @@ function AppInner() {
         /* Mobile */
         @media (max-width: 767px) {
           .sidebar-slot { display: none !important; }
-
-          /*
-            Fixed pill — floats above BottomNav.
-            BottomNav height ≈ 70px.
-            Give 14px breathing gap above it.
-            z-index 200 ensures it's above everything.
-          */
           .mobile-tiny-pill {
             position: fixed;
             bottom: calc(70px + env(safe-area-inset-bottom, 0px) + 14px);
@@ -148,7 +165,6 @@ function AppInner() {
             transform: translateX(-50%);
             z-index: 200;
             pointer-events: all;
-            /* drop shadow so pill reads over any page content */
             filter: drop-shadow(0 8px 24px rgba(0,0,0,0.7));
           }
         }
@@ -166,9 +182,13 @@ function App() {
   }
 
   return (
-    <PlayerProvider>
-      <AppInner />
-    </PlayerProvider>
+    <AuthProvider>
+      <ToastProvider>
+        <PlayerProvider>
+          <AppInner />
+        </PlayerProvider>
+      </ToastProvider>
+    </AuthProvider>
   );
 }
 

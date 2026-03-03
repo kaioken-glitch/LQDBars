@@ -1,5 +1,7 @@
 // src/context/PlayerContext.jsx
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 const PlayerContext = createContext();
 
@@ -17,28 +19,6 @@ export function PlayerProvider({ children }) {
   const [shuffledOrder, setShuffledOrder] = useState([]);
   const [showBackgroundDetail, setShowBackgroundDetail] = useState(false);
 
-  // ── Library songs — persisted to localStorage ──
-  const [librarySongs, setLibrarySongsRaw] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('lb:library_songs') || '[]'); } catch { return []; }
-  });
-
-  const setLibrarySongs = useCallback((updater) => {
-    setLibrarySongsRaw(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      try { localStorage.setItem('lb:library_songs', JSON.stringify(next)); } catch (_) {}
-      return next;
-    });
-  }, []);
-
-  const addToLibrary = useCallback((song) => {
-    if (!song) return;
-    setLibrarySongsRaw(prev => {
-      if (prev.some(s => s.id === song.id)) return prev; // no duplicates
-      const next = [...prev, { ...song, savedAt: Date.now() }];
-      try { localStorage.setItem('lb:library_songs', JSON.stringify(next)); } catch (_) {}
-      return next;
-    });
-  }, []);
 
   const audioRef = useRef(new Audio());
   const youtubePlayerRef = useRef(null);
@@ -241,6 +221,24 @@ export function PlayerProvider({ children }) {
       }
     }
   }, [isPlaying, currentSong]);
+
+  // ── Record play to Supabase listening_history ──────────────────────────
+  // Fires once per song change (not on pause/resume).
+  // Silently skips if user is not logged in or song has no youtubeId.
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!currentSong?.youtubeId || !user) return;
+    supabase.from('listening_history').insert({
+      user_id:    user.id,
+      youtube_id: currentSong.youtubeId,
+      name:       currentSong.name   || null,
+      artist:     currentSong.artist || null,
+      genre:      currentSong.genre  || null,
+    }).then(({ error }) => {
+      if (error) console.warn('[history] insert failed:', error.message);
+    });
+  }, [currentSong?.id]); // only fires when the song actually changes, not on play/pause
+  // ────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (playerTypeRef.current === 'youtube') {
@@ -450,10 +448,7 @@ export function PlayerProvider({ children }) {
     showBackgroundDetail,
     setShowBackgroundDetail,
     toggleBackgroundDetail,
-    // ── Library ──
-    librarySongs,
-    setLibrarySongs,
-    addToLibrary,
+
   };
 
   return (
