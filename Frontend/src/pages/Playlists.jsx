@@ -11,10 +11,9 @@ import { usePlaylists, notifyAll as notifyPlaylistHook } from '../hooks/usePlayl
 import { fetchPlaylistWithDurations } from '../utils/youtubePlaylist';
 import { useToast } from '../components/Toast';
 
-/* ── STORAGE ── */
+/* ── STORAGE — kept only for legacy reads; all writes go through usePlaylists hook ── */
 const LS     = 'lb:playlists';
 const loadPL = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
-const savePL = d => { try { localStorage.setItem(LS, JSON.stringify(d)); } catch (_) {} };
 
 /* ── YOUTUBE PLAYLIST IMPORT ──
    Uses Piped API (open-source, no API key, CORS-safe).
@@ -612,7 +611,20 @@ export default function Playlists() {
   const {
     currentSong, isPlaying, setIsPlaying, setPlayerSongs,
   } = usePlayer();
-  const { removeSongFromPlaylist } = usePlaylists();
+
+  // Single source of truth — the hook reads/writes localStorage and notifies all subscribers
+  const {
+    playlists,
+    createPlaylist: hookCreatePlaylist,
+    deletePlaylist: hookDeletePlaylist,
+    addSongToPlaylist,
+    removeSongFromPlaylist,
+    refreshFromStorage,
+  } = usePlaylists();
+
+  // Re-sync from storage every time this page mounts (handles login/nav back)
+  useEffect(() => { refreshFromStorage(); }, [refreshFromStorage]);
+
   const { show: showToast } = useToast();
 
   const [mockSongStates, setMockSongStates] = useState(() => {
@@ -627,19 +639,18 @@ export default function Playlists() {
     setMockSongStates(prev => ({ ...prev, [songId]: { ...prev[songId], ...updates } }));
   }, []);
 
-  const [playlists,    setPlaylists]    = useState(loadPL);
   const [query,        setQuery]        = useState('');
   const [showCreate,   setShowCreate]   = useState(false);
   const [showYTImport, setShowYTImport] = useState(false);
   const [selected,     setSelected]     = useState(null);
   const fileInputRef = useRef(null);
 
+  // Keep selected in sync when hook updates playlists (e.g. song removed from elsewhere)
   useEffect(() => {
-    savePL(playlists);
-    // Notify usePlaylists hook instances (e.g. AddToPlaylistBtn in HomeOnline)
-    // so they see the latest playlists without needing a page reload.
-    notifyPlaylistHook(playlists);
-  }, [playlists]);
+    if (!selected) return;
+    const fresh = playlists.find(p => p.id === selected.id);
+    if (fresh) setSelected(fresh);
+  }, [playlists]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     // Never show the hidden __library__ playlist in the Playlists grid
@@ -650,13 +661,13 @@ export default function Playlists() {
   }, [playlists, query]);
 
   const createPlaylist = useCallback((name) => {
-    setPlaylists(prev => [{ id: `pl_${Date.now()}`, name, songs: [], createdAt: Date.now() }, ...prev]);
-  }, []);
+    hookCreatePlaylist(name);
+  }, [hookCreatePlaylist]);
 
   const deletePlaylist = useCallback((id) => {
-    setPlaylists(prev => prev.filter(p => p.id !== id));
+    hookDeletePlaylist(id);
     setSelected(s => s?.id === id ? null : s);
-  }, []);
+  }, [hookDeletePlaylist]);
 
   const playList = useCallback((songs, idx = 0) => {
     if (!songs || songs.length === 0) return;
@@ -682,16 +693,8 @@ export default function Playlists() {
 
   const handleRemoveSong = useCallback((playlistId, songId, songName) => {
     removeSongFromPlaylist(playlistId, songId);
-    // Also sync local state so UI updates immediately
-    setPlaylists(prev => prev.map(p => {
-      if (p.id !== playlistId) return p;
-      return { ...p, songs: p.songs.filter(s => s.id !== songId) };
-    }));
-    // Keep selected in sync
-    setSelected(prev => {
-      if (!prev || prev.id !== playlistId) return prev;
-      return { ...prev, songs: prev.songs.filter(s => s.id !== songId) };
-    });
+    // Hook's notifyAll broadcasts to all usePlaylists subscribers including this component.
+    // selected is kept in sync by the useEffect above.
     showToast(`Removed from playlist ✓`, 'error');
   }, [removeSongFromPlaylist, showToast]);
 
@@ -710,25 +713,19 @@ export default function Playlists() {
       audio:  URL.createObjectURL(f),
       source: 'local',
     }));
-    setPlaylists(prev => [{
-      id: `pl_${Date.now()}`,
-      name: `Local Import (${songs.length} tracks)`,
-      songs,
-      source: 'local',
-      createdAt: Date.now(),
-    }, ...prev]);
+    const newPl = { id: `pl_${Date.now()}`, name: `Local Import (${songs.length} tracks)`, songs, source: 'local', createdAt: Date.now() };
+    // Read current list fresh from localStorage so we never prepend to stale state
+    const current = loadPL();
+    notifyPlaylistHook([newPl, ...current]);
     e.target.value = '';
   }, []);
 
   /* Songs saved as-is — PlayerContext handles YouTube playback via IFrame API */
   const handleYTImport = useCallback((name, songs) => {
-    setPlaylists(prev => [{
-      id: `pl_${Date.now()}`,
-      name,
-      songs,
-      source: 'youtube',
-      createdAt: Date.now(),
-    }, ...prev]);
+    const newPl = { id: `pl_${Date.now()}`, name, songs, source: 'youtube', createdAt: Date.now() };
+    // Read current list fresh from localStorage so we never prepend to stale state
+    const current = loadPL();
+    notifyPlaylistHook([newPl, ...current]);
   }, []);
 
   return (

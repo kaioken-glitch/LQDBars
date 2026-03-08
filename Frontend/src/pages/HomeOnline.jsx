@@ -16,42 +16,471 @@ import Loader from '../utils/Splashscreen';
 
 const GENRES = ['All', 'Hip-Hop', 'Pop', 'Rock', 'Jazz', 'Electronic', 'Classical', 'R&B', 'Blues'];
 
-const PLAYLISTS = [
-  { id: 'indie-folk-mix',     name: 'Indie Folk Mix',      artist: 'Curated', description: 'Soft acoustic vibes',  cover: 'https://placehold.co/400x400/8B4513/FFFFFF?text=Indie+Folk',  accent: '#C4884F', type: 'playlist' },
-  { id: 'underground-hiphop', name: 'Underground Hip-Hop', artist: 'Curated', description: 'Raw lyricism & beats', cover: 'https://placehold.co/400x400/2F4F4F/FFFFFF?text=Underground',  accent: '#4ECDC4', type: 'playlist' },
-  { id: 'edm-bangers',        name: 'EDM Bangers',         artist: 'Curated', description: 'Festival anthems',     cover: 'https://placehold.co/400x400/00CED1/FFFFFF?text=EDM',          accent: '#00CED1', type: 'playlist' },
-  { id: '8-bit-vibes',        name: '8‑Bit Vibes',         artist: 'Curated', description: 'Chiptune & retro',     cover: 'https://placehold.co/400x400/FFD700/000000?text=8-Bit',        accent: '#FFD700', type: 'playlist' },
+/* ─────────────────────────────────────────────────────────────────────────────
+   DYNAMIC SECTION SYSTEM
+   ─────────────────────────────────────────────────────────────────────────────
+   Instead of hardcoded cards, each section holds a POOL of search queries.
+   On every load we pick a random subset, fetch real YouTube results, and
+   render those. Zero placeholders, always fresh content.
+
+   PERSONALISATION HOOK (Phase 2):
+   ─────────────────────────────────────────────────────────────────────────────
+   When the user has enough listening history (tracked in PlayerContext →
+   Supabase listening_history), call buildPersonalisedSections(prefs) instead
+   of SECTION_DEFINITIONS to get queries like:
+     "kendrick lamar type beat"  ← from top artist
+     "hip-hop playlist 2024"     ← from top genre
+     "songs like luther"         ← from most replayed song
+   The fetch logic below is identical — only the queries change.
+────────────────────────────────────────────────────────────────────────────── */
+
+// Each section: id, title, badge label, number of results to show, query pool.
+// On load we pick ONE query at random from the pool — different every session.
+// ── Song-level query filter ─────────────────────────────────────────────────
+// ── Song-level quality filter ─────────────────────────────────────────────────
+// Three layers: title keywords, channel name patterns, duration guard.
+const MIX_TITLE_WORDS = [
+  // playlists / mixes
+  'playlist', ' mix', 'mixed by', 'megamix', 'nonstop', 'non-stop',
+  'back to back', 'continuous', 'extended set', 'dj set', 'mashup', 'medley',
+  // compilations
+  'compilation', 'collection', 'all songs', 'full album', 'album mix',
+  'full ep', 'full lp', 'full tape', 'mixtape', 'full project',
+  // "best of" / chart roundups
+  'best of', 'greatest hits', 'top 10', 'top 20', 'top 50', 'top 100',
+  'most played', 'chart hits', 'hit songs', 'all hits',
+  // duration giveaways
+  '1 hour', '2 hour', '3 hour', '4 hour', 'hour mix', 'hours of',
+  // reaction / interview / non-music
+  'reacts', 'reacting', 'reaction', 'interview', 'behind the scenes',
+  'making of', 'documentary', 'explained', 'breakdown', 'analysis',
+  'listening to', 'first time hearing', 'commentary',
+  // karaoke / instrumental covers
+  'karaoke', 'sing along', 'sing-along', 'cover version', 'covers of',
+  'instrumental version', 'backing track', 'piano cover', 'guitar cover',
+  'violin cover', 'cello cover', 'acoustic cover',
+  // lyric / fan-made
+  'fan made', 'fan video', 'lyric video', 'lyrics video',
+  'unofficial video', 'unofficial audio', 'unofficial music',
+  // slowed / sped up / reverb spam
+  'slowed reverb', 'slowed + reverb', 'sped up', 'nightcore',
+  'reverb only', '8d audio', 'bass boosted',
+  // shorts giveaways in title
+  '#shorts', '#short', 'youtube shorts',
 ];
 
-const ALBUMS = [
-  { id: 'album-damn',             name: 'DAMN.',               artist: 'Kendrick Lamar',       cover: 'https://placehold.co/400x400/800000/FFFFFF?text=DAMN.',              accent: '#B71C1C', type: 'album' },
-  { id: 'album-brent',            name: 'Wasteland',           artist: 'Brent Faiyaz',         cover: 'https://placehold.co/400x400/228B22/FFFFFF?text=Wasteland',          accent: '#2E7D32', type: 'album' },
-  { id: 'album-future',           name: 'I NEVER LIKED YOU',   artist: 'Future',               cover: 'https://placehold.co/400x400/000080/FFFFFF?text=INLY',               accent: '#1565C0', type: 'album' },
-  { id: 'album-don',              name: 'Life of a DON',       artist: 'Don Toliver',          cover: 'https://placehold.co/400x400/FF8C00/FFFFFF?text=Life+of+a+DON',      accent: '#E65100', type: 'album' },
-  { id: 'album-living-tombstone', name: 'The Living Tombstone', artist: 'The Living Tombstone', cover: 'https://placehold.co/400x400/4B0082/FFFFFF?text=TLT',               accent: '#6A1B9A', type: 'album' },
-  { id: 'album-nina',             name: 'I Put a Spell on You', artist: 'Nina Simone',         cover: 'https://placehold.co/400x400/111/FFFFFF?text=Nina+Simone',           accent: '#9E9E9E', type: 'album' },
-  { id: 'album-etta',             name: 'At Last!',             artist: 'Etta James',          cover: 'https://placehold.co/400x400/708090/FFFFFF?text=At+Last',            accent: '#78909C', type: 'album' },
+// Channel name suffixes/patterns that signal auto-generated or repost channels
+const BAD_CHANNEL_PATTERNS = [
+  ' - topic',        // YouTube auto-generated "Artist - Topic" channels
+  'topic channel',
+  'auto-generated',
+  // shorts / repost spam
+  'shorts',
+  'repost',
+  'reposts',
+  // generic lyric / cover farms
+  'lyrics channel',
+  'lyrics world',
+  'lyric world',
+  'lyrics hub',
+  'music lyrics',
+  'song lyrics',
+  'lyric video',
+  'lyrics official',
+  // music world / various artists farms
+  'music world',
+  'music zone',
+  'music box',
+  'music hub',
+  'music nation',
+  'music hits',
+  'music vibes',
+  'hit music',
+  // fan / unofficial
+  'fan channel',
+  'fan made',
+  'fan page',
+  'fanmade',
+  // slowed / edit spam farms
+  'slowed',
+  'reverb nation',
+  'bass nation',
+  'nightcore',
+  '8d music',
+  // karaoke farms
+  'karaoke',
+  'sing king',
+  'backing tracks',
 ];
 
-const SUGGESTIONS = [
-  { id: 'sg-luther',    name: 'luther',           artist: 'Kendrick Lamar',    cover: 'https://placehold.co/400x400/663399/FFFFFF?text=luther',       accent: '#9C27B0', type: 'suggestion' },
-  { id: 'sg-skyami',    name: 'SKYAMI',           artist: 'Don Toliver',       cover: 'https://placehold.co/400x400/FF6347/FFFFFF?text=SKYAMI',       accent: '#FF6347', type: 'suggestion' },
-  { id: 'sg-wait-for-u', name: 'Wait For U',     artist: 'Future ft. Drake',  cover: 'https://placehold.co/400x400/4682B4/FFFFFF?text=Wait+For+U',   accent: '#42A5F5', type: 'suggestion' },
-  { id: 'sg-gravity',   name: 'Gravity',          artist: 'Brent Faiyaz',     cover: 'https://placehold.co/400x400/DAA520/FFFFFF?text=Gravity',      accent: '#FFA726', type: 'suggestion' },
-  { id: 'sg-mc-calm',   name: 'Minecraft Calming', artist: 'C418',            cover: 'https://placehold.co/400x400/228B22/FFFFFF?text=Minecraft',    accent: '#66BB6A', type: 'suggestion' },
-  { id: 'sg-pokemon',   name: 'Pokémon Center',   artist: 'Junichi Masuda',   cover: 'https://placehold.co/400x400/FF1493/000000?text=Pok%C3%A9mon', accent: '#EC407A', type: 'suggestion' },
-  { id: 'sg-bad-guy',   name: 'Bad Guy',          artist: 'The Living Tombstone', cover: 'https://placehold.co/400x400/DC143C/FFFFFF?text=Bad+Guy',  accent: '#EF5350', type: 'suggestion' },
-  { id: 'sg-stressed',  name: 'Stressed Out',     artist: 'Twenty One Pilots', cover: 'https://placehold.co/400x400/696969/FFFFFF?text=Stressed+Out', accent: '#9E9E9E', type: 'suggestion' },
-  { id: 'sg-feeling',   name: 'Feeling Good',     artist: 'Nina Simone',      cover: 'https://placehold.co/400x400/2E8B57/FFFFFF?text=Feeling+Good', accent: '#26A69A', type: 'suggestion' },
-  { id: 'sg-at-last',   name: 'At Last',          artist: 'Etta James',       cover: 'https://placehold.co/400x400/CD5C5C/FFFFFF?text=At+Last',     accent: '#EF5350', type: 'suggestion' },
+function isSingleTrack(video) {
+  const title   = (video.title   || '').toLowerCase();
+  const channel = (video.channel || '').toLowerCase();
+
+  // 1. Title keyword filter
+  if (MIX_TITLE_WORDS.some(kw => title.includes(kw))) return false;
+
+  // 2. Channel name filter — Topic channels, lyric farms, karaoke, shorts spam
+  if (BAD_CHANNEL_PATTERNS.some(p => channel.includes(p))) return false;
+
+  // 3. Duration filter using real seconds from videos.list contentDetails
+  //    Shorts = under 62s. Mixes/compilations = over 12 min.
+  //    Both are now caught reliably since we batch-fetch durations.
+  if (video.durationSecs) {
+    if (video.durationSecs < 62)  return false; // YouTube Short
+    if (video.durationSecs > 720) return false; // Mix or compilation
+  }
+
+  // 4. All-caps heuristic — "SAD SONGS 2025 😭" style clickbait
+  const letters = title.replace(/[^a-z]/gi, '');
+  if (letters.length > 10) {
+    const upperRatio = (video.title.replace(/[^A-Za-z]/g, '').match(/[A-Z]/g) || []).length / letters.length;
+    if (upperRatio > 0.7 && !title.includes(' - ')) return false;
+  }
+
+  return true;
+}
+
+// ── GENRE-MAPPED SECTIONS ────────────────────────────────────────────────────
+// Each section id matches a GENRES pill. 'all' shows all sections.
+// pool = specific "Artist - Song official audio" queries → always returns the
+//        exact track as top result, never a playlist or mix.
+// Phase 2: swap pool entries for personalised queries from listening_history.
+// ─────────────────────────────────────────────────────────────────────────────
+const SECTION_DEFINITIONS = [
+  {
+    id:     'hip-hop',
+    genre:  'Hip-Hop',
+    title:  'Hip-Hop & Rap',
+    badge:  null,
+    pool: [
+      'kendrick lamar humble official audio',
+      'j cole love yourz official audio',
+      'drake gods plan official audio',
+      'travis scott antidote official audio',
+      'kanye west stronger official audio',
+      'lil baby emotionally scarred official audio',
+      'future mask off official audio',
+      'roddy ricch the box official audio',
+      'juice wrld lucid dreams official audio',
+      'meek mill going bad official audio',
+      'polo g pop out official audio',
+      'nba youngboy outside today official audio',
+      'dababy suge official audio',
+      'gunna fukumean official audio',
+      'lil durk all my life official audio',
+      'central cee band4band official audio',
+      'tyler the creator noid official audio',
+      '21 savage a lot official audio',
+      'big sean bounce back official audio',
+      'chance the rapper no problem official audio',
+    ],
+  },
+  {
+    id:     'pop',
+    genre:  'Pop',
+    title:  'Pop Hits',
+    badge:  null,
+    pool: [
+      'harry styles as it was official video',
+      'olivia rodrigo vampire official video',
+      'taylor swift anti hero official music video',
+      'dua lipa levitating official video',
+      'the weeknd blinding lights official video',
+      'ariana grande positions official video',
+      'billie eilish bad guy official audio',
+      'post malone circles official audio',
+      'ed sheeran shape of you official video',
+      'lana del rey summertime sadness official video',
+      'doja cat say so official audio',
+      'halsey without me official audio',
+      'camila cabello havana official video',
+      'lizzo juice official video',
+      'sabrina carpenter espresso official video',
+      'charlie puth attention official video',
+      'selena gomez lose you to love me official video',
+      'shawn mendes stitches official video',
+      'meghan trainor all about that bass official video',
+      'sia chandelier official video',
+    ],
+  },
+  {
+    id:     'rock',
+    genre:  'Rock',
+    title:  'Rock',
+    badge:  null,
+    pool: [
+      'arctic monkeys do i wanna know official video',
+      'foo fighters best of you official video',
+      'red hot chili peppers under the bridge official video',
+      'nirvana smells like teen spirit official video',
+      'queens of the stone age no one knows official video',
+      'the strokes last nite official video',
+      'radiohead karma police official video',
+      'tame impala the less i know the better official video',
+      'pearl jam black official audio',
+      'soundgarden black hole sun official video',
+      'green day boulevard of broken dreams official video',
+      'linkin park in the end official video',
+      'system of a down chop suey official video',
+      'muse uprising official video',
+      'the killers mr brightside official video',
+      'interpol obstacle 1 official audio',
+      'the national bloodbuzz ohio official audio',
+      'pixies where is my mind official audio',
+      'nine inch nails hurt official audio',
+      'alice in chains would official audio',
+    ],
+  },
+  {
+    id:     'jazz',
+    genre:  'Jazz',
+    title:  'Jazz',
+    badge:  null,
+    pool: [
+      'miles davis kind of blue so what official audio',
+      'john coltrane a love supreme official audio',
+      'chet baker almost blue official audio',
+      'dave brubeck take five official audio',
+      'bill evans waltz for debby official audio',
+      'thelonious monk round midnight official audio',
+      'nina simone feeling good official audio',
+      'ella fitzgerald summertime official audio',
+      'louis armstrong what a wonderful world official audio',
+      'charles mingus goodbye pork pie hat official audio',
+      'herbie hancock cantaloupe island official audio',
+      'stan getz girl from ipanema official audio',
+      'oscar peterson autumn leaves official audio',
+      'cannonball adderley mercy mercy mercy official audio',
+      'wes montgomery bumpin on sunset official audio',
+      'pat metheny bright size life official audio',
+      'kamasi washington the magnificent 7 official audio',
+      'esperanza spalding i know you know official audio',
+      'norah jones come away with me official audio',
+      'gregory porter liquid spirit official video',
+    ],
+  },
+  {
+    id:     'electronic',
+    genre:  'Electronic',
+    title:  'Electronic & Dance',
+    badge:  null,
+    pool: [
+      'daft punk get lucky official audio',
+      'aphex twin windowlicker official video',
+      'boards of canada roygbiv official audio',
+      'deadmau5 strobe official audio',
+      'caribou cant do without you official audio',
+      'four tet baby official audio',
+      'bicep glue official audio',
+      'burial archangel official audio',
+      'jamie xx loud places official audio',
+      'moderat bad kingdom official video',
+      'disclosure latch official audio',
+      'solomun home official audio',
+      'bonobo kong official video',
+      'richie hawtin official audio',
+      'skrillex bangarang official video',
+      'flume never be like you official audio',
+      'fred again bleu official audio',
+      'fisher losing it official audio',
+      'john summit la danza official audio',
+      'peggy gou i go official audio',
+    ],
+  },
+  {
+    id:     'classical',
+    genre:  'Classical',
+    title:  'Classical',
+    badge:  null,
+    pool: [
+      'beethoven moonlight sonata official audio',
+      'chopin nocturne op 9 no 2 official audio',
+      'mozart piano sonata no 11 official audio',
+      'bach cello suite no 1 official audio',
+      'debussy clair de lune official audio',
+      'vivaldi four seasons spring official audio',
+      'tchaikovsky swan lake official audio',
+      'brahms hungarian dance no 5 official audio',
+      'satie gymnopédie no 1 official audio',
+      'handel hallelujah chorus official audio',
+      'schubert ave maria official audio',
+      'liszt liebestraum official audio',
+      'ravel bolero official audio',
+      'pachelbel canon in d official audio',
+      'grieg in the hall of the mountain king official audio',
+      'saint saens carnival of the animals official audio',
+      'mahler symphony no 5 adagietto official audio',
+      'sibelius finlandia official audio',
+      'stravinsky rite of spring official audio',
+      'prokofiev romeo and juliet dance of the knights official audio',
+    ],
+  },
+  {
+    id:     'rnb',
+    genre:  'R&B',
+    title:  'R&B & Soul',
+    badge:  null,
+    pool: [
+      'brent faiyaz dead man walking official audio',
+      'sza kill bill official audio',
+      'frank ocean nights official audio',
+      'daniel caesar get you official audio',
+      'giveon heartbreak anniversary official audio',
+      'bryson tiller exchange official audio',
+      'the weeknd save your tears official audio',
+      'h.e.r focus official audio',
+      'summer walker over it official audio',
+      'partynextdoor loyal official audio',
+      'jhene aiko while were young official audio',
+      'usher confessions part ii official audio',
+      'alicia keys if i aint got you official audio',
+      'mary j blige be without you official audio',
+      'lauryn hill ex factor official audio',
+      'erykah badu on and on official audio',
+      'anderson paak come down official audio',
+      'lucky daye roll some mo official audio',
+      'khalid young dumb broke official audio',
+      'jorja smith blue lights official video',
+    ],
+  },
+  {
+    id:     'blues',
+    genre:  'Blues',
+    title:  'Blues',
+    badge:  null,
+    pool: [
+      'bb king the thrill is gone official audio',
+      'muddy waters hoochie coochie man official audio',
+      'robert johnson cross road blues official audio',
+      'howlin wolf smokestack lightning official audio',
+      'stevie ray vaughan pride and joy official audio',
+      'john lee hooker boom boom official audio',
+      'buddy guy damn right ive got the blues official audio',
+      'eric clapton crossroads official audio',
+      'albert king born under a bad sign official audio',
+      'freddie king hide away official audio',
+      'elmore james dust my broom official audio',
+      'sonny boy williamson help me official audio',
+      'junior wells messin with the kid official audio',
+      'little walter my babe official audio',
+      'lightning hopkins mojo hand official audio',
+      'gary moore still got the blues official audio',
+      'joe bonamassa slow train official audio',
+      'chris stapleton tennessee whiskey official video',
+      'gary clark jr when my train pulls in official video',
+      'susan tedeschi it hurt so bad official audio',
+    ],
+  },
+  // ── "All" bonus sections (shown when no genre filter active) ──────────────
+  {
+    id:     'trending',
+    genre:  null, // null = only shown in 'All' view
+    title:  'Trending Now',
+    badge:  'HOT',
+    pool: [
+      'kendrick lamar not like us official audio',
+      'sabrina carpenter espresso official video',
+      'billie eilish birds of a feather official',
+      'doja cat paint the town red official audio',
+      'drake push ups official audio',
+      'travis scott fe!n official audio',
+      'burna boy city boys official video',
+      'sza snooze official audio',
+      'tyler the creator chromakopia official audio',
+      'olivia rodrigo good 4 u official video',
+      'lil nas x montero official video',
+      'cardi b wap official audio',
+      'nicki minaj super freaky girl official audio',
+      '21 savage mr. international official audio',
+      'future wait for u official audio',
+      'metro boomin superhero official audio',
+      'gunna pushin p official audio',
+      'jack harlow first class official audio',
+      'lizzo about damn time official video',
+      'bad bunny un verano sin ti moscow mule official audio',
+    ],
+  },
+  {
+    id:     'new-releases',
+    genre:  null,
+    title:  'New Releases',
+    badge:  'NEW',
+    pool: [
+      'kendrick lamar tv off official audio',
+      'tyler the creator noid official audio',
+      'frank ocean official audio 2025',
+      'the weeknd hurry up tomorrow official audio',
+      'sza sos snooze official audio',
+      'don toliver lose my mind official audio',
+      'playboi carti official audio 2025',
+      'future mixtape pluto official audio 2025',
+      'lil baby official audio 2025',
+      'rod wave official audio 2025',
+      'nba youngboy official audio 2025',
+      'polo g official audio 2025',
+      'key glock official audio 2025',
+      'yeat official audio 2025',
+      'destroy lonely official audio 2025',
+      'central cee official audio 2025',
+      'asake official audio 2025',
+      'rema official audio 2025',
+      'ayra starr official audio 2025',
+      'omah lay official audio 2025',
+    ],
+  },
+  {
+    id:     'afrobeats',
+    genre:  null,
+    title:  'Afrobeats',
+    badge:  '🔥',
+    pool: [
+      'burna boy last last official video',
+      'wizkid essence official video',
+      'davido fall official video',
+      'rema calm down official audio',
+      'asake organise official audio',
+      'omah lay understand official audio',
+      'fireboy dml peru official audio',
+      'ckay love nwantiti official audio',
+      'tems free mind official audio',
+      'ayra starr rush official audio',
+      'kizz daniel buga official video',
+      'lucky daye over official audio',
+      'joeboy alcohol official audio',
+      'pheelz electricity official audio',
+      'zinoleesky official audio',
+      'victony official audio',
+      'ruger dior official audio',
+      'oxlade ku lo sa official audio',
+      'olamide rock official audio',
+      'naira marley official audio',
+    ],
+  },
 ];
 
-const NEW_RELEASES = [
-  { id: 'nr-chroma',   name: 'CHROMAKOPIA',       artist: 'Tyler, The Creator',    cover: 'https://placehold.co/400x400/FFD700/000000?text=CHROMAKOPIA',           accent: '#FFD700', type: 'new-release', badge: 'NEW' },
-  { id: 'nr-bando',    name: 'Bando Stone',        artist: 'Childish Gambino',      cover: 'https://placehold.co/400x400/FF4500/FFFFFF?text=Bando+Stone',           accent: '#FF4500', type: 'new-release', badge: 'NEW' },
-  { id: 'nr-trust',    name: "We Don't Trust You", artist: 'Future & Metro Boomin', cover: 'https://placehold.co/400x400/8A2BE2/FFFFFF?text=We+Don%27t+Trust+You',  accent: '#7B1FA2', type: 'new-release', badge: 'HOT' },
-  { id: 'nr-vultures', name: 'Vultures 2',         artist: '¥$',                   cover: 'https://placehold.co/400x400/2F4F4F/FFFFFF?text=Vultures+2',            accent: '#546E7A', type: 'new-release', badge: 'HOT' },
-];
+// ── Genre → section mapping ───────────────────────────────────────────────────
+// When a genre pill is active, show ONLY that genre's section.
+// When 'All', pick 4 random sections (mix of genre + bonus null-genre sections).
+function getSectionsForGenre(genre) {
+  if (genre === 'All') {
+    // Show 2 bonus sections (trending/new/afrobeats) + 2 random genre sections
+    const bonusSections = SECTION_DEFINITIONS.filter(s => s.genre === null);
+    const genreSections = SECTION_DEFINITIONS.filter(s => s.genre !== null);
+    const pickedBonus  = bonusSections.sort(() => Math.random() - 0.5).slice(0, 2);
+    const pickedGenre  = genreSections.sort(() => Math.random() - 0.5).slice(0, 2);
+    return [...pickedBonus, ...pickedGenre].map(sec => ({
+      ...sec,
+      query: sec.pool[Math.floor(Math.random() * sec.pool.length)],
+    }));
+  }
+  // Single genre — find its section and show all songs
+  const match = SECTION_DEFINITIONS.find(
+    s => s.genre?.toLowerCase() === genre.toLowerCase()
+  );
+  if (!match) return [];
+  return [{ ...match, query: match.pool[Math.floor(Math.random() * match.pool.length)] }];
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SCOPED STYLES  (no conflicts with index.css — all under .ho-root)
@@ -493,10 +922,16 @@ const TrackRow = memo(({ song, index, isActive, isPlaying, onPlay, isFav, isLike
   </div>
 ));
 
-const SectionHeader = ({ title, count }) => (
+const SectionHeader = ({ title, count, badge }) => (
   <div className="ho-sh">
     <span className="dot" />
     <h2>{title}</h2>
+    {badge === 'NEW'  && <span className="ho-badge-new">{badge}</span>}
+    {badge === 'HOT'  && <span className="ho-badge-hot">{badge}</span>}
+    {badge === 'FOR YOU' && <span className="ho-badge-new" style={{ background: 'linear-gradient(135deg,#1DB954,#17a349)' }}>{badge}</span>}
+    {badge && badge !== 'NEW' && badge !== 'HOT' && badge !== 'FOR YOU' && (
+      <span style={{ fontSize: 13 }}>{badge}</span>
+    )}
     {count != null && <span style={{ fontSize: 12, color: 'var(--lb-text-3)', fontWeight: 500, marginLeft: 2 }}>{count}</span>}
   </div>
 );
@@ -547,9 +982,9 @@ export default function HomeOnline() {
    * We keep a ref so detail-view TrackRow can check isActive without
    * the entire library being replaced.
    */
-  const ytSongRef = useRef(null);
-
-  const searchRef = useRef(null);
+  const ytSongRef   = useRef(null);
+  const searchRef   = useRef(null);
+  const searchCache = useRef({}); // "Song Artist" → videoId, avoids repeat quota burns
 
   const {
     songs,
@@ -669,14 +1104,31 @@ export default function HomeOnline() {
     }
   }, [songs, setPlayerSongs, setCurrentIndex, setIsPlaying]);
 
-  /* ── Play a card item by searching YouTube for its name + artist ── */
+  /* ── Play a card item — uses known youtubeId if available, searches only as fallback ── */
   const playStreamingSong = useCallback(async (item) => {
     setLoadingId(item.id);
     try {
-      const searchQuery = `${item.name} ${item.artist ?? ''} audio`.trim();
-      const vids = await youtubeConverter.searchVideos(searchQuery, 1);
-      if (!vids?.length) throw new Error('No results');
-      await playYoutubeVideo(vids[0], item.id);
+      // If the card already has a YouTube ID (all section cards do), skip search entirely.
+      // Search costs 100 quota units — only use it when we have no ID.
+      const knownId = item.youtubeId || (item.id?.startsWith('yt_') ? item.id.replace('yt_', '') : null);
+
+      if (knownId && /^[A-Za-z0-9_-]{11}$/.test(knownId)) {
+        // Use ID directly — zero quota cost
+        await playYoutubeVideo({ id: knownId, title: item.name, channel: item.artist }, item.id);
+      } else {
+        // Fallback: search only when we genuinely have no ID (local songs, manual entries)
+        const searchQuery = `${item.name} ${item.artist ?? ''} audio`.trim();
+        // Check cache first — don't re-search something we've already looked up
+        const cachedId = searchCache.current[searchQuery];
+        if (cachedId) {
+          await playYoutubeVideo({ id: cachedId, title: item.name, channel: item.artist }, item.id);
+        } else {
+          const vids = await youtubeConverter.searchVideos(searchQuery, 1);
+          if (!vids?.length) throw new Error('No results');
+          searchCache.current[searchQuery] = vids[0].id; // cache for next time
+          await playYoutubeVideo(vids[0], item.id);
+        }
+      }
     } catch (err) {
       console.error('playStreamingSong:', err);
       setErrorMsg(`Couldn't find "${item.name}" on YouTube.`);
@@ -738,15 +1190,84 @@ export default function HomeOnline() {
     patchSong(id, { liked: !current });
   }, [patchSong]);
 
-  /* ── Filtered data ── */
-  const filterByGenre = useCallback((items) => {
-    if (selectedGenre === 'All') return items;
-    return items.filter(i => i.type === selectedGenre.toLowerCase() || i.genre === selectedGenre.toLowerCase());
-  }, [selectedGenre]);
+  // Dynamic sections — re-fetched whenever genre pill changes
+  const [sections,    setSections]    = useState([]);
+  const [sectionsKey, setSectionsKey] = useState(0); // bump to force re-fetch
 
-  const filteredSuggestions = useMemo(() => filterByGenre(SUGGESTIONS), [filterByGenre]);
-  const filteredAlbums      = useMemo(() => filterByGenre(ALBUMS),      [filterByGenre]);
-  const filteredPlaylists   = useMemo(() => filterByGenre(PLAYLISTS),   [filterByGenre]);
+  // ── Section result cache (localStorage) ────────────────────────────────
+  // Saves API quota — 10,000 units/day, each search costs 100.
+  // Cache TTL: 12 hours. Key: "lb_section_{genre}_{sectionId}".
+  const SECTION_CACHE_TTL = 12 * 60 * 60 * 1000;
+
+  function getSectionCache(genre, secId) {
+    try {
+      const raw = localStorage.getItem(`lb_section_${genre}_${secId}`);
+      if (!raw) return null;
+      const { items, expires } = JSON.parse(raw);
+      if (Date.now() > expires) { localStorage.removeItem(`lb_section_${genre}_${secId}`); return null; }
+      return items;
+    } catch { return null; }
+  }
+
+  function setSectionCache(genre, secId, items) {
+    try {
+      localStorage.setItem(`lb_section_${genre}_${secId}`, JSON.stringify({
+        items,
+        expires: Date.now() + SECTION_CACHE_TTL,
+      }));
+    } catch { /* storage full — skip caching */ }
+  }
+
+  const fetchSections = useCallback((genre) => {
+    const chosen = getSectionsForGenre(genre);
+
+    // For each section, check cache first — only show shimmer for uncached ones
+    setSections(chosen.map(s => {
+      const cached = getSectionCache(genre, s.id);
+      return { ...s, items: cached || [], loading: !cached };
+    }));
+
+    chosen.forEach((sec, idx) => {
+      // If we have a valid cache hit, skip the API call entirely
+      const cached = getSectionCache(genre, sec.id);
+      if (cached) return;
+
+      youtubeConverter.searchVideos(sec.query, 16)
+        .then(videos => {
+          const items = (videos || [])
+            .filter(isSingleTrack)
+            .slice(0, 10)
+            .map(v => ({
+              id:        `yt_${v.id}`,
+              name:      v.title
+                .replace(/\s*[\(\[](official\s*(audio|video|music video|lyric video|visualizer)|lyrics?|hd|4k|explicit)[\)\]]/gi, '')
+                .replace(/\s*[-–]\s*(official\s*(audio|video|music video)|lyrics?)\s*$/gi, '')
+                .trim(),
+              artist:    v.channel,
+              cover:     v.thumbnail || '/default-cover.png',
+              accent:    '#1DB954',
+              type:      'suggestion',
+              genre:     sec.genre?.toLowerCase() || null,
+              youtube:   true,
+              youtubeId: v.id,
+              duration:  v.duration || '0:00',
+              badge:     sec.badge || null,
+            }));
+          setSectionCache(genre, sec.id, items); // save for next 12h
+          setSections(prev => prev.map((s, i) =>
+            i === idx ? { ...s, items, loading: false } : s
+          ));
+        })
+        .catch(() => setSections(prev => prev.map((s, i) =>
+          i === idx ? { ...s, items: [], loading: false } : s
+        )));
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch on mount (All) and whenever genre changes
+  useEffect(() => {
+    fetchSections(selectedGenre);
+  }, [selectedGenre, fetchSections]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Search dropdown visibility ── */
   const showDropdown = searchFocused && query.trim() && (localResults.length > 0 || ytResults.length > 0 || ytSearching);
@@ -1004,73 +1525,30 @@ export default function HomeOnline() {
             {/* ── CONTENT ── */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 8px' }}>
 
-              {/* Suggestions */}
-              <section style={{ marginBottom: 36 }}>
-                <SectionHeader title="Suggestions" count={filteredSuggestions.length} />
-                {loading ? <ShimmerCards count={6} /> : (
-                  <div className="ho-grid">
-                    {filteredSuggestions.map(s => (
-                      <MusicCard key={s.id} item={s}
-                        isActive={isCardActive(s)} isPlaying={isPlaying}
-                        loadingId={loadingId}
-                        onPlay={() => playStreamingSong(s)}
-                        onClick={() => openDetail({ ...s, songs: [] })}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* New Releases */}
-              <section style={{ marginBottom: 36 }}>
-                <SectionHeader title="New Releases" />
-                {loading ? <ShimmerCards count={4} /> : (
-                  <div className="ho-grid">
-                    {NEW_RELEASES.map(n => (
-                      <MusicCard key={n.id} item={n}
-                        isActive={isCardActive(n)} isPlaying={isPlaying}
-                        loadingId={loadingId}
-                        onPlay={() => playStreamingSong(n)}
-                        onClick={() => openDetail({ ...n, songs: [] })}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* Playlists */}
-              <section style={{ marginBottom: 36 }}>
-                <SectionHeader title="Playlists" count={filteredPlaylists.length} />
-                {loading ? <ShimmerCards count={4} /> : (
-                  <div className="ho-grid">
-                    {filteredPlaylists.map(p => (
-                      <MusicCard key={p.id} item={p}
-                        isActive={isCardActive(p)} isPlaying={isPlaying}
-                        loadingId={loadingId}
-                        onPlay={() => playOnlineItem(p)}
-                        onClick={() => openDetail({ ...p, songs: [] })}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* Albums */}
-              <section style={{ marginBottom: 36 }}>
-                <SectionHeader title="Albums" count={filteredAlbums.length} />
-                {loading ? <ShimmerCards count={6} /> : (
-                  <div className="ho-grid">
-                    {filteredAlbums.map(a => (
-                      <MusicCard key={a.id} item={a}
-                        isActive={isCardActive(a)} isPlaying={isPlaying}
-                        loadingId={loadingId}
-                        onPlay={() => playOnlineItem(a)}
-                        onClick={() => openDetail({ ...a, songs: [] })}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
+              {/* ── Dynamic sections — each fetched independently ── */}
+              {sections.map(sec => (
+                <section key={sec.id} style={{ marginBottom: 36 }}>
+                  <SectionHeader
+                    title={sec.title}
+                    count={sec.loading ? undefined : sec.items.length}
+                    badge={sec.badge}
+                  />
+                  {sec.loading ? <ShimmerCards count={sec.count} /> : (
+                    sec.items.length === 0 ? null : (
+                      <div className="ho-grid">
+                        {sec.items.map(item => (
+                          <MusicCard key={item.id} item={item}
+                            isActive={isCardActive(item)} isPlaying={isPlaying}
+                            loadingId={loadingId}
+                            onPlay={() => playStreamingSong(item)}
+                            onClick={() => openDetail({ ...item, songs: [] })}
+                          />
+                        ))}
+                      </div>
+                    )
+                  )}
+                </section>
+              ))}
 
               {/* Downloaded */}
               <section style={{ marginBottom: 36 }}>

@@ -3,17 +3,104 @@ import {
   FaUser, FaCamera, FaSave, FaDownload, FaWifi, FaSlidersH,
   FaBell, FaMoon, FaShieldAlt, FaCheckCircle, FaExclamationCircle,
   FaClipboard, FaFileImport, FaRedoAlt, FaTrash, FaEnvelope,
-  FaPhone, FaMapMarkerAlt, FaChartLine, FaSignOutAlt,
+  FaPhone, FaMapMarkerAlt, FaChartLine, FaSignOutAlt, FaTimes,
 } from 'react-icons/fa';
 import { VERSION, BUILD_DATE } from '../version';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+
+/* ─── Changelog data ────────────────────────────────────────────── */
+const CHANGELOG = [
+  {
+    version: VERSION,
+    date: BUILD_DATE,
+    tag: 'Latest',
+    changes: [
+      'Pixelify Sans lyrics — bold active line with green fill sweep animation',
+      'Mobile player: full-width art card expands to show lyrics side-by-side',
+      'Lyrics overlay: blurred cover art + dark panel animates in on toggle',
+      'Active lyric fill colour is now always green (never accent colour)',
+      'Darker mobile expanded player background',
+      'Playlist persistence — import handlers now read fresh from localStorage',
+    ],
+  },
+  {
+    version: '1.3.0',
+    date: '2026-03-04',
+    tag: 'Stable',
+    changes: [
+      'YouTube streaming via yt-dlp backend — instant playback, no downloads',
+      'HomeOnline localStorage cache — preserves daily API quota across reloads',
+      'LRCLIB synced lyrics with karaoke-style left-to-right green fill sweep',
+      'Playlists: single source of truth via usePlaylists hook',
+      'Settings overflow fix — scroll container properly bounded',
+    ],
+  },
+  {
+    version: '1.2.0',
+    date: '2026-02-28',
+    tag: null,
+    changes: [
+      'YouTube playlist import via Piped API (no API key required)',
+      'Local file import to playlists',
+      'Queue management and shuffle/repeat controls',
+      'Mobile mini-player with expand to full-screen',
+    ],
+  },
+];
+
+/* ─── Update popup ──────────────────────────────────────────────── */
+function UpdatePopup({ onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div className="sup-overlay" onClick={onClose}>
+      <div className="sup-box" onClick={e => e.stopPropagation()}>
+        <div className="sup-header">
+          <div>
+            <div className="sup-eyebrow">Release Notes</div>
+            <div className="sup-title">What&apos;s New</div>
+          </div>
+          <button className="sup-close" onClick={onClose}><FaTimes /></button>
+        </div>
+        <div className="sup-body">
+          {CHANGELOG.map((entry, ei) => (
+            <div key={ei} className="sup-entry">
+              <div className="sup-entry-header">
+                <span className="sup-version">v{entry.version}</span>
+                {entry.tag && (
+                  <span className={`sup-tag ${entry.tag === 'Latest' ? 'latest' : 'stable'}`}>
+                    {entry.tag}
+                  </span>
+                )}
+                <span className="sup-date">{entry.date}</span>
+              </div>
+              <ul className="sup-list">
+                {entry.changes.map((c, ci) => (
+                  <li key={ci} className="sup-item">
+                    <span className="sup-bullet" />
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ─── scoped CSS ────────────────────────────────────────────────── */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 .set-root {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
   --s-green:        #1DB954;
   --s-green-bright: #23E065;
   --s-green-dim:    rgba(29,185,84,0.12);
@@ -35,7 +122,7 @@ const CSS = `
   -webkit-font-smoothing: antialiased;
 }
 .set-root *, .set-root *::before, .set-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
-.set-shell { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.set-shell { width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .set-ambient { position: absolute; top: 0; left: 0; right: 0; height: 260px; background: linear-gradient(180deg, rgba(29,185,84,0.07) 0%, transparent 100%); pointer-events: none; z-index: 0; }
 .set-scroll { flex: 1; overflow-y: auto; position: relative; z-index: 1; padding: 32px 28px 40px; }
 .set-scroll::-webkit-scrollbar { width: 4px; }
@@ -47,8 +134,8 @@ const CSS = `
 .set-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
 .set-title { font-family: 'Syne', sans-serif; font-size: clamp(32px,5vw,48px); font-weight: 800; letter-spacing: -0.04em; color: var(--s-t1); line-height: 1; }
 .set-title span { background: linear-gradient(135deg, #fff 0%, var(--s-green-bright) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.set-version-btn { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; background: var(--s-s1); border: 1px solid var(--s-b1); cursor: pointer; transition: background 0.15s; color: var(--s-t3); font-size: 11px; font-family: 'DM Sans', sans-serif; }
-.set-version-btn:hover { background: var(--s-s2); }
+.set-version-btn { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; background: var(--s-s1); border: 1px solid var(--s-b1); cursor: pointer; transition: background 0.15s, border-color 0.15s; color: var(--s-t3); font-size: 11px; font-family: 'DM Sans', sans-serif; }
+.set-version-btn:hover { background: var(--s-s2); border-color: rgba(29,185,84,0.3); color: var(--s-green); }
 .set-version-dot { opacity: 0.4; }
 
 /* tabs */
@@ -173,6 +260,68 @@ const CSS = `
 .set-toast.success { background: rgba(29,185,84,0.15); border-color: rgba(29,185,84,0.3); color: #6EE7A0; }
 .set-toast.error   { background: rgba(255,68,102,0.12); border-color: rgba(255,68,102,0.25); color: #FCA5A5; }
 @keyframes setToastIn { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+
+/* ─── Update popup ─── */
+.sup-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.72); backdrop-filter: blur(18px);
+  display: flex; align-items: center; justify-content: center;
+  animation: supFadeIn 0.22s ease both;
+}
+@keyframes supFadeIn { from{opacity:0} to{opacity:1} }
+.sup-box {
+  width: min(480px, 94vw);
+  background: #0C0E10;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.85);
+  animation: supScaleIn 0.3s cubic-bezier(0.22,1,0.36,1) both;
+  max-height: 85vh;
+  display: flex; flex-direction: column;
+}
+@keyframes supScaleIn { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:none} }
+.sup-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 24px 24px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: linear-gradient(135deg, rgba(29,185,84,0.09), transparent);
+  flex-shrink: 0;
+}
+.sup-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #1DB954; margin-bottom: 4px;
+}
+.sup-title {
+  font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+  letter-spacing: -0.03em; color: #fff;
+}
+.sup-close {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5); font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s, color 0.15s; flex-shrink: 0;
+}
+.sup-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.sup-body {
+  overflow-y: auto; padding: 20px 24px 28px;
+  display: flex; flex-direction: column; gap: 24px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent;
+}
+.sup-body::-webkit-scrollbar { width: 4px; }
+.sup-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 3px; }
+.sup-entry { border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
+.sup-entry:last-child { border-bottom: none; padding-bottom: 0; }
+.sup-entry-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.sup-version { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+.sup-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 9999px; }
+.sup-tag.latest { background: rgba(29,185,84,0.18); color: #1DB954; border: 1px solid rgba(29,185,84,0.3); }
+.sup-tag.stable { background: rgba(96,165,250,0.12); color: #60A5FA; border: 1px solid rgba(96,165,250,0.25); }
+.sup-date { font-size: 12px; color: rgba(255,255,255,0.28); margin-left: auto; }
+.sup-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.sup-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.55; }
+.sup-bullet { width: 5px; height: 5px; border-radius: 50%; background: #1DB954; flex-shrink: 0; margin-top: 6px; }
 `;
 
 /* ─── primitives ────────────────────────────────────────────────── */
@@ -270,16 +419,24 @@ function Toast({ message, type, onClose }) {
 
 /* ─── main ──────────────────────────────────────────────────────── */
 export default function Settings() {
-  const [tab,   setTab]   = useState('profile');
-  const [toast, setToast] = useState(null);
-  const [saved, setSaved] = useState(false);
+  const [tab,         setTab]         = useState('profile');
+  const [toast,       setToast]       = useState(null);
+  const [saved,       setSaved]       = useState(false);
+  const [showUpdate,  setShowUpdate]  = useState(false);
   const showToast = useCallback((msg, type = 'success') => setToast({ message: msg, type }), []);
+
+  /* Listen for the update popup event dispatched by the version button */
+  useEffect(() => {
+    const handler = () => setShowUpdate(true);
+    window.addEventListener('open-update-popup', handler);
+    return () => window.removeEventListener('open-update-popup', handler);
+  }, []);
 
   /* ── Auth ── */
   const { user, profile: authProfile, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
 
-  /* profile — seeded from Supabase authProfile, falls back to localStorage */
+  /* profile */
   const [name,     setName]     = useState(() => localStorage.getItem('lb:profileName')     || 'Music Lover');
   const [email,    setEmail]    = useState(() => localStorage.getItem('lb:profileEmail')    || '');
   const [phone,    setPhone]    = useState(() => localStorage.getItem('lb:profilePhone')    || '');
@@ -287,7 +444,6 @@ export default function Settings() {
   const [bio,      setBio]      = useState(() => localStorage.getItem('lb:profileBio')      || '');
   const [avatar,   setAvatar]   = useState(() => localStorage.getItem('lb:profileAvatar')   || '');
 
-  // Re-seed when authProfile loads (arrives async after mount)
   useEffect(() => {
     if (!authProfile) return;
     if (authProfile.display_name) setName(authProfile.display_name);
@@ -297,9 +453,7 @@ export default function Settings() {
     if (authProfile.bio)          setBio(authProfile.bio || '');
   }, [authProfile]);
 
-  useEffect(() => {
-    if (user?.email) setEmail(user.email);
-  }, [user]);
+  useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
 
   /* playback */
   const [crossfade,       setCrossfade]       = useState(() => Number(localStorage.getItem('lb:crossfade') || 0));
@@ -327,7 +481,7 @@ export default function Settings() {
   const [cacheSize]       = useState('12.4 MB');
   const [isOnline,        setIsOnline]        = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
 
-  /* persist settings to localStorage */
+  /* persist */
   useEffect(() => { localStorage.setItem('lb:darkMode', darkMode); if (darkMode) document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [darkMode]);
   useEffect(() => { localStorage.setItem('lb:notifications',          notifications);    }, [notifications]);
   useEffect(() => { localStorage.setItem('lb:autoDownload',           autoDownload);     }, [autoDownload]);
@@ -349,7 +503,7 @@ export default function Settings() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  /* ── Save profile → Supabase + localStorage ── */
+  /* ── Save profile ── */
   const saveProfile = async () => {
     localStorage.setItem('lb:profileName',     name);
     localStorage.setItem('lb:profileEmail',    email);
@@ -376,11 +530,10 @@ export default function Settings() {
     showToast('Profile saved!');
   };
 
-  /* ── Avatar upload → Supabase Storage (bucket: 'avatars', must be public) ── */
+  /* ── Avatar upload ── */
   const handleAvatar = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-
     if (user) {
       const ext  = f.name.split('.').pop();
       const path = `${user.id}/avatar.${ext}`;
@@ -442,8 +595,12 @@ export default function Settings() {
   ];
 
   return (
-    <div className="set-root">
+    <div className="set-root" style={{ minHeight: 0 }}>
       <style>{CSS}</style>
+
+      {/* Update popup — rendered at root level so it's always on top */}
+      {showUpdate && <UpdatePopup onClose={() => setShowUpdate(false)} />}
+
       <div className="set-shell">
         <div className="set-ambient" />
         <div className="set-scroll">
@@ -452,10 +609,14 @@ export default function Settings() {
             {/* header */}
             <div className="set-header">
               <h1 className="set-title">Sett<span>ings</span></h1>
-              <button className="set-version-btn" onClick={() => window.dispatchEvent(new CustomEvent('open-update-popup'))}>
+              <button
+                className="set-version-btn"
+                onClick={() => setShowUpdate(true)}
+                title="View release notes"
+              >
                 <span>v{VERSION}</span>
                 <span className="set-version-dot">·</span>
-                <span>{BUILD_DATE}</span>
+                <span style={{ color: '#1DB954', fontSize: 10 }}>What&apos;s new</span>
               </button>
             </div>
 
