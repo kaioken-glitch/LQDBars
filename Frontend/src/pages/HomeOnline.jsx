@@ -1067,73 +1067,69 @@ export default function HomeOnline() {
        4. No loading state — the user saw no feedback while getAudioStream resolved.
        5. No error toast / recovery — silent failures left nothing playing.
   ───────────────────────────────────────────────────────────────────── */
-  const playYoutubeVideo = useCallback(async (video, itemId) => {
-    // Show spinner on the card that was clicked.
+  const playYoutubeVideo = useCallback((video, itemId) => {
+    // ── FIX: PlayerContext uses YouTube IFrame API for source:'youtube' songs.
+    // ──      getAudioStream() was the failure point — backend call not needed.
+    // ──      PlayerContext only needs youtubeId + source:'youtube'.
     setLoadingId(itemId ?? video.id);
     try {
-      const audioUrl = await youtubeConverter.getAudioStream(video.id);
-
-      if (!audioUrl) throw new Error('No audio URL returned');
-
-      const ytSong = makeYtSong(video, audioUrl);
+      const ytSong = {
+        id:        `yt_${video.id}`,
+        name:      video.title    || 'Unknown',
+        artist:    video.channel  || 'YouTube',
+        album:     '',
+        duration:  video.duration || '0:00',
+        cover:     video.thumbnail || '/default-cover.png',
+        audio:     `https://www.youtube.com/watch?v=${video.id}`,
+        url:       `https://www.youtube.com/watch?v=${video.id}`,
+        src:       `https://www.youtube.com/watch?v=${video.id}`,
+        youtube:   true,
+        youtubeId: video.id,
+        source:    'youtube',
+      };
       ytSongRef.current = ytSong;
-
-      /*
-       * CRITICAL: insert the YT song at the START of the existing songs array
-       * rather than replacing it. This means:
-       *   - The player can still navigate to downloaded songs after playing YT
-       *   - The existing queue is preserved
-       *   - We always play index 0 which is the freshly inserted YT track
-       *
-       * If your PlayerContext's setPlayerSongs accepts (songs, startIndex),
-       * pass 0 as the second argument. If not, we set index separately.
-       */
+      // Prepend — keeps downloaded songs accessible via prev/next
       const updatedQueue = [ytSong, ...songs.filter(s => !s.youtube)];
-      setPlayerSongs(updatedQueue);
-      setCurrentIndex(0);
-      // Small delay ensures the context has processed the new queue
-      // before we flip isPlaying to true.
-      setTimeout(() => setIsPlaying(true), 50);
+      setPlayerSongs(updatedQueue, 0);
+      setTimeout(() => { setIsPlaying(true); setLoadingId(null); }, 80);
     } catch (err) {
       console.error('playYoutubeVideo failed:', err);
-      setErrorMsg(`Couldn't stream "${video.title}". Try another track.`);
-      // Clear the error after 4 s so it doesn't linger
+      setErrorMsg(`Couldn't play "${video.title}". Try another track.`);
       setTimeout(() => setErrorMsg(null), 4000);
-    } finally {
       setLoadingId(null);
     }
-  }, [songs, setPlayerSongs, setCurrentIndex, setIsPlaying]);
+  }, [songs, setPlayerSongs, setIsPlaying]);
 
-  /* ── Play a card item — uses known youtubeId if available, searches only as fallback ── */
+  /* ── Play a card item — uses known youtubeId directly, searches only as fallback ── */
   const playStreamingSong = useCallback(async (item) => {
-    setLoadingId(item.id);
-    try {
-      // If the card already has a YouTube ID (all section cards do), skip search entirely.
-      // Search costs 100 quota units — only use it when we have no ID.
-      const knownId = item.youtubeId || (item.id?.startsWith('yt_') ? item.id.replace('yt_', '') : null);
+    const knownId = item.youtubeId || (item.id?.startsWith('yt_') ? item.id.replace('yt_', '') : null);
 
-      if (knownId && /^[A-Za-z0-9_-]{11}$/.test(knownId)) {
-        // Use ID directly — zero quota cost
-        await playYoutubeVideo({ id: knownId, title: item.name, channel: item.artist }, item.id);
-      } else {
-        // Fallback: search only when we genuinely have no ID (local songs, manual entries)
-        const searchQuery = `${item.name} ${item.artist ?? ''} audio`.trim();
-        // Check cache first — don't re-search something we've already looked up
+    if (knownId && /^[A-Za-z0-9_-]{11}$/.test(knownId)) {
+      // Direct play — zero quota cost (playYoutubeVideo handles setLoadingId)
+      playYoutubeVideo(
+        { id: knownId, title: item.name, channel: item.artist, thumbnail: item.cover, duration: item.duration },
+        item.id
+      );
+    } else {
+      // Fallback: search only when we have no YouTube ID
+      setLoadingId(item.id);
+      try {
+        const searchQuery = `${item.name} ${item.artist ?? ''} official audio`.trim();
         const cachedId = searchCache.current[searchQuery];
         if (cachedId) {
-          await playYoutubeVideo({ id: cachedId, title: item.name, channel: item.artist }, item.id);
+          playYoutubeVideo({ id: cachedId, title: item.name, channel: item.artist }, item.id);
         } else {
           const vids = await youtubeConverter.searchVideos(searchQuery, 1);
           if (!vids?.length) throw new Error('No results');
-          searchCache.current[searchQuery] = vids[0].id; // cache for next time
-          await playYoutubeVideo(vids[0], item.id);
+          searchCache.current[searchQuery] = vids[0].id;
+          playYoutubeVideo(vids[0], item.id);
         }
+      } catch (err) {
+        console.error('playStreamingSong search fallback:', err);
+        setErrorMsg(`Couldn't find "${item.name}" on YouTube.`);
+        setTimeout(() => setErrorMsg(null), 4000);
+        setLoadingId(null);
       }
-    } catch (err) {
-      console.error('playStreamingSong:', err);
-      setErrorMsg(`Couldn't find "${item.name}" on YouTube.`);
-      setTimeout(() => setErrorMsg(null), 4000);
-      setLoadingId(null);
     }
   }, [playYoutubeVideo]);
 

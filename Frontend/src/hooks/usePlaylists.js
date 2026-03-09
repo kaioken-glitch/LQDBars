@@ -7,53 +7,56 @@ const save = (data) => { try { localStorage.setItem(LS_KEY, JSON.stringify(data)
 const listeners = new Set();
 let _cache = load();
 
-export function notifyAll(next) {
-  const withLib = ensureLibraryPlaylist(next);
-  _cache = withLib;
-  save(withLib);
-  listeners.forEach(fn => fn([...withLib]));
-}
-
 /* ── Reserved playlist ID for the Library tab ── */
 export const LIBRARY_PLAYLIST_ID = '__library__';
 
 function ensureLibraryPlaylist(list) {
-  if (list.some(p => p.id === '__library__')) return list;
-  return [...list, { id: '__library__', name: 'Library', songs: [], createdAt: 0, _hidden: true }];
+  if (!Array.isArray(list)) list = [];
+  if (list.some(p => p.id === LIBRARY_PLAYLIST_ID)) return list;
+  return [...list, { id: LIBRARY_PLAYLIST_ID, name: 'Library', songs: [], createdAt: 0, _hidden: true }];
 }
 
 // Always make sure __library__ exists in the cache on load
 _cache = ensureLibraryPlaylist(_cache);
 
+export function notifyAll(next) {
+  if (!Array.isArray(next)) next = [];
+  const withLib = ensureLibraryPlaylist(next);
+  _cache = withLib;
+  save(withLib);                                  // persist immediately
+  listeners.forEach(fn => { try { fn([...withLib]); } catch (_) {} });
+}
+
 export function usePlaylists() {
   const [playlists, setPlaylists] = useState(() => [..._cache]);
 
   useEffect(() => {
-    // Sync from in-process notifyAll calls (e.g. AddToPlaylistBtn)
-    const handler = (next) => setPlaylists(next);
+    const handler = (next) => setPlaylists([...next]);
     listeners.add(handler);
 
-    // ALSO sync from cross-component localStorage writes (Playlists.jsx uses savePL directly).
-    // The 'storage' event fires when another JS context writes the same key,
-    // but within the same tab we supplement with a polling re-read on mount.
-    const syncFromStorage = () => {
-      const fresh = ensureLibraryPlaylist(load());
+    // Sync once on mount — picks up any writes that happened before this component mounted
+    const fresh = ensureLibraryPlaylist(load());
+    if (JSON.stringify(fresh) !== JSON.stringify(_cache)) {
       _cache = fresh;
-      setPlaylists([...fresh]);
-      listeners.forEach(fn => fn !== handler && fn([...fresh]));
+      // Notify ALL listeners (including this one via handler)
+      listeners.forEach(fn => { try { fn([...fresh]); } catch (_) {} });
+    } else {
+      // Still update local state so this component reflects current _cache
+      setPlaylists([..._cache]);
+    }
+
+    // Cross-tab sync
+    const onStorage = (e) => {
+      if (e.key !== LS_KEY) return;
+      const cross = ensureLibraryPlaylist(load());
+      _cache = cross;
+      listeners.forEach(fn => { try { fn([...cross]); } catch (_) {} });
     };
-
-    // Re-read once on mount in case Playlists.jsx wrote before this hook mounted
-    syncFromStorage();
-
-    // Listen for writes from other tabs
-    window.addEventListener('storage', (e) => {
-      if (e.key === LS_KEY) syncFromStorage();
-    });
+    window.addEventListener('storage', onStorage);
 
     return () => {
       listeners.delete(handler);
-      window.removeEventListener('storage', syncFromStorage);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
@@ -70,8 +73,8 @@ export function usePlaylists() {
   const addSongToPlaylist = useCallback((playlistId, song) => {
     const next = _cache.map(p => {
       if (p.id !== playlistId) return p;
-      if (p.songs.some(s => s.id === song.id)) return p;
-      return { ...p, songs: [...p.songs, { ...song }] };
+      if ((p.songs || []).some(s => s.id === song.id)) return p;
+      return { ...p, songs: [...(p.songs || []), { ...song }] };
     });
     notifyAll(next);
   }, []);
@@ -79,7 +82,7 @@ export function usePlaylists() {
   const removeSongFromPlaylist = useCallback((playlistId, songId) => {
     const next = _cache.map(p => {
       if (p.id !== playlistId) return p;
-      return { ...p, songs: p.songs.filter(s => s.id !== songId) };
+      return { ...p, songs: (p.songs || []).filter(s => s.id !== songId) };
     });
     notifyAll(next);
   }, []);
@@ -94,15 +97,16 @@ export function usePlaylists() {
     setPlaylists([...fresh]);
   }, []);
 
-  // Convenience: add a song to the hidden Library playlist.
-  // Returns false if the song is already in the library (duplicate), true if added.
+  // Add a song to the hidden Library playlist.
+  // Returns false if already present, true if added.
   const addToLibrary = useCallback((song) => {
     if (!song) return false;
+    // Always read _cache fresh — avoids stale closure
     const current = _cache;
     const libPl = current.find(p => p.id === LIBRARY_PLAYLIST_ID)
       || { id: LIBRARY_PLAYLIST_ID, name: 'Library', songs: [], createdAt: 0, _hidden: true };
-    if (libPl.songs.some(s => s.id === song.id)) return false; // already exists
-    const updatedLib = { ...libPl, songs: [...libPl.songs, { ...song, savedAt: Date.now() }] };
+    if ((libPl.songs || []).some(s => s.id === song.id)) return false;
+    const updatedLib = { ...libPl, songs: [...(libPl.songs || []), { ...song, savedAt: Date.now() }] };
     const next = current.some(p => p.id === LIBRARY_PLAYLIST_ID)
       ? current.map(p => p.id === LIBRARY_PLAYLIST_ID ? updatedLib : p)
       : [...current, updatedLib];
@@ -110,8 +114,17 @@ export function usePlaylists() {
     return true;
   }, []);
 
-  // Get just the library songs
   const librarySongs = (playlists.find(p => p.id === LIBRARY_PLAYLIST_ID)?.songs) || [];
 
-  return { playlists, createPlaylist, deletePlaylist, addSongToPlaylist, removeSongFromPlaylist, updatePlaylist, refreshFromStorage, addToLibrary, librarySongs };
+  return {
+    playlists,
+    createPlaylist,
+    deletePlaylist,
+    addSongToPlaylist,
+    removeSongFromPlaylist,
+    updatePlaylist,
+    refreshFromStorage,
+    addToLibrary,
+    librarySongs,
+  };
 }
