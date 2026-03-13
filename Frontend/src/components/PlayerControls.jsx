@@ -478,7 +478,7 @@ const CSS = `
   overflow: hidden;
   position: relative;
   background: transparent;
-  font-family: 'Pixelify Sans', 'Syne', sans-serif;
+  font-family: 'Syne', sans-serif;
   -webkit-font-smoothing: antialiased;
   /* Pixel fonts render sharper without subpixel AA */
   -moz-osx-font-smoothing: grayscale;
@@ -499,14 +499,14 @@ const CSS = `
   transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* ────────────────────────────────────────────────────────────
-   LYRIC LINES — Pixelify Sans
+   LYRIC LINES — Syne
    Inactive = wt 400, spaced out, very dim  →  raw pixel grid feel
    Active   = wt 700, tighter, full size    →  bold pixel punch
    The fill sweep animates through the active text via lpFill.
 ──────────────────────────────────────────────────────────── */
 .lp-line {
   display: block;
-  font-family: 'Pixelify Sans', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 16px;
   font-weight: 400;
   line-height: 1.7;
@@ -521,7 +521,7 @@ const CSS = `
 }
 
 .lp-line.lp-line-active {
-  font-family: 'Pixelify Sans', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 21px;
   font-weight: 700;
   line-height: 1.5;
@@ -542,7 +542,7 @@ const CSS = `
   flex: 1;
   overflow-y: auto;
   padding: 24px 20px 48px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Syne', sans-serif;
   font-size: 14px;
   line-height: 1.85;
   color: rgba(255,255,255,0.5);
@@ -614,7 +614,7 @@ const CSS = `
   --pc-text-3:      rgba(255,255,255,0.28);
 }
 .pc-root *, .pc-root *::before, .pc-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
-.pc-root { font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+.pc-root { font-family: 'Syne', sans-serif; -webkit-font-smoothing: antialiased; }
 
 .pc-empty {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
