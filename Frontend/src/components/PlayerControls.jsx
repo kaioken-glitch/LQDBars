@@ -237,7 +237,7 @@ function LyricsPanel({ accentColor, bg }) {
                         animation: `lpFill ${lineDur}s linear forwards`,
                         animationDelay: `-${elapsed}s`,
                         display: 'inline-block',
-                        fontFamily: "'Pixelify Sans', monospace",
+                        fontFamily: "'Syne', sans-serif",
                         fontWeight: 700,
                         fontSize: '21px',
                         letterSpacing: '0.02em',
@@ -245,7 +245,7 @@ function LyricsPanel({ accentColor, bg }) {
                       } : {
                         color: 'rgba(255,255,255,0.75)',
                         display: 'inline-block',
-                        fontFamily: "'Pixelify Sans', monospace",
+                        fontFamily: "'Syne', sans-serif",
                         fontWeight: 400,
                         fontSize: '16px',
                         letterSpacing: '0.06em',
@@ -452,7 +452,7 @@ const VolumeSlider = memo(({ volume, isMuted, onVolume, onMute }) => (
 
 /* ─── CSS ───────────────────────────────────────────────────────── */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=Pixelify+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
 /* ════════════════════════════════════
    THE FILL ANIMATION
