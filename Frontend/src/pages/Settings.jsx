@@ -8,6 +8,7 @@ import {
 import { VERSION, BUILD_DATE } from '../version';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { usePlaylists } from '../hooks/usePlaylists'; 
 
 /* ─── Changelog data ────────────────────────────────────────────── */
 const CHANGELOG = [
