@@ -89,6 +89,38 @@ function useLyrics(currentSong, currentTime) {
   return { lines, plainLyrics, activeLine, status };
 }
 
+/* ─── Lava Lamp Background ───────────────────────────────────────── */
+function LavaLampBg({ accentRGB, intensity = 1 }) {
+  const r = accentRGB || '29, 185, 84';
+  const parts = r.split(',').map(s => parseInt(s.trim(), 10));
+  const [pr, pg, pb] = parts;
+  // Derive complementary + tertiary blob colors from accent
+  const comp = `${Math.round(pb * 0.9)}, ${Math.round(pr * 0.35)}, ${Math.round(pg * 0.65)}`;
+  const mid  = `${Math.round((pr * 0.5 + pb * 0.5))}, ${Math.round(pg * 0.25)}, ${Math.round(pb * 0.8)}`;
+
+  return (
+    <div className="llamp-root" aria-hidden="true">
+      <div className="llamp-base" style={{
+        background: `radial-gradient(ellipse at 50% 100%, rgba(${r},0.15) 0%, #020204 65%)`
+      }} />
+      <div className="llamp-blob llamp-b1" style={{
+        background: `radial-gradient(circle, rgba(${r},${(0.58 * intensity).toFixed(2)}) 0%, transparent 70%)`
+      }} />
+      <div className="llamp-blob llamp-b2" style={{
+        background: `radial-gradient(circle, rgba(${comp},${(0.48 * intensity).toFixed(2)}) 0%, transparent 70%)`
+      }} />
+      <div className="llamp-blob llamp-b3" style={{
+        background: `radial-gradient(circle, rgba(${mid},${(0.38 * intensity).toFixed(2)}) 0%, transparent 65%)`
+      }} />
+      <div className="llamp-blob llamp-b4" style={{
+        background: `radial-gradient(circle, rgba(${r},${(0.28 * intensity).toFixed(2)}) 0%, transparent 60%)`
+      }} />
+      <div className="llamp-grain" />
+      <div className="llamp-scrim" />
+    </div>
+  );
+}
+
 /* ─── Shimmer ────────────────────────────────────────────────────── */
 const WIDTHS = ['68%','52%','78%','44%','72%','58%','82%','48%','65%','74%'];
 function LpShimmer() {
@@ -102,7 +134,7 @@ function LpShimmer() {
 }
 
 /* ─── LyricsPanel ────────────────────────────────────────────────── */
-function LyricsPanel({ accentColor, bg }) {
+function LyricsPanel({ accentColor, bg, fontSize = 'normal' }) {
   const { currentSong, currentTime, seekTo: seekToFn } = usePlayer();
   const { lines, plainLyrics, activeLine, status } = useLyrics(currentSong, currentTime);
 
@@ -113,6 +145,7 @@ function LyricsPanel({ accentColor, bg }) {
 
   const accent  = accentColor || '#1DB954';
   const bgColor = bg || 'rgba(8,8,10,1)';
+  const isLarge = fontSize === 'large';
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -153,6 +186,9 @@ function LyricsPanel({ accentColor, bg }) {
   const handleClick = useCallback((time) => { seekToFn?.(time); }, [seekToFn]);
   const spacerH = viewportH > 0 ? viewportH / 2 : 160;
 
+  const activeSize   = isLarge ? '30px' : '21px';
+  const inactiveSize = isLarge ? '19px' : '16px';
+
   return (
     <div className="lp-root" style={{ '--lp-bg': bgColor, '--lp-accent': accent }}>
       {status === 'loading' && <LpShimmer />}
@@ -162,24 +198,18 @@ function LyricsPanel({ accentColor, bg }) {
           <div className="lp-mask-top"    aria-hidden="true" />
           <div className="lp-mask-bottom" aria-hidden="true" />
           <div className="lp-viewport" ref={viewportRef}>
-            <div
-              className="lp-list"
-              style={{ transform: `translateY(${translateY}px)` }}
-            >
+            <div className="lp-list" style={{ transform: `translateY(${translateY}px)` }}>
               <span style={{ display: 'block', height: spacerH }} aria-hidden="true" />
               {lines.map((line, i) => {
                 const dist = i - activeLine;
                 const abs  = Math.abs(dist);
                 const isActive = dist === 0;
 
-                // Duration = time until next line starts (capped 1s–8s for animation)
                 const nextTime = lines[i + 1]?.time;
                 const lineDur  = isActive && nextTime
                   ? Math.max(1, Math.min(8, nextTime - line.time))
                   : 3;
 
-                // How far through the current active line are we?
-                // offset = how many seconds have elapsed since this line started
                 const elapsed = isActive ? Math.max(0, currentTime - line.time) : 0;
 
                 const wrapStyle = isActive ? {
@@ -188,10 +218,10 @@ function LyricsPanel({ accentColor, bg }) {
                   transformOrigin: 'left center',
                   transition: 'all 0.45s cubic-bezier(0.22,1,0.36,1)',
                 } : {
-                  opacity: abs === 1 ? 0.62 : abs === 2 ? 0.38 : 0.2,
+                  opacity: abs === 1 ? 0.55 : abs === 2 ? 0.30 : 0.16,
                   transform: `scale(${abs === 1 ? 0.975 : abs === 2 ? 0.955 : 0.935})`,
                   transformOrigin: 'left center',
-                  filter: abs >= 3 ? 'blur(0.5px)' : 'none',
+                  filter: abs >= 3 ? 'blur(0.7px)' : 'none',
                   transition: 'all 0.45s cubic-bezier(0.22,1,0.36,1)',
                 };
 
@@ -203,32 +233,11 @@ function LyricsPanel({ accentColor, bg }) {
                     style={wrapStyle}
                     onClick={() => handleClick(line.time)}
                     aria-current={isActive ? 'true' : undefined}
-                    data-line-dur={isActive ? lineDur : undefined}
-                    data-line-elapsed={isActive ? elapsed : undefined}
                   >
                     <span
                       className="lp-line-inner"
                       style={isActive ? {
-                        /*
-                         * THE FILL EFFECT
-                         * We paint the text twice via a CSS gradient clipped to the text.
-                         * Left side = accent green, right side = dim white.
-                         * The split point is animated from 0% → 100% over lineDur seconds.
-                         * We use animation-delay: -elapsed so it resumes mid-word
-                         * when activeLine changes (e.g. after seeking).
-                         *
-                         * The gradient:
-                         *   0% … (split-ε) = green (filled)
-                         *   (split) … 100% = white 30% (unfilled)
-                         * We drive the split via a @keyframes on background-size, not
-                         * background-position, so the fill is truly left-to-right.
-                         *
-                         * Implementation: animate background-size of a two-layer
-                         * pseudo approach — but inline we can't use pseudo-elements,
-                         * so we animate the background-position of a hard-stop gradient
-                         * whose background-size is 200% 100%, sweeping left-to-right.
-                         */
-                        backgroundImage: `linear-gradient(to right, #1DB954 50%, rgba(255,255,255,0.85) 50%)`,
+                        backgroundImage: `linear-gradient(to right, #1DB954 50%, rgba(255,255,255,0.95) 50%)`,
                         backgroundSize: '200% 100%',
                         backgroundPosition: '100% 0',
                         WebkitBackgroundClip: 'text',
@@ -238,17 +247,19 @@ function LyricsPanel({ accentColor, bg }) {
                         animationDelay: `-${elapsed}s`,
                         display: 'inline-block',
                         fontFamily: "'Syne', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '21px',
-                        letterSpacing: '0.02em',
+                        fontWeight: 800,
+                        fontSize: activeSize,
+                        letterSpacing: '-0.02em',
                         textShadow: 'none',
+                        lineHeight: 1.3,
                       } : {
-                        color: 'rgba(255,255,255,0.75)',
+                        color: 'rgba(255,255,255,0.85)',
                         display: 'inline-block',
                         fontFamily: "'Syne', sans-serif",
-                        fontWeight: 400,
-                        fontSize: '16px',
-                        letterSpacing: '0.06em',
+                        fontWeight: 600,
+                        fontSize: inactiveSize,
+                        letterSpacing: '0.005em',
+                        lineHeight: 1.55,
                       }}
                     >
                       {line.text}
@@ -282,8 +293,8 @@ function LyricsPanel({ accentColor, bg }) {
 
 /* ═══════════════════════════════════════════════════════════════════ */
 
-const FALLBACK_COLOR = '22, 163, 74';
-const FALLBACK_COVER = 'https://placehold.co/400x400/0a0a0a/333?text=♪';
+const FALLBACK_COLOR = '29, 185, 84';
+const FALLBACK_COVER = 'https://placehold.co/400x400/0a0a0a/333?text=?';
 const COLOR_CACHE    = new Map();
 
 function extractDominantRGB(src) {
@@ -454,160 +465,116 @@ const VolumeSlider = memo(({ volume, isMuted, onVolume, onMute }) => (
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
-/* ════════════════════════════════════
-   THE FILL ANIMATION
-   background-position sweeps from 100% (all white) → 0% (all green).
-   The gradient is: green 50% / white 50%, background-size: 200%.
-   So at position 100%: only white visible (right half shown).
-   At position 0%: only green visible (left half shown).
-   This creates a crisp left-to-right fill sweep.
-════════════════════════════════════ */
 @keyframes lpFill {
   from { background-position: 100% 0; }
   to   { background-position:   0% 0; }
 }
 
-/* ════════════════════════════════════
-   LYRICS PANEL
-════════════════════════════════════ */
+/* ════ LAVA LAMP ════ */
+.llamp-root {
+  position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none;
+}
+.llamp-base { position: absolute; inset: 0; transition: background 2s ease; }
+.llamp-blob {
+  position: absolute; border-radius: 50%;
+  filter: blur(90px); will-change: transform;
+  transition: background 2.5s ease;
+}
+.llamp-b1 { width: 75%; height: 75%; top: -20%; left: -15%; animation: blob1 20s ease-in-out infinite alternate; }
+.llamp-b2 { width: 65%; height: 65%; bottom: -15%; right: -15%; animation: blob2 26s ease-in-out infinite alternate; }
+.llamp-b3 { width: 50%; height: 50%; top: 20%; left: 28%; animation: blob3 17s ease-in-out infinite alternate; }
+.llamp-b4 { width: 38%; height: 38%; top: -8%; right: 8%; animation: blob4 30s ease-in-out infinite alternate; }
+
+@keyframes blob1 {
+  0%   { transform: translate(0,0) scale(1); }
+  25%  { transform: translate(6%,14%) scale(1.07); }
+  50%  { transform: translate(12%,6%) scale(0.94); }
+  75%  { transform: translate(-4%,18%) scale(1.1); }
+  100% { transform: translate(16%,10%) scale(1.04); }
+}
+@keyframes blob2 {
+  0%   { transform: translate(0,0) scale(1); }
+  33%  { transform: translate(-12%,-10%) scale(1.12); }
+  66%  { transform: translate(6%,-18%) scale(0.90); }
+  100% { transform: translate(-18%,-6%) scale(1.08); }
+}
+@keyframes blob3 {
+  0%   { transform: translate(0,0) scale(1); }
+  20%  { transform: translate(-18%,12%) scale(1.18); }
+  40%  { transform: translate(22%,-8%) scale(0.86); }
+  60%  { transform: translate(-10%,-18%) scale(1.08); }
+  80%  { transform: translate(14%,10%) scale(0.92); }
+  100% { transform: translate(-6%,20%) scale(1.14); }
+}
+@keyframes blob4 {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(-22%,28%) scale(1.22); }
+  100% { transform: translate(12%,16%) scale(0.82); }
+}
+
+.llamp-grain {
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.048'/%3E%3C/svg%3E");
+  background-size: 180px; mix-blend-mode: overlay; opacity: 0.65;
+}
+/* The key: heavy dark scrim keeps contrast high while blobs stay visible as color */
+.llamp-scrim {
+  position: absolute; inset: 0;
+  background: rgba(3,3,7,0.56);
+}
+
+/* ════ LYRICS PANEL ════ */
 .lp-root {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  position: relative;
-  background: transparent;
-  font-family: 'Syne', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  /* Pixel fonts render sharper without subpixel AA */
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  display: flex; flex-direction: column;
+  height: 100%; width: 100%; overflow: hidden; position: relative;
+  background: transparent; font-family: 'Syne', sans-serif;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
-.lp-viewport {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  height: 100%;
-  width: 100%;
-}
+.lp-viewport { flex: 1; overflow: hidden; position: relative; height: 100%; width: 100%; }
 .lp-list {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  padding: 0 24px;
-  will-change: transform;
-  transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+  position: absolute; top: 0; left: 0; right: 0; padding: 0 32px;
+  will-change: transform; transition: transform 0.52s cubic-bezier(0.22,1,0.36,1);
 }
-/* ────────────────────────────────────────────────────────────
-   LYRIC LINES — Syne
-   Inactive = wt 400, spaced out, very dim  →  raw pixel grid feel
-   Active   = wt 700, tighter, full size    →  bold pixel punch
-   The fill sweep animates through the active text via lpFill.
-──────────────────────────────────────────────────────────── */
 .lp-line {
-  display: block;
-  font-family: 'Syne', sans-serif;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1.7;
-  letter-spacing: 0.06em;   /* pixel fonts look great spaced out when dim */
-  padding: 4px 0;
-  cursor: pointer;
-  transform-origin: left center;
-  user-select: none;
-  border-radius: 6px;
-  /* Crisp pixel rendering */
-  image-rendering: pixelated;
+  display: block; font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 600; line-height: 1.65;
+  letter-spacing: 0.005em; padding: 6px 0; cursor: pointer;
+  transform-origin: left center; user-select: none;
 }
-
-.lp-line.lp-line-active {
-  font-family: 'Syne', sans-serif;
-  font-size: 21px;
-  font-weight: 700;
-  line-height: 1.5;
-  letter-spacing: 0.02em;  /* bold weight = tighter tracking */
-}
-
-.lp-line-inner {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-.lp-line:not(.lp-line-active):hover .lp-line-inner {
-  background: rgba(255,255,255,0.05);
-}
-
+.lp-line.lp-line-active { font-size: 21px; font-weight: 800; line-height: 1.3; letter-spacing: -0.02em; }
+.lp-line-inner { display: inline-block; padding: 3px 8px; border-radius: 6px; transition: background 0.15s; }
+.lp-line:not(.lp-line-active):hover .lp-line-inner { background: rgba(255,255,255,0.06); }
 .lp-plain {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px 20px 48px;
-  font-family: 'Syne', sans-serif;
-  font-size: 14px;
-  line-height: 1.85;
-  color: rgba(255,255,255,0.5);
-  white-space: pre-wrap;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  flex: 1; overflow-y: auto; padding: 28px 32px 52px;
+  font-family: 'Syne', sans-serif; font-size: 15px; line-height: 1.9;
+  color: rgba(255,255,255,0.55); white-space: pre-wrap;
+  -ms-overflow-style: none; scrollbar-width: none;
 }
 .lp-plain::-webkit-scrollbar { display: none; }
-
 .lp-mask-top, .lp-mask-bottom {
-  position: absolute;
-  left: 0; right: 0;
-  height: 80px;
-  pointer-events: none;
-  z-index: 3;
+  position: absolute; left: 0; right: 0; height: 110px;
+  pointer-events: none; z-index: 3;
 }
-.lp-mask-top {
-  top: 0;
-  background: linear-gradient(to bottom, var(--lp-bg, rgba(8,8,10,1)) 0%, transparent 100%);
-}
-.lp-mask-bottom {
-  bottom: 0;
-  background: linear-gradient(to top, var(--lp-bg, rgba(8,8,10,1)) 0%, transparent 100%);
-}
-
+.lp-mask-top    { top: 0;    background: linear-gradient(to bottom, var(--lp-bg, rgba(3,3,7,1)) 0%, transparent 100%); }
+.lp-mask-bottom { bottom: 0; background: linear-gradient(to top,   var(--lp-bg, rgba(3,3,7,1)) 0%, transparent 100%); }
 .lp-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 28px;
-  color: rgba(255,255,255,0.25);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  text-align: center;
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 28px; color: rgba(255,255,255,0.25);
+  font-family: 'Syne', sans-serif; font-size: 13px; text-align: center;
 }
-
-.lp-shimmer-wrap { padding: 24px 20px; }
+.lp-shimmer-wrap { padding: 32px; }
 .lp-shimmer-line {
-  height: 20px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,0.04) 25%,
-    rgba(255,255,255,0.10) 50%,
-    rgba(255,255,255,0.04) 75%
-  );
-  background-size: 200% 100%;
-  animation: lpShimmer 1.6s ease-in-out infinite;
+  height: 20px; border-radius: 6px; margin-bottom: 22px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%; animation: lpShimmer 1.6s ease-in-out infinite;
 }
-@keyframes lpShimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+@keyframes lpShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
-/* ════════════════════════════════════
-   PLAYER CONTROLS
-════════════════════════════════════ */
+/* ════ PLAYER BASE ════ */
 :root {
   --pc-green:       #1DB954;
   --pc-green-bright:#23E065;
-  --pc-bg:          rgba(8,8,10,0.97);
+  --pc-bg:          rgba(6,6,10,0.97);
   --pc-border:      rgba(255,255,255,0.07);
   --pc-text-1:      #FFFFFF;
   --pc-text-2:      rgba(255,255,255,0.5);
@@ -615,50 +582,32 @@ const CSS = `
 }
 .pc-root *, .pc-root *::before, .pc-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
 .pc-root { font-family: 'Syne', sans-serif; -webkit-font-smoothing: antialiased; }
-
 .pc-empty {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
   height: 72px; display: flex; align-items: center; justify-content: center;
   background: var(--pc-bg); border-top: 1px solid var(--pc-border);
-  backdrop-filter: blur(32px); color: var(--pc-text-3); font-size: 13px; letter-spacing: 0.04em;
+  backdrop-filter: blur(32px); color: var(--pc-text-3); font-size: 13px;
 }
-
 .pc-bar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
   background: var(--pc-bg); border-top: 1px solid var(--pc-border);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
 }
 .pc-bar-accent-line {
   height: 2px;
   background: linear-gradient(to right, transparent 0%, rgba(var(--pc-accent),0.7) 20%, rgba(var(--pc-accent),0.9) 50%, rgba(var(--pc-accent),0.7) 80%, transparent 100%);
   transition: background 0.8s ease;
 }
-.pc-bar-track {
-  position: relative; height: 3px; background: rgba(255,255,255,0.08);
-  cursor: pointer; transition: height 0.18s ease; user-select: none;
-}
-.pc-bar-thick   { height: 5px; }
+.pc-bar-track { position: relative; height: 3px; background: rgba(255,255,255,0.08); cursor: pointer; transition: height 0.18s ease; user-select: none; }
+.pc-bar-thick { height: 5px; }
 .pc-bar-hovered { height: 5px; }
-.pc-bar-fill {
-  height: 100%;
-  background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green));
-  transition: width 0.1s linear, background 0.8s ease;
-  border-radius: inherit; will-change: width;
-}
-.pc-bar-thumb {
-  position: absolute; top: 50%; transform: translate(-50%,-50%);
-  width: 12px; height: 12px; border-radius: 50%; background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.18s ease; pointer-events: none;
-}
+.pc-bar-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; border-radius: inherit; will-change: width; }
+.pc-bar-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
 .pc-bar-hovered .pc-bar-thumb { opacity: 1; }
 .pc-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--pc-text-3); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .pc-bar-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; gap: 16px; max-width: 1600px; margin: 0 auto; }
-.pc-song-info  { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; max-width: 320px; }
-.pc-cover-wrap {
-  position: relative; flex-shrink: 0; width: 52px; height: 52px; border-radius: 10px; overflow: hidden;
-  cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.5); transition: transform 0.2s, box-shadow 0.2s;
-}
+.pc-song-info { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; max-width: 320px; }
+.pc-cover-wrap { position: relative; flex-shrink: 0; width: 52px; height: 52px; border-radius: 10px; overflow: hidden; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.5); transition: transform 0.2s, box-shadow 0.2s; }
 .pc-cover-wrap:hover { transform: scale(1.06); box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
 .pc-cover-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pc-song-meta { flex: 1; min-width: 0; }
@@ -668,35 +617,19 @@ const CSS = `
 .pc-heart-btn:hover { color: #FF4455; transform: scale(1.2); }
 .pc-heart-btn.liked { color: #FF4455; }
 .pc-controls { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
-.pc-ctrl-row  { display: flex; align-items: center; gap: 6px; }
-.pc-ctrl-btn {
-  background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px;
-  width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  transition: color 0.18s, background 0.18s, transform 0.15s; position: relative;
-}
-.pc-ctrl-btn:hover  { color: var(--pc-text-1); background: rgba(255,255,255,0.07); }
+.pc-ctrl-row { display: flex; align-items: center; gap: 6px; }
+.pc-ctrl-btn { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, background 0.18s, transform 0.15s; position: relative; }
+.pc-ctrl-btn:hover { color: var(--pc-text-1); background: rgba(255,255,255,0.07); }
 .pc-ctrl-btn.active { color: var(--pc-green-bright); }
 .pc-ctrl-btn:active { transform: scale(0.9); }
-.pc-play-btn {
-  width: 48px; height: 48px; border-radius: 50%; background: var(--pc-text-1); border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; color: #000; font-size: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4); transition: transform 0.18s, box-shadow 0.18s, background 0.2s; flex-shrink: 0;
-}
-.pc-play-btn:hover  { transform: scale(1.08); box-shadow: 0 8px 28px rgba(0,0,0,0.5); background: var(--pc-green-bright); }
+.pc-play-btn { width: 48px; height: 48px; border-radius: 50%; background: var(--pc-text-1); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); transition: transform 0.18s, box-shadow 0.18s, background 0.2s; flex-shrink: 0; }
+.pc-play-btn:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(0,0,0,0.5); background: var(--pc-green-bright); }
 .pc-play-btn:active { transform: scale(0.94); }
-.pc-repeat-badge {
-  position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%;
-  background: var(--pc-green); color: #000; font-size: 8px; font-weight: 800;
-  display: flex; align-items: center; justify-content: center;
-}
+.pc-repeat-badge { position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%; background: var(--pc-green); color: #000; font-size: 8px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .pc-time-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--pc-text-3); font-variant-numeric: tabular-nums; }
 .pc-time-sep { opacity: 0.4; }
 .pc-right { display: flex; align-items: center; gap: 10px; flex: 1; justify-content: flex-end; max-width: 360px; min-width: 0; }
-.pc-icon-btn {
-  background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px;
-  width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  transition: color 0.18s, background 0.18s; flex-shrink: 0;
-}
+.pc-icon-btn { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, background 0.18s; flex-shrink: 0; }
 .pc-icon-btn:hover { color: var(--pc-text-1); background: rgba(255,255,255,0.07); }
 .pc-volume { display: flex; align-items: center; gap: 8px; min-width: 100px; flex-shrink: 1; }
 .pc-vol-track { position: relative; flex: 1; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer; transition: height 0.15s; }
@@ -706,266 +639,181 @@ const CSS = `
 .pc-vol-label { font-size: 11px; color: var(--pc-text-3); min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
 .pc-track-count { font-size: 11px; color: var(--pc-text-3); white-space: nowrap; }
 
-/* ── expanded desktop ── */
+/* ════ DESKTOP EXPANDED — Apple-quality ════ */
 .pc-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
-.pc-expanded-bg {
-  position: absolute; inset: 0;
-  background: linear-gradient(170deg, rgba(var(--pc-accent),0.5) 0%, rgba(var(--pc-accent),0.18) 30%, #07080A 60%);
-  transition: background 0.9s ease;
-}
-.pc-expanded-bg::after {
-  content: ''; position: absolute; inset: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.032'/%3E%3C/svg%3E");
-  background-size: 200px; mix-blend-mode: overlay; pointer-events: none;
-}
+.pc-expanded > .llamp-root { z-index: 0; }
+.pc-exp-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.40); pointer-events: none; }
 .pc-exp-header {
-  position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.07);
-  background: rgba(0,0,0,0.25); backdrop-filter: blur(20px);
+  position: relative; z-index: 3;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 32px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(0,0,0,0.18); backdrop-filter: blur(28px);
 }
-.pc-exp-header-title { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pc-text-2); font-weight: 500; }
-.pc-exp-header-btns  { display: flex; align-items: center; gap: 8px; }
-.pc-exp-body { position: relative; z-index: 2; display: flex; flex: 1; overflow: hidden; padding: 32px 40px 24px; gap: 48px; }
-.pc-art-col  { display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; gap: 28px; }
+.pc-exp-header-title { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.4); font-weight: 600; }
+.pc-exp-header-btns { display: flex; align-items: center; gap: 6px; }
+
+.pc-exp-body {
+  position: relative; z-index: 2;
+  display: flex; flex: 1; overflow: hidden;
+  padding: 44px 60px 36px; gap: 60px;
+  align-items: center;
+}
+
+/* Left: art + controls — fixed width */
+.pc-art-col { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; width: clamp(260px,30vw,360px); gap: 22px; }
 .pc-art-frame { position: relative; }
-.pc-art-glow {
-  position: absolute; inset: -16px; border-radius: 28px;
-  background: radial-gradient(circle, rgba(var(--pc-accent),0.35) 0%, transparent 70%);
-  filter: blur(24px); transition: background 0.9s ease; animation: glowPulse 3s ease-in-out infinite;
-}
-@keyframes glowPulse { 0%,100%{opacity:0.7;transform:scale(1)} 50%{opacity:1;transform:scale(1.04)} }
-.pc-art-img {
-  position: relative; display: block;
-  width: clamp(220px,30vw,340px); height: clamp(220px,30vw,340px);
-  border-radius: 22px; object-fit: cover;
-  box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.1);
-  transition: transform 0.4s ease;
-}
-.pc-art-img:hover { transform: scale(1.02); }
-.pc-art-img.playing { animation: artFloat 6s ease-in-out infinite; }
-@keyframes artFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-.pc-exp-meta { text-align: center; }
-.pc-exp-song-name { font-family: 'Syne', sans-serif; font-size: clamp(22px,3vw,36px); font-weight: 800; letter-spacing: -0.03em; color: var(--pc-text-1); margin-bottom: 6px; line-height: 1.1; }
-.pc-exp-artist { font-size: 16px; color: var(--pc-text-2); }
-.pc-exp-progress { width: 100%; max-width: 420px; }
-.pc-exp-ctrl-row { display: flex; align-items: center; gap: 12px; }
-.pc-exp-ctrl-btn {
-  background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.55); font-size: 18px;
-  width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  transition: color 0.18s, background 0.18s, transform 0.15s; position: relative;
-}
-.pc-exp-ctrl-btn:hover  { color: #fff; background: rgba(255,255,255,0.08); }
+.pc-art-glow { position: absolute; inset: -20px; border-radius: 32px; background: radial-gradient(circle, rgba(var(--pc-accent),0.42) 0%, transparent 70%); filter: blur(30px); transition: background 1.2s ease; animation: glowPulse 4s ease-in-out infinite; }
+@keyframes glowPulse { 0%,100%{opacity:0.62;transform:scale(1)} 50%{opacity:1;transform:scale(1.06)} }
+.pc-art-img { position: relative; display: block; width: clamp(240px,28vw,340px); height: clamp(240px,28vw,340px); border-radius: 22px; object-fit: cover; box-shadow: 0 44px 110px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.08); transition: transform 0.4s ease; }
+.pc-art-img:hover { transform: scale(1.015); }
+.pc-art-img.playing { animation: artFloat 7s ease-in-out infinite; }
+@keyframes artFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.pc-exp-meta { text-align: center; width: 100%; }
+.pc-exp-song-name { font-family: 'Syne', sans-serif; font-size: clamp(18px,2.2vw,30px); font-weight: 800; letter-spacing: -0.03em; color: #fff; margin-bottom: 6px; line-height: 1.1; }
+.pc-exp-artist { font-size: 14px; color: rgba(255,255,255,0.48); }
+.pc-exp-progress { width: 100%; }
+.pc-exp-ctrl-row { display: flex; align-items: center; gap: 8px; }
+.pc-exp-ctrl-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 17px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, background 0.18s, transform 0.15s; position: relative; }
+.pc-exp-ctrl-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
 .pc-exp-ctrl-btn.active { color: var(--pc-green-bright); }
 .pc-exp-ctrl-btn:active { transform: scale(0.9); }
-.pc-exp-play-btn {
-  width: 70px; height: 70px; border-radius: 50%; background: #fff; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; color: #000; font-size: 24px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5); transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-}
-.pc-exp-play-btn:hover  { transform: scale(1.07); background: var(--pc-green-bright); box-shadow: 0 12px 50px rgba(29,185,84,0.4); }
+.pc-exp-play-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 23px; box-shadow: 0 8px 36px rgba(0,0,0,0.45); transition: transform 0.2s, box-shadow 0.2s, background 0.2s; }
+.pc-exp-play-btn:hover { transform: scale(1.07); background: var(--pc-green-bright); box-shadow: 0 12px 48px rgba(29,185,84,0.45); }
 .pc-exp-play-btn:active { transform: scale(0.95); }
-.pc-exp-bottom { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; }
+.pc-exp-bottom { display: flex; align-items: center; justify-content: space-between; width: 100%; }
 
-/* ── queue / lyrics side panels ── */
-.pc-queue, .pc-lyrics-panel {
-  width: 340px; flex-shrink: 0;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 20px; display: flex; flex-direction: column; overflow: hidden;
-  animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1);
+/* Right: lyrics — fills remaining space, Apple-style */
+.pc-lyrics-col {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  height: 100%;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px; overflow: hidden;
+  backdrop-filter: blur(24px);
+  animation: slideInRight 0.34s cubic-bezier(0.22,1,0.36,1);
 }
-@keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
-.pc-queue-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.07);
-  font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; color: var(--pc-text-1);
+.pc-lyrics-col-header {
+  flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.pc-queue-list  { flex: 1; overflow-y: auto; padding: 8px; }
-.pc-queue-item  { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
-.pc-queue-item:hover  { background: rgba(255,255,255,0.06); }
+.pc-lyrics-col-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pc-green-bright); margin-bottom: 3px; }
+.pc-lyrics-col-song { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.01em; margin-bottom: 2px; }
+.pc-lyrics-col-artist { font-size: 12px; color: rgba(255,255,255,0.4); }
+.pc-lyrics-col-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+
+@keyframes slideInRight { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
+
+/* Queue panel */
+.pc-queue { width: 300px; flex-shrink: 0; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(24px); animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1); }
+.pc-queue-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,0.07); font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; color: var(--pc-text-1); }
+.pc-queue-list { flex: 1; overflow-y: auto; padding: 8px; }
+.pc-queue-item { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+.pc-queue-item:hover { background: rgba(255,255,255,0.06); }
 .pc-queue-item.active { background: rgba(29,185,84,0.12); }
-.pc-queue-thumb  { width: 40px; height: 40px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
-.pc-queue-meta   { flex: 1; min-width: 0; }
-.pc-queue-name   { font-size: 13px; font-weight: 600; color: var(--pc-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-queue-thumb { width: 40px; height: 40px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
+.pc-queue-meta { flex: 1; min-width: 0; }
+.pc-queue-name { font-size: 13px; font-weight: 600; color: var(--pc-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-queue-artist { font-size: 11px; color: var(--pc-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-queue-active-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pc-green); flex-shrink: 0; }
-.pc-lyrics-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
 
-/* ── lyrics drawer (compact bar) ── */
-.pc-lyrics-drawer {
-  position: fixed; left: 0; right: 0; bottom: 73px; z-index: 39;
-  height: 0; overflow: hidden; display: flex; flex-direction: column;
-  background: rgba(8,8,12,0.97);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border-top: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 0 -8px 40px rgba(0,0,0,0.6);
-  transition: height 0.42s cubic-bezier(0.22,1,0.36,1);
-}
-.pc-lyrics-drawer.open { height: 400px; }
-.pc-lyrics-drawer-header {
-  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 24px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.pc-lyrics-drawer-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pc-green-bright); }
-.pc-lyrics-drawer-song { font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+/* Desktop compact lyrics drawer */
+.pc-lyrics-drawer { position: fixed; left: 0; right: 0; bottom: 73px; z-index: 39; height: 0; overflow: hidden; display: flex; flex-direction: column; background: rgba(6,6,10,0.96); backdrop-filter: blur(40px) saturate(180%); border-top: 1px solid rgba(255,255,255,0.08); box-shadow: 0 -8px 40px rgba(0,0,0,0.6); transition: height 0.42s cubic-bezier(0.22,1,0.36,1); }
+.pc-lyrics-drawer.open { height: 420px; }
+.pc-lyrics-drawer-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 12px 28px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.pc-lyrics-drawer-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pc-green-bright); }
+.pc-lyrics-drawer-song { font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
 .pc-lyrics-drawer-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
 
-/* ── mobile ── */
-.pc-mobile-bar {
-  position: fixed; left: 8px; right: 8px; z-index: 40;
-  background: rgba(12,14,16,0.95); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px;
-  backdrop-filter: blur(32px); box-shadow: 0 -4px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(var(--pc-accent),0.08);
-  transition: opacity 0.25s, transform 0.25s; overflow: hidden;
-}
+/* ════ MOBILE MINI BAR ════ */
+.pc-mobile-bar { position: fixed; left: 8px; right: 8px; z-index: 40; background: rgba(12,14,18,0.95); border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; backdrop-filter: blur(32px); box-shadow: 0 -4px 40px rgba(0,0,0,0.5); transition: opacity 0.25s, transform 0.25s; overflow: hidden; }
 .pc-mobile-bar.hidden { opacity: 0; transform: translateY(8px); pointer-events: none; }
-.pc-mobile-progress { height: 2px; background: rgba(255,255,255,0.08); position: relative; }
-.pc-mobile-progress-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.8), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; will-change: width; }
-.pc-mobile-inner  { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
-.pc-mobile-cover  { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.4); cursor: pointer; }
+.pc-mobile-progress { height: 2px; background: rgba(255,255,255,0.08); }
+.pc-mobile-progress-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.8), var(--pc-green)); transition: width 0.1s linear; will-change: width; }
+.pc-mobile-inner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.pc-mobile-cover { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; overflow: hidden; cursor: pointer; }
 .pc-mobile-cover img { width: 100%; height: 100%; object-fit: cover; }
-.pc-mobile-meta   { flex: 1; min-width: 0; }
-.pc-mobile-name   { font-size: 13px; font-weight: 600; color: var(--pc-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Syne', sans-serif; }
+.pc-mobile-meta { flex: 1; min-width: 0; }
+.pc-mobile-name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Syne', sans-serif; }
 .pc-mobile-artist { font-size: 11px; color: var(--pc-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-mobile-btns   { display: flex; align-items: center; gap: 4px; }
-.pc-mobile-play { width: 40px; height: 40px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.35); transition: transform 0.15s, background 0.2s; flex-shrink: 0; }
-.pc-mobile-play:hover  { background: var(--pc-green-bright); transform: scale(1.06); }
+.pc-mobile-btns { display: flex; align-items: center; gap: 4px; }
+.pc-mobile-play { width: 40px; height: 40px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 14px; transition: transform 0.15s, background 0.2s; flex-shrink: 0; }
 .pc-mobile-play:active { transform: scale(0.92); }
-.pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.15s; }
-.pc-mobile-next:hover { color: var(--pc-text-1); }
-.pc-mob-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
-.pc-mob-exp-bg {
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(var(--pc-accent),0.30) 0%, rgba(var(--pc-accent),0.08) 25%, #050507 55%);
-  transition: background 0.9s ease;
-}
-.pc-mob-exp-bg::after {
-  content: ''; position: absolute; inset: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-  background-size: 200px; mix-blend-mode: overlay; pointer-events: none;
-}
-.pc-mob-header { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-.pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pc-text-3); }
-.pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 24px 24px 32px; flex: 1; }
-/* ── Art wrap: stacking context for art + lyrics overlay ── */
-/* ────────────────────────────────────────────────────────────
-   ART WRAP — full progress-bar width always.
-   When lyrics open: row layout — art thumbnail left, lyrics right.
-   When closed: art fills the full width as a square card.
-──────────────────────────────────────────────────────────── */
-.pc-mob-art-wrap {
-  position: relative;
-  margin-bottom: 28px;
-  width: 100%;                        /* matches progress bar width */
-  border-radius: 20px;
-  flex-shrink: 0;
-  overflow: hidden;
-  /* Default height = square card */
-  height: min(72vw, 300px);
-  display: flex;
-  flex-direction: row;
-  transition: height 0.5s cubic-bezier(0.22,1,0.36,1),
-              border-radius 0.5s cubic-bezier(0.22,1,0.36,1);
-}
+.pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
-/* When lyrics open: shorter (thumbnail mode) — art left, lyrics right */
-.pc-mob-art-wrap.lyrics-open {
-  height: 200px;
-}
-
-/* Glow sits outside the wrap */
-.pc-mob-art-glow {
-  position: absolute; inset: -12px; border-radius: 26px;
-  background: radial-gradient(circle,rgba(var(--pc-accent),0.35) 0%,transparent 70%);
-  filter: blur(20px);
-  animation: glowPulse 3s ease-in-out infinite;
-  pointer-events: none;
-}
-
-/* ── Cover art slot ── */
-.pc-mob-art-slot {
-  position: relative;
-  flex-shrink: 0;
-  /* Default: full width square */
-  width: 100%; height: 100%;
-  transition: width 0.5s cubic-bezier(0.22,1,0.36,1),
-              border-radius 0.5s cubic-bezier(0.22,1,0.36,1);
-  overflow: hidden;
-  border-radius: 20px;
-}
-.pc-mob-art-wrap.lyrics-open .pc-mob-art-slot {
-  width: 42%;      /* thumbnail column */
-  border-radius: 0;
-}
-.pc-mob-art {
-  display: block; width: 100%; height: 100%;
-  object-fit: cover;
-  transition: filter 0.45s cubic-bezier(0.22,1,0.36,1);
-  will-change: filter;
-}
-.pc-mob-art.playing { animation: artFloat 6s ease-in-out infinite; }
-
-/* Blur art slightly in thumbnail state */
-.pc-mob-art-wrap.lyrics-open .pc-mob-art {
-  filter: brightness(0.75) saturate(0.7);
-  animation: none;
-}
-
-/* Vertical divider / gradient edge between art and lyrics */
-.pc-mob-art-slot::after {
-  content: '';
-  position: absolute; inset: 0 0 0 auto;
-  width: 40px;
-  background: linear-gradient(to right, transparent, rgba(5,5,7,0.85));
-  opacity: 0;
-  transition: opacity 0.5s cubic-bezier(0.22,1,0.36,1);
-  pointer-events: none;
-}
-.pc-mob-art-wrap.lyrics-open .pc-mob-art-slot::after { opacity: 1; }
-
-/* ── Dark scrim over full art in cover-only mode (unused now, kept for safety) ── */
-.pc-mob-art-scrim { display: none; }
-
-/* ── Lyrics panel — right column ── */
-.pc-mob-art-lyrics {
-  flex: 1;
-  min-width: 0;
-  position: relative;
-  background: rgba(5,5,7,0.92);
-  overflow: hidden;
-  opacity: 0;
-  transform: translateX(10px);
-  pointer-events: none;
-  transition: opacity 0.45s cubic-bezier(0.22,1,0.36,1),
-              transform 0.45s cubic-bezier(0.22,1,0.36,1);
-  border-radius: 0 20px 20px 0;
-}
-.pc-mob-art-wrap.lyrics-open .pc-mob-art-lyrics {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
-}
-
-.pc-mob-meta      { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 20px; }
-.pc-mob-name      { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--pc-text-1); letter-spacing: -0.03em; margin-bottom: 4px; }
-.pc-mob-artist    { font-size: 14px; color: var(--pc-text-2); }
-.pc-mob-progress  { width: 100%; margin-bottom: 24px; }
-.pc-mob-ctrl-row  { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-bottom: 20px; }
-.pc-mob-ctrl-btn  { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 18px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, transform 0.15s; position: relative; }
+/* ════ MOBILE EXPANDED ════ */
+.pc-mob-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
+.pc-mob-expanded > .llamp-root { z-index: 0; }
+.pc-mob-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.44); pointer-events: none; }
+.pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
+.pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.38); }
+.pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 28px 24px 32px; flex: 1; overflow-y: auto; }
+.pc-mob-art-frame { position: relative; margin-bottom: 28px; flex-shrink: 0; }
+.pc-mob-art-glow { position: absolute; inset: -16px; border-radius: 28px; background: radial-gradient(circle,rgba(var(--pc-accent),0.42) 0%,transparent 70%); filter: blur(22px); animation: glowPulse 4s ease-in-out infinite; pointer-events: none; }
+.pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 22px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); }
+.pc-mob-art.playing { animation: artFloat 7s ease-in-out infinite; }
+.pc-mob-meta { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 20px; }
+.pc-mob-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 4px; }
+.pc-mob-artist { font-size: 14px; color: rgba(255,255,255,0.48); }
+.pc-mob-progress { width: 100%; margin-bottom: 24px; }
+.pc-mob-ctrl-row { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-bottom: 20px; }
+.pc-mob-ctrl-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 18px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, transform 0.15s; position: relative; }
 .pc-mob-ctrl-btn:active { transform: scale(0.88); }
 .pc-mob-ctrl-btn.active { color: var(--pc-green-bright); }
-.pc-mob-play-btn  { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 22px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); transition: transform 0.18s, background 0.2s; }
+.pc-mob-play-btn { width: 68px; height: 68px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 24px; box-shadow: 0 8px 36px rgba(0,0,0,0.5); transition: transform 0.18s, background 0.2s; }
 .pc-mob-play-btn:active { transform: scale(0.92); }
-.pc-mob-extras    { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
-.pc-mob-vol       { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pc-text-2); cursor: pointer; background: none; border: none; }
-.pc-mob-count     { font-size: 12px; color: var(--pc-text-3); }
-.pc-mob-queue     { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; max-height: 280px; overflow-y: auto; }
-.pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--pc-text-1); margin-bottom: 10px; }
+.pc-mob-extras { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
+.pc-mob-vol { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pc-text-2); cursor: pointer; background: none; border: none; }
+.pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
+.pc-mob-queue { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; max-height: 240px; overflow-y: auto; }
+.pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+
+/* ════ MOBILE FULLSCREEN LYRICS ════ */
+.pc-mob-lyrics-fs {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; flex-direction: column; overflow: hidden;
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
+}
+.pc-mob-lyrics-fs.open { transform: translateY(0); }
+.pc-mob-lyrics-fs > .llamp-root { z-index: 0; }
+.pc-mob-lyrics-dark { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,5,0.50); pointer-events: none; }
+
+.pc-mob-lyrics-header {
+  position: relative; z-index: 3; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 14px;
+  background: rgba(0,0,0,0.2); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.pc-mob-lyrics-header-info { display: flex; flex-direction: column; gap: 1px; }
+.pc-mob-lyrics-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pc-green-bright); margin-bottom: 2px; }
+.pc-mob-lyrics-song { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
+.pc-mob-lyrics-artist { font-size: 11px; color: rgba(255,255,255,0.42); }
+
+.pc-mob-lyrics-body { position: relative; z-index: 2; flex: 1; min-height: 0; overflow: hidden; }
+
+.pc-mob-lyrics-footer {
+  position: relative; z-index: 3; flex-shrink: 0;
+  padding: 16px 24px 28px;
+  background: rgba(0,0,0,0.28); backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.pc-mob-lyrics-footer-progress { margin-bottom: 14px; }
+.pc-mob-lyrics-footer-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.pc-mob-lyrics-footer-play { width: 54px; height: 54px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.4); transition: transform 0.15s, background 0.2s; position: relative; }
+.pc-mob-lyrics-footer-play:hover { background: var(--pc-green-bright); }
+.pc-mob-lyrics-footer-play:active { transform: scale(0.92); }
+.pc-mob-lyrics-footer-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.55); font-size: 20px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.15s; }
+.pc-mob-lyrics-footer-btn:active { color: #fff; transform: scale(0.88); }
 
 @keyframes bufferSpin { to { transform: rotate(360deg); } }
 .pc-buffer-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--pc-green); animation: bufferSpin 0.7s linear infinite; pointer-events: none; }
 
 @media (max-width: 767px)  { .pc-desktop-bar { display: none !important; } }
-@media (min-width: 768px)  { .pc-mobile-bar  { display: none !important; } .pc-mob-expanded { display: none !important; } }
+@media (min-width: 768px)  { .pc-mobile-bar { display: none !important; } .pc-mob-expanded { display: none !important; } .pc-mob-lyrics-fs { display: none !important; } }
 `;
 
 /* ─── main component ────────────────────────────────────────────── */
@@ -982,10 +830,11 @@ export default function PlayerControls() {
     isBuffering,
   } = usePlayer();
 
-  const [accentRGB,  setAccentRGB]  = useState(FALLBACK_COLOR);
-  const [showQueue,  setShowQueue]  = useState(false);
-  const [showLyrics, setShowLyrics] = useState(false);
-  const [liked,      setLiked]      = useState(false);
+  const [accentRGB,     setAccentRGB]     = useState(FALLBACK_COLOR);
+  const [showQueue,     setShowQueue]     = useState(false);
+  const [showLyrics,    setShowLyrics]    = useState(false);
+  const [showMobLyrics, setShowMobLyrics] = useState(false);
+  const [liked,         setLiked]         = useState(false);
   const prevCoverRef = useRef(null);
 
   const openQueue  = () => { setShowQueue(true);  setShowLyrics(false); };
@@ -999,6 +848,7 @@ export default function PlayerControls() {
   }, [currentSong?.cover]);
 
   useEffect(() => { setLiked(false); }, [currentIndex]);
+  useEffect(() => { if (!showBackgroundDetail) setShowMobLyrics(false); }, [showBackgroundDetail]);
 
   const handleSeek = useCallback((t) => seekTo(t), [seekTo]);
   const togglePlay = useCallback(() => setIsPlaying(p => !p), [setIsPlaying]);
@@ -1018,34 +868,26 @@ export default function PlayerControls() {
   /* ── desktop expanded ── */
   const desktopExpanded = showBackgroundDetail && (
     <div className="pc-expanded pc-desktop-bar" style={accentStyle}>
-      <div className="pc-expanded-bg" />
+      <LavaLampBg accentRGB={accentRGB} intensity={0.88} />
+      <div className="pc-exp-dark-overlay" />
       <div className="pc-exp-header">
-        <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
+        <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}>
+          <FaChevronDown style={{ fontSize: 18 }} />
+        </button>
         <span className="pc-exp-header-title">Now Playing</span>
         <div className="pc-exp-header-btns">
           <button className={`pc-icon-btn pc-heart-btn ${liked ? 'liked' : ''}`} onClick={() => setLiked(l => !l)}><FaHeart /></button>
-          <button
-            className="pc-icon-btn"
-            style={{ color: showLyrics ? 'var(--pc-green-bright)' : undefined }}
-            onClick={() => showLyrics ? setShowLyrics(false) : openLyrics()}
-            title="Lyrics"
-          ><FaMusic /></button>
-          <button
-            className="pc-icon-btn"
-            style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }}
-            onClick={() => showQueue ? setShowQueue(false) : openQueue()}
-            title="Queue"
-          ><FaList /></button>
+          <button className="pc-icon-btn" style={{ color: showLyrics ? 'var(--pc-green-bright)' : undefined }} onClick={() => showLyrics ? setShowLyrics(false) : openLyrics()} title="Lyrics"><FaMusic /></button>
+          <button className="pc-icon-btn" style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }} onClick={() => showQueue ? setShowQueue(false) : openQueue()} title="Queue"><FaList /></button>
           <button className="pc-icon-btn"><FaEllipsisH /></button>
         </div>
       </div>
       <div className="pc-exp-body">
+        {/* Left: art + controls */}
         <div className="pc-art-col">
           <div className="pc-art-frame">
             <div className="pc-art-glow" />
-            <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name}
-              className={`pc-art-img ${isPlaying ? 'playing' : ''}`}
-              onError={e => { e.target.src = FALLBACK_COVER; }} />
+            <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-art-img ${isPlaying ? 'playing' : ''}`} onError={e => { e.target.src = FALLBACK_COVER; }} />
           </div>
           <div className="pc-exp-meta">
             <h2 className="pc-exp-song-name">{currentSong.name}</h2>
@@ -1069,19 +911,26 @@ export default function PlayerControls() {
           </div>
         </div>
 
-        {showQueue && (
-          <QueuePanel songs={songs} currentIndex={currentIndex} onSelect={setCurrentIndex} onClose={() => setShowQueue(false)} />
-        )}
+        {/* Right: lyrics */}
         {showLyrics && (
-          <div className="pc-lyrics-panel">
-            <div className="pc-queue-header">
-              <span>Lyrics</span>
+          <div className="pc-lyrics-col">
+            <div className="pc-lyrics-col-header">
+              <div>
+                <div className="pc-lyrics-col-label">Lyrics</div>
+                <div className="pc-lyrics-col-song">{currentSong.name}</div>
+                <div className="pc-lyrics-col-artist">{currentSong.artist}</div>
+              </div>
               <button onClick={() => setShowLyrics(false)} className="pc-icon-btn"><FaTimes /></button>
             </div>
-            <div className="pc-lyrics-body">
-              <LyricsPanel accentColor={accent} bg="transparent" />
+            <div className="pc-lyrics-col-body">
+              <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
             </div>
           </div>
+        )}
+
+        {/* Right: queue */}
+        {showQueue && (
+          <QueuePanel songs={songs} currentIndex={currentIndex} onSelect={setCurrentIndex} onClose={() => setShowQueue(false)} />
         )}
       </div>
     </div>
@@ -1095,17 +944,14 @@ export default function PlayerControls() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FaMusic style={{ fontSize: 11, color: 'var(--pc-green-bright)' }} />
             <span className="pc-lyrics-drawer-title">Lyrics</span>
-            {currentSong && (
-              <span className="pc-lyrics-drawer-song">{currentSong.name}{currentSong.artist ? ` · ${currentSong.artist}` : ''}</span>
-            )}
+            {currentSong && <span className="pc-lyrics-drawer-song">{currentSong.name}{currentSong.artist ? ` · ${currentSong.artist}` : ''}</span>}
           </div>
           <button className="pc-icon-btn" onClick={() => setShowLyrics(false)}><FaTimes style={{ fontSize: 11 }} /></button>
         </div>
         <div className="pc-lyrics-drawer-body">
-          <LyricsPanel accentColor={accent} bg="rgba(8,8,12,0.97)" />
+          <LyricsPanel accentColor={accent} bg="rgba(6,6,10,0.96)" />
         </div>
       </div>
-
       <div className="pc-bar pc-desktop-bar" style={accentStyle}>
         <div className="pc-bar-accent-line" />
         <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} />
@@ -1132,36 +978,14 @@ export default function PlayerControls() {
               <RepeatBtn mode={repeatMode} onToggle={toggleRepeatMode} />
             </div>
             <div className="pc-time-row">
-              <span>{fmt(currentTime)}</span>
-              <span className="pc-time-sep">·</span>
-              <span>{duration > 0 ? fmt(duration) : '--:--'}</span>
+              <span>{fmt(currentTime)}</span><span className="pc-time-sep">·</span><span>{duration > 0 ? fmt(duration) : '--:--'}</span>
             </div>
           </div>
           <div className="pc-right">
             <VolumeSlider volume={volume} isMuted={isMuted} onVolume={setVolume} onMute={toggleMute} />
-            <button
-              onClick={() => showLyrics ? setShowLyrics(false) : openLyrics()}
-              style={{
-                background: showLyrics ? 'var(--pc-green)' : 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%',
-                width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', flexShrink: 0, color: '#fff', fontSize: 13, transition: 'background 0.2s',
-              }}
-              title="Lyrics"
-            ><FaMusic style={{ fontSize: 12 }} /></button>
-            <button
-              onClick={() => showQueue ? setShowQueue(false) : openQueue()}
-              style={{
-                background: showQueue ? 'var(--pc-green)' : 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%',
-                width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', flexShrink: 0, color: '#fff', fontSize: 13, transition: 'background 0.2s',
-              }}
-              title="Queue"
-            ><FaList style={{ fontSize: 11 }} /></button>
-            <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(true)} title="Expand">
-              <FaChevronDown style={{ transform: 'rotate(180deg)', fontSize: 12 }} />
-            </button>
+            <button onClick={() => showLyrics ? setShowLyrics(false) : openLyrics()} style={{ background: showLyrics ? 'var(--pc-green)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: '#fff', fontSize: 13, transition: 'background 0.2s' }} title="Lyrics"><FaMusic style={{ fontSize: 12 }} /></button>
+            <button onClick={() => showQueue ? setShowQueue(false) : openQueue()} style={{ background: showQueue ? 'var(--pc-green)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: '#fff', fontSize: 13, transition: 'background 0.2s' }} title="Queue"><FaList style={{ fontSize: 11 }} /></button>
+            <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(true)} title="Expand"><FaChevronDown style={{ transform: 'rotate(180deg)', fontSize: 12 }} /></button>
           </div>
         </div>
       </div>
@@ -1186,45 +1010,27 @@ export default function PlayerControls() {
           <button className="pc-mobile-play" onClick={e => { e.stopPropagation(); togglePlay(); }}>
             {isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 2 }} />}
           </button>
-          <button className="pc-mobile-next" onClick={e => { e.stopPropagation(); playNext(); }}>
-            <FaStepForward />
-          </button>
+          <button className="pc-mobile-next" onClick={e => { e.stopPropagation(); playNext(); }}><FaStepForward /></button>
         </div>
       </div>
     </div>
   );
 
-  /* ── mobile expanded ── */
+  /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
     <div className="pc-mob-expanded" style={accentStyle}>
-      <div className="pc-mob-exp-bg" />
+      <LavaLampBg accentRGB={accentRGB} intensity={0.82} />
+      <div className="pc-mob-dark-overlay" />
       <div className="pc-mob-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
-        <span className="pc-mob-header-label">
-          {showLyrics ? 'Lyrics' : 'Now Playing'}
-        </span>
+        <span className="pc-mob-header-label">Now Playing</span>
         <button className="pc-icon-btn"><FaEllipsisH /></button>
       </div>
       <div className="pc-mob-body">
-
-        {/* Art + lyrics — full width; when lyrics open: thumbnail | lyrics side-by-side */}
-        <div className={`pc-mob-art-wrap ${showLyrics ? 'lyrics-open' : ''}`}>
+        <div className="pc-mob-art-frame">
           <div className="pc-mob-art-glow" />
-          {/* Left: cover art slot — full-width square, shrinks to 42% when lyrics open */}
-          <div className="pc-mob-art-slot">
-            <img
-              src={currentSong.cover || FALLBACK_COVER}
-              alt={currentSong.name}
-              className={`pc-mob-art ${isPlaying && !showLyrics ? 'playing' : ''}`}
-              onError={e => { e.target.src = FALLBACK_COVER; }}
-            />
-          </div>
-          {/* Right: lyrics panel — slides in from right when lyrics open */}
-          <div className="pc-mob-art-lyrics">
-            <LyricsPanel accentColor={accent} bg="transparent" />
-          </div>
+          <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-mob-art ${isPlaying ? 'playing' : ''}`} onError={e => { e.target.src = FALLBACK_COVER; }} />
         </div>
-
         <div className="pc-mob-meta">
           <div className="pc-mob-name">{currentSong.name}</div>
           <div className="pc-mob-artist">{currentSong.artist}</div>
@@ -1240,8 +1046,7 @@ export default function PlayerControls() {
           </button>
           <button className="pc-mob-ctrl-btn" onClick={playNext} style={{ fontSize: 22 }}><FaStepForward /></button>
           <button className={`pc-mob-ctrl-btn ${repeatMode !== 'off' ? 'active' : ''}`} onClick={toggleRepeatMode} style={{ position: 'relative' }}>
-            <FaRedoAlt />
-            {repeatMode === 'one' && <span className="pc-repeat-badge">1</span>}
+            <FaRedoAlt />{repeatMode === 'one' && <span className="pc-repeat-badge">1</span>}
           </button>
         </div>
         <div className="pc-mob-extras">
@@ -1251,38 +1056,55 @@ export default function PlayerControls() {
           </button>
           <span className="pc-mob-count">{currentIndex + 1} / {songs.length}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {/* Mic/lyrics toggle — taps the art overlay */}
-            <button
-              className="pc-icon-btn"
-              style={{ color: showLyrics ? 'var(--pc-green-bright)' : undefined }}
-              onClick={() => showLyrics ? setShowLyrics(false) : openLyrics()}
-              aria-label={showLyrics ? 'Hide lyrics' : 'Show lyrics'}
-            ><FaMusic /></button>
-            <button
-              className="pc-icon-btn"
-              style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }}
-              onClick={() => showQueue ? setShowQueue(false) : openQueue()}
-              aria-label="Toggle queue"
-            ><FaList /></button>
+            <button className="pc-icon-btn" style={{ color: showMobLyrics ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowMobLyrics(true)} aria-label="Show lyrics"><FaMusic /></button>
+            <button className="pc-icon-btn" style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowQueue(q => !q)} aria-label="Queue"><FaList /></button>
           </div>
         </div>
-
         {showQueue && (
           <div className="pc-mob-queue">
             <div className="pc-mob-queue-title">Queue</div>
             {songs.map((song, idx) => (
               <div key={song.id || idx} className={`pc-queue-item ${idx === currentIndex ? 'active' : ''}`} onClick={() => setCurrentIndex(idx)}>
                 <img src={song.cover || FALLBACK_COVER} alt={song.name} className="pc-queue-thumb" onError={e => { e.target.src = FALLBACK_COVER; }} />
-                <div className="pc-queue-meta">
-                  <p className="pc-queue-name">{song.name}</p>
-                  <p className="pc-queue-artist">{song.artist}</p>
-                </div>
+                <div className="pc-queue-meta"><p className="pc-queue-name">{song.name}</p><p className="pc-queue-artist">{song.artist}</p></div>
                 {idx === currentIndex && <div className="pc-queue-active-dot" />}
               </div>
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
 
+  /* ── mobile fullscreen lyrics ── */
+  const mobileLyricsFs = (
+    <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
+      <LavaLampBg accentRGB={accentRGB} intensity={1.0} />
+      <div className="pc-mob-lyrics-dark" />
+      <div className="pc-mob-lyrics-header">
+        <div className="pc-mob-lyrics-header-info">
+          <span className="pc-mob-lyrics-label">Lyrics</span>
+          <span className="pc-mob-lyrics-song">{currentSong?.name}</span>
+          <span className="pc-mob-lyrics-artist">{currentSong?.artist}</span>
+        </div>
+        <button className="pc-icon-btn" onClick={() => setShowMobLyrics(false)} aria-label="Close lyrics" style={{ color: 'rgba(255,255,255,0.6)', fontSize: 20 }}>
+          <FaChevronDown />
+        </button>
+      </div>
+      <div className="pc-mob-lyrics-body">
+        <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
+      </div>
+      <div className="pc-mob-lyrics-footer">
+        <div className="pc-mob-lyrics-footer-progress">
+          <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
+        </div>
+        <div className="pc-mob-lyrics-footer-row">
+          <button className="pc-mob-lyrics-footer-btn" onClick={playPrev}><FaStepBackward /></button>
+          <button className="pc-mob-lyrics-footer-play" onClick={togglePlay} style={{ position: 'relative' }}>
+            {isBuffering ? <div className="pc-buffer-ring" /> : isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 2 }} />}
+          </button>
+          <button className="pc-mob-lyrics-footer-btn" onClick={playNext}><FaStepForward /></button>
+        </div>
       </div>
     </div>
   );
@@ -1294,6 +1116,7 @@ export default function PlayerControls() {
       {desktopBar}
       {mobileMini}
       {mobileExpanded}
+      {mobileLyricsFs}
     </div>
   );
 }
