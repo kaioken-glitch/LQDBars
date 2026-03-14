@@ -11,6 +11,7 @@ import {
   faCompactDisc, faBolt,
 } from '@fortawesome/free-solid-svg-icons';
 import { fetchSongs, patchSong as apiPatchSong } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
@@ -32,6 +33,18 @@ function getGreeting() {
   if (h < 17) return 'Good afternoon';
   if (h < 21) return 'Good evening';
   return 'Good night';
+}
+
+/* Extract first name from a full name / email / display_name */
+function getFirstName(profile, user) {
+  // 1. Supabase profile display_name
+  const dn = profile?.display_name || profile?.full_name;
+  if (dn) return dn.split(' ')[0];
+  // 2. Google OAuth user_metadata
+  const gn = user?.user_metadata?.full_name || user?.user_metadata?.name;
+  if (gn) return gn.split(' ')[0];
+  // 3. Nothing — return null so we show greeting only
+  return null;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -791,6 +804,7 @@ const DotsMenu = memo(({ song, songList, onAddToQueue }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const { show: showToast } = useToast();
+  const { user, profile: authProfile } = useAuth();
   const { addToLibrary } = usePlaylists();
   useOutsideClick(ref, () => setOpen(false));
 
@@ -846,6 +860,7 @@ const AddToPlaylistBtn = memo(({ song }) => {
   const { playlists: allPlaylists, addSongToPlaylist } = usePlaylists();
   const playlists = allPlaylists.filter(p => !p._hidden);
   const { show: showToast } = useToast();
+  const { user, profile: authProfile } = useAuth();
   useOutsideClick(ref, () => setOpen(false));
   const handle = useCallback((pl) => { addSongToPlaylist(pl.id, song); showToast(`Added to ${pl.name} ✓`,'success'); setOpen(false); }, [song, addSongToPlaylist, showToast]);
   return (
@@ -940,6 +955,7 @@ export default function HomeOnline() {
   const [searchFocused,   setSearchFocused]   = useState(false);
 
   const { show: showToast } = useToast();
+  const { user, profile: authProfile } = useAuth();
   const ytSongRef   = useRef(null);
   const searchCache = useRef({});
 
@@ -960,8 +976,9 @@ export default function HomeOnline() {
   // songs is the current playback queue — can include YouTube tracks
   const activeSong = currentSong ?? songs[currentIndex];
 
-  // Greeting
-  const greeting = useMemo(() => getGreeting(), []);
+  // Greeting + username
+  const greeting  = useMemo(() => getGreeting(), []);
+  const firstName = useMemo(() => getFirstName(authProfile, user), [authProfile, user]);
 
   /* ── Initial load ── */
   useEffect(() => { if (volume === 1) setVolume(0.2); }, []); // eslint-disable-line
@@ -1258,7 +1275,9 @@ export default function HomeOnline() {
           <>
             {/* ── GREETING HERO ── */}
             <div className="ho-hero">
-              <h1 className="ho-greeting">{greeting} 👋</h1>
+              <h1 className="ho-greeting">
+                {firstName ? <>{greeting}, {firstName}</> : greeting}
+              </h1>
               <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
             </div>
 
