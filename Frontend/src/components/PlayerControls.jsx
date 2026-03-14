@@ -4,7 +4,7 @@ import {
   FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute,
   FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic,
 } from 'react-icons/fa';
-import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
+import * as THREE from 'three';
 import { usePlayer } from '../context/PlayerContext';
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -90,119 +90,234 @@ function useLyrics(currentSong, currentTime) {
   return { lines, plainLyrics, activeLine, status };
 }
 
-/* ─── Iridescence WebGL Background ──────────────────────────────── */
-const VERT = `
-attribute vec2 uv;
-attribute vec2 position;
+/* ─── ColorBends WebGL Background ───────────────────────────────── */
+const MAX_COLORS = 8;
+const CB_FRAG = `
+#define MAX_COLORS ${MAX_COLORS}
+uniform vec2 uCanvas;
+uniform float uTime;
+uniform float uSpeed;
+uniform vec2 uRot;
+uniform int uColorCount;
+uniform vec3 uColors[MAX_COLORS];
+uniform int uTransparent;
+uniform float uScale;
+uniform float uFrequency;
+uniform float uWarpStrength;
+uniform vec2 uPointer;
+uniform float uMouseInfluence;
+uniform float uParallax;
+uniform float uNoise;
+varying vec2 vUv;
+void main() {
+  float t = uTime * uSpeed;
+  vec2 p = vUv * 2.0 - 1.0;
+  p += uPointer * uParallax * 0.1;
+  vec2 rp = vec2(p.x * uRot.x - p.y * uRot.y, p.x * uRot.y + p.y * uRot.x);
+  vec2 q = vec2(rp.x * (uCanvas.x / uCanvas.y), rp.y);
+  q /= max(uScale, 0.0001);
+  q /= 0.5 + 0.2 * dot(q, q);
+  q += 0.2 * cos(t) - 7.56;
+  vec2 toward = (uPointer - rp);
+  q += toward * uMouseInfluence * 0.2;
+  vec3 col = vec3(0.0);
+  float a = 1.0;
+  if (uColorCount > 0) {
+    vec2 s = q;
+    vec3 sumCol = vec3(0.0);
+    float cover = 0.0;
+    for (int i = 0; i < MAX_COLORS; ++i) {
+      if (i >= uColorCount) break;
+      s -= 0.01;
+      vec2 r = sin(1.5 * (s.yx * uFrequency) + 2.0 * cos(s * uFrequency));
+      float m0 = length(r + sin(5.0 * r.y * uFrequency - 3.0 * t + float(i)) / 4.0);
+      float kBelow = clamp(uWarpStrength, 0.0, 1.0);
+      float kMix = pow(kBelow, 0.3);
+      float gain = 1.0 + max(uWarpStrength - 1.0, 0.0);
+      vec2 disp = (r - s) * kBelow;
+      vec2 warped = s + disp * gain;
+      float m1 = length(warped + sin(5.0 * warped.y * uFrequency - 3.0 * t + float(i)) / 4.0);
+      float m = mix(m0, m1, kMix);
+      float w = 1.0 - exp(-6.0 / exp(6.0 * m));
+      sumCol += uColors[i] * w;
+      cover = max(cover, w);
+    }
+    col = clamp(sumCol, 0.0, 1.0);
+    a = uTransparent > 0 ? cover : 1.0;
+  } else {
+    vec2 s = q;
+    for (int k = 0; k < 3; ++k) {
+      s -= 0.01;
+      vec2 r = sin(1.5 * (s.yx * uFrequency) + 2.0 * cos(s * uFrequency));
+      float m0 = length(r + sin(5.0 * r.y * uFrequency - 3.0 * t + float(k)) / 4.0);
+      float kBelow = clamp(uWarpStrength, 0.0, 1.0);
+      float kMix = pow(kBelow, 0.3);
+      float gain = 1.0 + max(uWarpStrength - 1.0, 0.0);
+      vec2 disp = (r - s) * kBelow;
+      vec2 warped = s + disp * gain;
+      float m1 = length(warped + sin(5.0 * warped.y * uFrequency - 3.0 * t + float(k)) / 4.0);
+      float m = mix(m0, m1, kMix);
+      col[k] = 1.0 - exp(-6.0 / exp(6.0 * m));
+    }
+    a = uTransparent > 0 ? max(max(col.r, col.g), col.b) : 1.0;
+  }
+  if (uNoise > 0.0001) {
+    float n = fract(sin(dot(gl_FragCoord.xy + vec2(uTime), vec2(12.9898, 78.233))) * 43758.5453123);
+    col += (n - 0.5) * uNoise;
+    col = clamp(col, 0.0, 1.0);
+  }
+  vec3 rgb = (uTransparent > 0) ? col * a : col;
+  gl_FragColor = vec4(rgb, a);
+}
+`;
+const CB_VERT = `
 varying vec2 vUv;
 void main() {
   vUv = uv;
-  gl_Position = vec4(position, 0, 1);
-}
-`;
-const FRAG = `
-precision highp float;
-uniform float uTime;
-uniform vec3 uColor;
-uniform vec3 uResolution;
-uniform vec2 uMouse;
-uniform float uAmplitude;
-uniform float uSpeed;
-varying vec2 vUv;
-void main() {
-  float mr = min(uResolution.x, uResolution.y);
-  vec2 uv = (vUv.xy * 2.0 - 1.0) * uResolution.xy / mr;
-  uv += (uMouse - vec2(0.5)) * uAmplitude;
-  float d = -uTime * 0.5 * uSpeed;
-  float a = 0.0;
-  for (float i = 0.0; i < 8.0; ++i) {
-    a += cos(i - d - a * uv.x);
-    d += sin(uv.y * i + a);
-  }
-  d += uTime * 0.5 * uSpeed;
-  vec3 col = vec3(cos(uv * vec2(d, a)) * 0.6 + 0.4, cos(a + d) * 0.5 + 0.5);
-  col = cos(col * cos(vec3(d, a, 2.5)) * 0.5 + 0.5) * uColor;
-  gl_FragColor = vec4(col, 1.0);
+  gl_Position = vec4(position, 1.0);
 }
 `;
 
-function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
-  const ctnRef  = useRef(null);
-  const mouseRef = useRef({ x: 0.5, y: 0.5 });
+/* Convert "r, g, b" (0-255) string → array of hex color strings */
+function accentToColors(accentRGB) {
+  const [r, g, b] = (accentRGB || '29, 185, 84').split(',').map(Number);
+  const toHex = (rv, gv, bv) =>
+    '#' + [rv, gv, bv].map(v => Math.min(255, Math.max(0, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  return [
+    toHex(r, g, b),                                           // primary accent
+    toHex(b * 0.85, r * 0.3, g * 0.7),                       // complementary
+    toHex(r * 0.35, g * 0.18, b * 0.9),                      // deep cool shadow
+    toHex(r * 0.6, g * 0.5, b * 0.4),                        // warm mid
+  ];
+}
 
-  // Convert "r, g, b" string (0-255) to normalised [0..1] triplet
-  const color = (accentRGB || '29, 185, 84')
-    .split(',')
-    .map(s => Math.max(0.18, parseInt(s.trim(), 10) / 255));
+function ColorBendsBg({ accentRGB }) {
+  const containerRef        = useRef(null);
+  const rendererRef         = useRef(null);
+  const rafRef              = useRef(null);
+  const materialRef         = useRef(null);
+  const resizeObserverRef   = useRef(null);
+  const pointerTargetRef    = useRef(new THREE.Vector2(0, 0));
+  const pointerCurrentRef   = useRef(new THREE.Vector2(0, 0));
 
+  // Rebuild scene when accentRGB changes
   useEffect(() => {
-    const ctn = ctnRef.current;
-    if (!ctn) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    const renderer = new Renderer({ alpha: false });
-    const gl = renderer.gl;
-    gl.clearColor(0, 0, 0, 1);
+    const colors = accentToColors(accentRGB);
 
-    let program;
-    function resize() {
-      renderer.setSize(ctn.offsetWidth, ctn.offsetHeight);
-      if (program) {
-        program.uniforms.uResolution.value = new Color(
-          gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height
-        );
-      }
-    }
-    window.addEventListener('resize', resize);
-    resize();
+    const scene    = new THREE.Scene();
+    const camera   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const geometry = new THREE.PlaneGeometry(2, 2);
 
-    const geometry = new Triangle(gl);
-    program = new Program(gl, {
-      vertex: VERT,
-      fragment: FRAG,
+    const uColorsArray = Array.from({ length: MAX_COLORS }, () => new THREE.Vector3(0, 0, 0));
+    const toVec3 = hex => {
+      const h = hex.replace('#', '');
+      return new THREE.Vector3(
+        parseInt(h.slice(0,2),16)/255,
+        parseInt(h.slice(2,4),16)/255,
+        parseInt(h.slice(4,6),16)/255
+      );
+    };
+    const colorVecs = colors.slice(0, MAX_COLORS).map(toVec3);
+    colorVecs.forEach((v,i) => uColorsArray[i].copy(v));
+
+    const material = new THREE.ShaderMaterial({
+      vertexShader: CB_VERT,
+      fragmentShader: CB_FRAG,
       uniforms: {
-        uTime:       { value: 0 },
-        uColor:      { value: new Color(...color) },
-        uResolution: { value: new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height) },
-        uMouse:      { value: new Float32Array([0.5, 0.5]) },
-        uAmplitude:  { value: amplitude },
-        uSpeed:      { value: speed },
+        uCanvas:        { value: new THREE.Vector2(1, 1) },
+        uTime:          { value: 0 },
+        uSpeed:         { value: 0.16 },
+        uRot:           { value: new THREE.Vector2(1, 0) },
+        uColorCount:    { value: colorVecs.length },
+        uColors:        { value: uColorsArray },
+        uTransparent:   { value: 0 },
+        uScale:         { value: 1.1 },
+        uFrequency:     { value: 0.9 },
+        uWarpStrength:  { value: 1.3 },
+        uPointer:       { value: new THREE.Vector2(0, 0) },
+        uMouseInfluence:{ value: 0.55 },
+        uParallax:      { value: 0.4 },
+        uNoise:         { value: 0.05 },
       },
+      premultipliedAlpha: true,
+      transparent: false,
     });
+    materialRef.current = material;
 
-    const mesh = new Mesh(gl, { geometry, program });
-    let rafId;
-    function update(t) {
-      rafId = requestAnimationFrame(update);
-      program.uniforms.uTime.value = t * 0.001;
-      renderer.render({ scene: mesh });
-    }
-    rafId = requestAnimationFrame(update);
-    ctn.appendChild(gl.canvas);
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
 
-    function onMouseMove(e) {
-      const rect = ctn.getBoundingClientRect();
-      program.uniforms.uMouse.value[0] = (e.clientX - rect.left) / rect.width;
-      program.uniforms.uMouse.value[1] = 1 - (e.clientY - rect.top) / rect.height;
-    }
-    ctn.addEventListener('mousemove', onMouseMove);
+    const renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      powerPreference: 'high-performance',
+      alpha: false,
+    });
+    rendererRef.current = renderer;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 1);
+    renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    container.appendChild(renderer.domElement);
+
+    const handleResize = () => {
+      const w = container.clientWidth  || 1;
+      const h = container.clientHeight || 1;
+      renderer.setSize(w, h, false);
+      material.uniforms.uCanvas.value.set(w, h);
+    };
+    handleResize();
+
+    const ro = new ResizeObserver(handleResize);
+    ro.observe(container);
+    resizeObserverRef.current = ro;
+
+    const clock = new THREE.Clock();
+    const loop = () => {
+      const dt      = clock.getDelta();
+      const elapsed = clock.elapsedTime;
+      material.uniforms.uTime.value = elapsed;
+      // Slow gentle rotation
+      const rad = (elapsed * 3) * Math.PI / 180;
+      material.uniforms.uRot.value.set(Math.cos(rad), Math.sin(rad));
+      // Smooth pointer lerp
+      pointerCurrentRef.current.lerp(pointerTargetRef.current, Math.min(1, dt * 6));
+      material.uniforms.uPointer.value.copy(pointerCurrentRef.current);
+      renderer.render(scene, camera);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+
+    const onPointerMove = e => {
+      const rect = container.getBoundingClientRect();
+      pointerTargetRef.current.set(
+        ((e.clientX - rect.left)  / (rect.width  || 1)) * 2 - 1,
+        -(((e.clientY - rect.top) / (rect.height || 1)) * 2 - 1)
+      );
+    };
+    container.addEventListener('pointermove', onPointerMove);
 
     return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', resize);
-      ctn.removeEventListener('mousemove', onMouseMove);
-      if (ctn.contains(gl.canvas)) ctn.removeChild(gl.canvas);
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      cancelAnimationFrame(rafRef.current);
+      ro.disconnect();
+      container.removeEventListener('pointermove', onPointerMove);
+      geometry.dispose();
+      material.dispose();
+      renderer.dispose();
+      renderer.forceContextLoss();
+      if (renderer.domElement.parentElement === container) {
+        container.removeChild(renderer.domElement);
+      }
     };
-  }, [accentRGB, speed, amplitude]); // eslint-disable-line
+  }, [accentRGB]);
 
   return (
     <div
-      ref={ctnRef}
+      ref={containerRef}
       aria-hidden="true"
-      style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        overflow: 'hidden', pointerEvents: 'none',
-      }}
+      style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}
     />
   );
 }
@@ -675,74 +790,107 @@ const CSS = `
 .pc-vol-label { font-size: 11px; color: var(--pc-text-3); min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
 .pc-track-count { font-size: 11px; color: var(--pc-text-3); white-space: nowrap; }
 
-/* ════ DESKTOP EXPANDED — Apple-quality ════ */
-.pc-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
-.pc-exp-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.40); pointer-events: none; }
+/* ════ DESKTOP EXPANDED — full-screen lyrics, controls at bottom ════ */
+.pc-expanded {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.pc-exp-dark-overlay {
+  position: absolute; inset: 0; z-index: 1;
+  background: rgba(2,2,6,0.45); pointer-events: none;
+}
+
+/* Header: just the nav strip */
 .pc-exp-header {
   position: relative; z-index: 3;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 32px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-  background: rgba(0,0,0,0.18); backdrop-filter: blur(28px);
+  padding: 16px 28px;
+  background: rgba(0,0,0,0.12); backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
 }
-.pc-exp-header-title { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.4); font-weight: 600; }
+.pc-exp-header-title {
+  font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(255,255,255,0.38); font-weight: 600;
+}
 .pc-exp-header-btns { display: flex; align-items: center; gap: 6px; }
 
+/* Body: lyrics take everything between header and footer */
 .pc-exp-body {
   position: relative; z-index: 2;
-  display: flex; flex: 1; overflow: hidden;
-  padding: 44px 60px 36px; gap: 60px;
-  align-items: center;
+  display: flex; flex-direction: column; flex: 1;
+  overflow: hidden; min-height: 0;
 }
 
-/* Left: art + controls — fixed width */
-.pc-art-col { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; width: clamp(260px,30vw,360px); gap: 22px; }
-.pc-art-frame { position: relative; }
-.pc-art-glow { position: absolute; inset: -20px; border-radius: 32px; background: radial-gradient(circle, rgba(var(--pc-accent),0.42) 0%, transparent 70%); filter: blur(30px); transition: background 1.2s ease; animation: glowPulse 4s ease-in-out infinite; }
-@keyframes glowPulse { 0%,100%{opacity:0.62;transform:scale(1)} 50%{opacity:1;transform:scale(1.06)} }
-.pc-art-img { position: relative; display: block; width: clamp(240px,28vw,340px); height: clamp(240px,28vw,340px); border-radius: 22px; object-fit: cover; box-shadow: 0 44px 110px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.08); transition: transform 0.4s ease; }
-.pc-art-img:hover { transform: scale(1.015); }
-.pc-art-img.playing { animation: artFloat 7s ease-in-out infinite; }
-@keyframes artFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-.pc-exp-meta { text-align: center; width: 100%; }
-.pc-exp-song-name { font-family: 'Syne', sans-serif; font-size: clamp(18px,2.2vw,30px); font-weight: 800; letter-spacing: -0.03em; color: #fff; margin-bottom: 6px; line-height: 1.1; }
-.pc-exp-artist { font-size: 14px; color: rgba(255,255,255,0.48); }
-.pc-exp-progress { width: 100%; }
-.pc-exp-ctrl-row { display: flex; align-items: center; gap: 8px; }
-.pc-exp-ctrl-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 17px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, background 0.18s, transform 0.15s; position: relative; }
-.pc-exp-ctrl-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+/* Full-width transparent lyrics area */
+.pc-exp-lyrics-area {
+  flex: 1; min-height: 0; overflow: hidden; position: relative;
+  /* transparent — shader shows through */
+}
+
+/* Footer: controls bar pinned to bottom */
+.pc-exp-footer {
+  position: relative; z-index: 3; flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 16px 40px 24px;
+  background: rgba(0,0,0,0.22); backdrop-filter: blur(28px);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.pc-exp-footer-meta {
+  display: flex; align-items: center; gap: 16px; width: 100%; max-width: 640px;
+}
+.pc-exp-footer-thumb {
+  width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+}
+.pc-exp-footer-text { flex: 1; min-width: 0; }
+.pc-exp-footer-name {
+  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+  color: #fff; letter-spacing: -0.01em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
+}
+.pc-exp-footer-artist { font-size: 12px; color: rgba(255,255,255,0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-exp-footer-heart { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.3); font-size: 14px; padding: 6px; border-radius: 50%; transition: color 0.2s, transform 0.15s; flex-shrink: 0; }
+.pc-exp-footer-heart:hover { color: #FF4455; transform: scale(1.2); }
+.pc-exp-footer-heart.liked { color: #FF4455; }
+
+.pc-exp-progress { width: 100%; max-width: 640px; }
+.pc-exp-ctrl-row { display: flex; align-items: center; gap: 10px; }
+.pc-exp-ctrl-btn {
+  background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5);
+  font-size: 17px; width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.18s, background 0.18s, transform 0.15s; position: relative;
+}
+.pc-exp-ctrl-btn:hover  { color: #fff; background: rgba(255,255,255,0.08); }
 .pc-exp-ctrl-btn.active { color: var(--pc-green-bright); }
 .pc-exp-ctrl-btn:active { transform: scale(0.9); }
-.pc-exp-play-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 23px; box-shadow: 0 8px 36px rgba(0,0,0,0.45); transition: transform 0.2s, box-shadow 0.2s, background 0.2s; }
-.pc-exp-play-btn:hover { transform: scale(1.07); background: var(--pc-green-bright); box-shadow: 0 12px 48px rgba(29,185,84,0.45); }
+.pc-exp-play-btn {
+  width: 62px; height: 62px; border-radius: 50%; background: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: #000; font-size: 22px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45); transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.pc-exp-play-btn:hover  { transform: scale(1.07); background: var(--pc-green-bright); box-shadow: 0 12px 44px rgba(29,185,84,0.45); }
 .pc-exp-play-btn:active { transform: scale(0.95); }
-.pc-exp-bottom { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.pc-exp-footer-right { display: flex; align-items: center; gap: 8px; }
 
-/* Right: lyrics — fills remaining space, Apple-style */
-.pc-lyrics-col {
-  flex: 1; min-width: 0; min-height: 0;
-  display: flex; flex-direction: column;
-  height: 100%;
-  background: rgba(0,0,0,0.22);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 24px; overflow: hidden;
-  backdrop-filter: blur(24px);
-  animation: slideInRight 0.34s cubic-bezier(0.22,1,0.36,1);
+/* art/glow kept for mobile — unused in desktop expanded now but keep classes */
+.pc-art-frame { position: relative; }
+.pc-art-glow { position: absolute; inset: -20px; border-radius: 32px; background: radial-gradient(circle, rgba(var(--pc-accent),0.42) 0%, transparent 70%); filter: blur(30px); animation: glowPulse 4s ease-in-out infinite; }
+@keyframes glowPulse { 0%,100%{opacity:0.62;transform:scale(1)} 50%{opacity:1;transform:scale(1.06)} }
+.pc-art-img { position: relative; display: block; border-radius: 22px; object-fit: cover; }
+.pc-art-img.playing { animation: artFloat 7s ease-in-out infinite; }
+@keyframes artFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+
+/* Queue panel — floats as overlay on right when open */
+.pc-queue {
+  position: absolute; right: 24px; top: 0; bottom: 0; z-index: 5;
+  width: 300px; flex-shrink: 0;
+  background: rgba(8,8,14,0.82); border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 0; display: flex; flex-direction: column; overflow: hidden;
+  backdrop-filter: blur(32px);
+  animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1);
 }
-.pc-lyrics-col-header {
-  flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.pc-lyrics-col-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pc-green-bright); margin-bottom: 3px; }
-.pc-lyrics-col-song { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.01em; margin-bottom: 2px; }
-.pc-lyrics-col-artist { font-size: 12px; color: rgba(255,255,255,0.4); }
-.pc-lyrics-col-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
-
-@keyframes slideInRight { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
-
-/* Queue panel */
-.pc-queue { width: 300px; flex-shrink: 0; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(24px); animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1); }
 .pc-queue-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,0.07); font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; color: var(--pc-text-1); }
 .pc-queue-list { flex: 1; overflow-y: auto; padding: 8px; }
 .pc-queue-item { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
@@ -753,6 +901,8 @@ const CSS = `
 .pc-queue-name { font-size: 13px; font-weight: 600; color: var(--pc-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-queue-artist { font-size: 11px; color: var(--pc-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-queue-active-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pc-green); flex-shrink: 0; }
+
+@keyframes slideInRight { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
 
 /* Desktop compact lyrics drawer */
 .pc-lyrics-drawer { position: fixed; left: 0; right: 0; bottom: 73px; z-index: 39; height: 0; overflow: hidden; display: flex; flex-direction: column; background: rgba(6,6,10,0.96); backdrop-filter: blur(40px) saturate(180%); border-top: 1px solid rgba(255,255,255,0.08); box-shadow: 0 -8px 40px rgba(0,0,0,0.6); transition: height 0.42s cubic-bezier(0.22,1,0.36,1); }
@@ -898,73 +1048,82 @@ export default function PlayerControls() {
 
   const accent = `rgb(${accentRGB})`;
 
-  /* ── desktop expanded ── */
+  /* ── desktop expanded — full-screen lyrics, controls at bottom ── */
   const desktopExpanded = showBackgroundDetail && (
     <div className="pc-expanded pc-desktop-bar" style={accentStyle}>
-      <IridescenceBg accentRGB={accentRGB} />
+      <ColorBendsBg accentRGB={accentRGB} />
       <div className="pc-exp-dark-overlay" />
+
+      {/* Top nav strip */}
       <div className="pc-exp-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}>
           <FaChevronDown style={{ fontSize: 18 }} />
         </button>
         <span className="pc-exp-header-title">Now Playing</span>
         <div className="pc-exp-header-btns">
-          <button className={`pc-icon-btn pc-heart-btn ${liked ? 'liked' : ''}`} onClick={() => setLiked(l => !l)}><FaHeart /></button>
-          <button className="pc-icon-btn" style={{ color: showLyrics ? 'var(--pc-green-bright)' : undefined }} onClick={() => showLyrics ? setShowLyrics(false) : openLyrics()} title="Lyrics"><FaMusic /></button>
-          <button className="pc-icon-btn" style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }} onClick={() => showQueue ? setShowQueue(false) : openQueue()} title="Queue"><FaList /></button>
+          <button
+            className="pc-icon-btn"
+            style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }}
+            onClick={() => setShowQueue(q => !q)}
+            title="Queue"
+          ><FaList /></button>
           <button className="pc-icon-btn"><FaEllipsisH /></button>
         </div>
       </div>
+
+      {/* Body: full-width transparent lyrics */}
       <div className="pc-exp-body">
-        {/* Left: art + controls */}
-        <div className="pc-art-col">
-          <div className="pc-art-frame">
-            <div className="pc-art-glow" />
-            <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-art-img ${isPlaying ? 'playing' : ''}`} onError={e => { e.target.src = FALLBACK_COVER; }} />
-          </div>
-          <div className="pc-exp-meta">
-            <h2 className="pc-exp-song-name">{currentSong.name}</h2>
-            <p className="pc-exp-artist">{currentSong.artist}</p>
-          </div>
-          <div className="pc-exp-progress">
-            <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
-          </div>
-          <div className="pc-exp-ctrl-row">
-            <button className={`pc-exp-ctrl-btn ${shuffle ? 'active' : ''}`} onClick={toggleShuffle}><FaRandom /></button>
-            <button className="pc-exp-ctrl-btn" onClick={playPrev}><FaStepBackward style={{ fontSize: 22 }} /></button>
-            <button className="pc-exp-play-btn" onClick={togglePlay} style={{ position: 'relative' }}>
-              {isBuffering ? <div className="pc-buffer-ring" /> : isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 3 }} />}
-            </button>
-            <button className="pc-exp-ctrl-btn" onClick={playNext}><FaStepForward style={{ fontSize: 22 }} /></button>
-            <RepeatBtn mode={repeatMode} onToggle={toggleRepeatMode} />
-          </div>
-          <div className="pc-exp-bottom">
-            <VolumeSlider volume={volume} isMuted={isMuted} onVolume={setVolume} onMute={toggleMute} />
-            <span className="pc-track-count" style={{ marginLeft: 16 }}>{currentIndex + 1} / {songs.length}</span>
-          </div>
+        <div className="pc-exp-lyrics-area">
+          <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
         </div>
 
-        {/* Right: lyrics */}
-        {showLyrics && (
-          <div className="pc-lyrics-col">
-            <div className="pc-lyrics-col-header">
-              <div>
-                <div className="pc-lyrics-col-label">Lyrics</div>
-                <div className="pc-lyrics-col-song">{currentSong.name}</div>
-                <div className="pc-lyrics-col-artist">{currentSong.artist}</div>
-              </div>
-              <button onClick={() => setShowLyrics(false)} className="pc-icon-btn"><FaTimes /></button>
-            </div>
-            <div className="pc-lyrics-col-body">
-              <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
-            </div>
-          </div>
-        )}
-
-        {/* Right: queue */}
+        {/* Queue overlay panel */}
         {showQueue && (
-          <QueuePanel songs={songs} currentIndex={currentIndex} onSelect={setCurrentIndex} onClose={() => setShowQueue(false)} />
+          <QueuePanel
+            songs={songs}
+            currentIndex={currentIndex}
+            onSelect={setCurrentIndex}
+            onClose={() => setShowQueue(false)}
+          />
         )}
+      </div>
+
+      {/* Footer: mini thumb + song info + full controls */}
+      <div className="pc-exp-footer">
+        {/* Song identity row */}
+        <div className="pc-exp-footer-meta">
+          <img
+            src={currentSong.cover || FALLBACK_COVER}
+            alt={currentSong.name}
+            className="pc-exp-footer-thumb"
+            onError={e => { e.target.src = FALLBACK_COVER; }}
+          />
+          <div className="pc-exp-footer-text">
+            <div className="pc-exp-footer-name">{currentSong.name}</div>
+            <div className="pc-exp-footer-artist">{currentSong.artist}</div>
+          </div>
+          <button className={`pc-exp-footer-heart ${liked ? 'liked' : ''}`} onClick={() => setLiked(l => !l)}>
+            <FaHeart />
+          </button>
+          <VolumeSlider volume={volume} isMuted={isMuted} onVolume={setVolume} onMute={toggleMute} />
+          <span className="pc-track-count">{currentIndex + 1} / {songs.length}</span>
+        </div>
+
+        {/* Progress */}
+        <div className="pc-exp-progress">
+          <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
+        </div>
+
+        {/* Playback controls */}
+        <div className="pc-exp-ctrl-row">
+          <button className={`pc-exp-ctrl-btn ${shuffle ? 'active' : ''}`} onClick={toggleShuffle}><FaRandom /></button>
+          <button className="pc-exp-ctrl-btn" onClick={playPrev}><FaStepBackward style={{ fontSize: 22 }} /></button>
+          <button className="pc-exp-play-btn" onClick={togglePlay} style={{ position: 'relative' }}>
+            {isBuffering ? <div className="pc-buffer-ring" /> : isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 3 }} />}
+          </button>
+          <button className="pc-exp-ctrl-btn" onClick={playNext}><FaStepForward style={{ fontSize: 22 }} /></button>
+          <RepeatBtn mode={repeatMode} onToggle={toggleRepeatMode} />
+        </div>
       </div>
     </div>
   );
@@ -1052,7 +1211,7 @@ export default function PlayerControls() {
   /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
     <div className="pc-mob-expanded" style={accentStyle}>
-      <IridescenceBg accentRGB={accentRGB} />
+      <ColorBendsBg accentRGB={accentRGB} />
       <div className="pc-mob-dark-overlay" />
       <div className="pc-mob-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
@@ -1112,7 +1271,7 @@ export default function PlayerControls() {
   /* ── mobile fullscreen lyrics ── */
   const mobileLyricsFs = (
     <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
-      <IridescenceBg accentRGB={accentRGB} />
+      <ColorBendsBg accentRGB={accentRGB} />
       <div className="pc-mob-lyrics-dark" />
       <div className="pc-mob-lyrics-header">
         <div className="pc-mob-lyrics-header-info">
