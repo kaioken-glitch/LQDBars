@@ -99,9 +99,7 @@ function UpdatePopup({ onClose }) {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-/* ══════════════════════════════════════
-   ROOT & SHELL
-══════════════════════════════════════ */
+/* ══ ROOT ══ */
 .set-root {
   width: 100%; height: 100%; display: flex; flex-direction: column;
   --s-green:        #1DB954;
@@ -131,7 +129,6 @@ const CSS = `
   display: flex; flex-direction: column;
   overflow: hidden; position: relative;
 }
-
 .set-scroll {
   flex: 1; overflow-y: auto; position: relative; z-index: 1;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent;
@@ -139,106 +136,76 @@ const CSS = `
 .set-scroll::-webkit-scrollbar { width: 4px; }
 .set-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 3px; }
 
-/* ══════════════════════════════════════
-   SPOTIFY-STYLE PROFILE HERO
-   Full-bleed cover with avatar anchored
-   at the bottom-left — exactly like
-   Spotify's artist/profile pages.
-══════════════════════════════════════ */
-
-/* Hero banner — full bleed, tall */
+/* ══ HERO BANNER ══ */
 .set-hero-banner {
-  position: relative;
-  width: 100%;
-  height: 220px;
-  flex-shrink: 0;
-  overflow: hidden;
+  position: relative; width: 100%; height: 220px;
+  flex-shrink: 0; overflow: hidden;
   background: linear-gradient(135deg, #0d1a12 0%, #0a0c0f 100%);
 }
-/* Colour wash derived from accent */
 .set-hero-wash {
   position: absolute; inset: 0;
   background: linear-gradient(160deg,
-    rgba(29,185,84,0.38) 0%,
-    rgba(29,185,84,0.12) 40%,
-    rgba(0,0,0,0) 70%
-  );
-  transition: background 1.2s ease;
+    rgba(29,185,84,0.42) 0%,
+    rgba(29,185,84,0.14) 45%,
+    rgba(0,0,0,0) 72%);
 }
-/* Noise grain overlay */
 .set-hero-grain {
   position: absolute; inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
-  background-size: 180px;
-  mix-blend-mode: overlay;
-  pointer-events: none;
+  background-size: 180px; mix-blend-mode: overlay; pointer-events: none;
 }
-/* Bottom scrim so profile info stays legible */
 .set-hero-scrim {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 120px;
+  position: absolute; bottom: 0; left: 0; right: 0; height: 140px;
   background: linear-gradient(to top, rgba(8,8,10,1) 0%, transparent 100%);
   pointer-events: none;
 }
 
-/* Profile identity strip — sits below the banner, overlapping via negative margin */
+/* ══ PROFILE STRIP — avatar overlaps banner bottom ══ */
 .set-profile-strip {
-  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 20px;
-  padding: 0 28px 20px;
-  margin-top: -64px;
-  z-index: 2;
-  flex-shrink: 0;
+  padding: 0 28px 0;
+  margin-top: -72px;
+  position: relative; z-index: 2; flex-shrink: 0;
 }
-
-/* Avatar — large circle, Spotify-style */
 .set-avatar-wrap {
-  position: relative;
-  flex-shrink: 0;
-  width: 100px;
-  height: 100px;
+  position: relative; flex-shrink: 0; width: 110px; height: 110px;
 }
 .set-avatar {
-  width: 100px; height: 100px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: linear-gradient(135deg, rgba(29,185,84,0.25), rgba(35,224,101,0.1));
+  width: 110px; height: 110px; border-radius: 50%; overflow: hidden;
+  background: linear-gradient(135deg, rgba(29,185,84,0.25), rgba(35,224,101,0.08));
   border: 3px solid rgba(8,8,10,1);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
   display: flex; align-items: center; justify-content: center;
   transition: transform 0.3s var(--s-spring);
 }
 .set-avatar:hover { transform: scale(1.03); }
 .set-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.set-avatar-placeholder { color: rgba(255,255,255,0.18); font-size: 36px; }
+.set-avatar-placeholder { color: rgba(255,255,255,0.18); font-size: 38px; }
 .set-avatar-upload {
-  position: absolute; bottom: 2px; right: 2px;
+  position: absolute; bottom: 3px; right: 3px;
   width: 30px; height: 30px; border-radius: 50%;
-  background: var(--s-green);
+  background: var(--s-green); border: 2px solid rgba(8,8,10,1);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; border: 2px solid rgba(8,8,10,1);
-  box-shadow: 0 4px 14px rgba(29,185,84,0.5);
+  cursor: pointer; box-shadow: 0 4px 14px rgba(29,185,84,0.5);
   transition: transform 0.15s var(--s-spring), background 0.15s;
 }
 .set-avatar-upload:hover { transform: scale(1.14); background: var(--s-green-bright); }
 .set-avatar-upload input { display: none; }
 
-/* Name + meta beside avatar */
-.set-profile-meta { flex: 1; min-width: 0; padding-bottom: 4px; }
+/* Name block beside avatar */
+.set-profile-meta { flex: 1; min-width: 0; padding-bottom: 6px; }
 .set-profile-type {
   font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--s-green);
-  margin-bottom: 4px;
+  text-transform: uppercase; color: var(--s-green); margin-bottom: 4px;
 }
 .set-profile-name {
   font-family: 'Syne', sans-serif;
-  font-size: clamp(22px, 3.5vw, 36px);
-  font-weight: 800; letter-spacing: -0.04em;
-  color: #fff; line-height: 1.05;
+  font-size: clamp(24px, 3.5vw, 38px);
+  font-weight: 800; letter-spacing: -0.04em; color: #fff; line-height: 1.05;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 6px;
-  text-shadow: 0 2px 20px rgba(0,0,0,0.5);
+  margin-bottom: 5px; text-shadow: 0 2px 20px rgba(0,0,0,0.5);
 }
 .set-profile-email {
   font-size: 13px; color: var(--s-t2); margin-bottom: 10px;
@@ -253,16 +220,15 @@ const CSS = `
 .set-badge-premium { background: rgba(29,185,84,0.12); color: var(--s-green); border-color: rgba(29,185,84,0.25); }
 .set-badge-member  { background: var(--s-s1); color: var(--s-t3); border-color: var(--s-b1); }
 
-/* Action buttons beside hero */
+/* Save + sign out — flush right */
 .set-profile-actions {
   display: flex; gap: 8px; align-items: center;
-  flex-shrink: 0; padding-bottom: 6px;
+  flex-shrink: 0; padding-bottom: 8px;
 }
 .set-save-btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 10px 22px; border-radius: 9999px;
-  font-size: 13px; font-weight: 700;
-  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 700; font-family: 'DM Sans', sans-serif;
   cursor: pointer; transition: all 0.2s var(--s-spring);
 }
 .set-save-btn.unsaved {
@@ -285,43 +251,91 @@ const CSS = `
 .set-signout-btn:hover { background: rgba(255,68,102,0.16); }
 .set-signout-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* ══════════════════════════════════════
-   CONTENT AREA — tabs + cards
-══════════════════════════════════════ */
-.set-content { padding: 0 28px 40px; max-width: 760px; }
+/* ══ STATS ROW — followers/following placeholder ══ */
+.set-stats-row {
+  display: flex; align-items: center; gap: 32px;
+  padding: 16px 28px 0;
+}
+.set-stat { display: flex; flex-direction: column; gap: 1px; }
+.set-stat-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.03em;
+}
+.set-stat-label { font-size: 11px; color: var(--s-t3); font-weight: 500; }
+.set-stat-divider { width: 1px; height: 28px; background: var(--s-b1); flex-shrink: 0; }
 
-/* Tabs — pill strip, Apple style */
+/* ══ TABS ══ */
 .set-tabs {
   display: flex; gap: 2px;
   background: var(--s-s1); border: 1px solid var(--s-b1);
   border-radius: 14px; padding: 4px;
-  margin-bottom: 24px;
+  margin: 20px 28px 0;
   max-width: 340px;
 }
 .set-tab {
   flex: 1; padding: 10px 14px; border-radius: 10px;
-  font-size: 13px; font-weight: 600;
-  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
   cursor: pointer; transition: all 0.2s var(--s-ease);
-  color: var(--s-t3); background: none; border: none;
-  white-space: nowrap;
+  color: var(--s-t3); background: none; border: none; white-space: nowrap;
 }
 .set-tab:hover { color: var(--s-t2); }
 .set-tab.active { background: #fff; color: #000; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
 
-/* Version button */
-.set-version-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px; border-radius: 10px;
-  background: var(--s-s1); border: 1px solid var(--s-b1);
-  cursor: pointer; transition: background 0.15s, border-color 0.15s;
-  color: var(--s-t3); font-size: 11px; font-family: 'DM Sans', sans-serif;
-  margin-bottom: 24px;
-}
-.set-version-btn:hover { background: var(--s-s2); border-color: rgba(29,185,84,0.3); color: var(--s-green); }
-.set-version-dot { opacity: 0.4; }
+/* ══ CONTENT WRAPPER ══ */
+.set-content { padding: 20px 28px 100px; }
 
-/* ── Cards ── */
+/* ══ PROFILE TAB — playlist tiles ══ */
+.set-pl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.set-pl-tile {
+  border-radius: 14px; overflow: hidden;
+  background: var(--s-s1); border: 1px solid var(--s-b1);
+  cursor: pointer; transition: transform 0.2s var(--s-spring), border-color 0.2s;
+  position: relative;
+}
+.set-pl-tile:hover { transform: translateY(-3px); border-color: rgba(29,185,84,0.25); }
+.set-pl-mosaic {
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr; aspect-ratio: 1;
+  background: #111; gap: 1px;
+}
+.set-pl-mosaic img { width: 100%; height: 100%; object-fit: cover; }
+.set-pl-mosaic-single { aspect-ratio: 1; overflow: hidden; }
+.set-pl-mosaic-single img { width: 100%; height: 100%; object-fit: cover; }
+.set-pl-info { padding: 10px 12px 12px; }
+.set-pl-name {
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+  color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px;
+}
+.set-pl-count { font-size: 11px; color: var(--s-t3); }
+
+.set-section-head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+}
+.set-section-head h3 {
+  font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800;
+  color: #fff; letter-spacing: -0.02em;
+}
+.set-section-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--s-green); flex-shrink: 0;
+}
+.set-section-sub { font-size: 12px; color: var(--s-t3); margin-bottom: 16px; }
+
+/* Empty state */
+.set-empty-state {
+  background: var(--s-s1); border: 1px solid var(--s-b1);
+  border-radius: 16px; padding: 36px 24px; text-align: center;
+  margin-top: 12px;
+}
+.set-empty-icon { font-size: 28px; color: var(--s-t3); margin-bottom: 10px; }
+.set-empty-title { font-size: 14px; font-weight: 600; color: var(--s-t2); margin-bottom: 4px; }
+.set-empty-sub { font-size: 12px; color: var(--s-t3); }
+
+/* ══ CARD ══ */
 .set-card {
   background: var(--s-s1); border: 1px solid var(--s-b1);
   border-radius: 20px; overflow: hidden; margin-bottom: 12px;
@@ -335,8 +349,7 @@ const CSS = `
 .set-card-icon { font-size: 14px; }
 .set-card-title {
   font-family: 'Syne', sans-serif; font-weight: 700;
-  font-size: 12px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--s-t1);
+  font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--s-t1);
 }
 .set-card-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 .set-card.emerald .set-card-icon { color: var(--s-green); }
@@ -345,7 +358,7 @@ const CSS = `
 .set-card.red     .set-card-icon { color: var(--s-red); }
 .set-card.amber   .set-card-icon { color: var(--s-amber); }
 
-/* ── Form ── */
+/* ══ FORM ══ */
 .set-form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
 @media (min-width: 520px) {
   .set-form-grid { grid-template-columns: 1fr 1fr; }
@@ -353,8 +366,7 @@ const CSS = `
 }
 .set-field-label {
   display: block; font-size: 11px; font-weight: 600;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--s-t3); margin-bottom: 7px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--s-t3); margin-bottom: 7px;
 }
 .set-input {
   width: 100%; padding: 11px 14px;
@@ -368,7 +380,7 @@ const CSS = `
 .set-input[readonly] { opacity: 0.5; cursor: not-allowed; }
 .set-textarea { resize: none; }
 
-/* ── Toggle ── */
+/* ══ TOGGLE ══ */
 .set-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .set-toggle-text { flex: 1; min-width: 0; }
 .set-toggle-label { font-size: 14px; font-weight: 500; color: var(--s-t1); margin-bottom: 2px; }
@@ -388,7 +400,7 @@ const CSS = `
 }
 .set-switch.on .set-switch-thumb { transform: translateX(20px); }
 
-/* ── Slider ── */
+/* ══ SLIDER ══ */
 .set-slider-row { display: flex; flex-direction: column; gap: 10px; }
 .set-slider-top { display: flex; align-items: center; justify-content: space-between; }
 .set-slider-meta { display: flex; flex-direction: column; gap: 2px; }
@@ -400,7 +412,7 @@ const CSS = `
 .set-slider-thumb-dot { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid var(--s-green); box-shadow: 0 2px 8px rgba(0,0,0,0.35); pointer-events: none; }
 .set-slider-input { position: absolute; inset: -8px 0; width: 100%; opacity: 0; cursor: pointer; height: calc(100% + 16px); }
 
-/* ── Select ── */
+/* ══ SELECT ══ */
 .set-select-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .set-select {
   background: var(--s-s2); border: 1px solid var(--s-b1);
@@ -413,7 +425,7 @@ const CSS = `
 .set-select:focus { border-color: rgba(29,185,84,0.4); }
 .set-select option { background: #111315; }
 
-/* ── Number input ── */
+/* ══ NUMBER INPUT ══ */
 .set-num-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .set-num-controls { display: flex; align-items: center; gap: 8px; }
 .set-num-btn {
@@ -426,7 +438,7 @@ const CSS = `
 .set-num-btn:hover { background: var(--s-sh); }
 .set-num-val { font-size: 14px; font-weight: 600; color: var(--s-t1); font-variant-numeric: tabular-nums; min-width: 28px; text-align: center; }
 
-/* ── Info row ── */
+/* ══ INFO ROW ══ */
 .set-info-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px; background: rgba(255,255,255,0.025);
@@ -449,7 +461,7 @@ const CSS = `
 }
 .set-clear-btn:hover { background: rgba(255,68,102,0.16); }
 
-/* ── Action grid ── */
+/* ══ ACTIONS ══ */
 .set-actions-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .set-action-btn {
   display: flex; align-items: center; justify-content: center; gap: 7px;
@@ -465,7 +477,22 @@ const CSS = `
 .set-action-danger:hover { background: rgba(255,68,102,0.15); }
 .set-action-note { font-size: 12px; color: var(--s-t3); line-height: 1.5; margin-bottom: 6px; }
 
-/* ── Toast ── */
+/* ══ FLOATING VERSION BUTTON — bottom right ══ */
+.set-version-fab {
+  position: fixed; bottom: 90px; right: 20px; z-index: 50;
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border-radius: 9999px;
+  background: rgba(10,12,14,0.85); border: 1px solid var(--s-b2);
+  backdrop-filter: blur(20px);
+  cursor: pointer; color: var(--s-t3); font-size: 11px; font-family: 'DM Sans', sans-serif;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+.set-version-fab:hover { background: rgba(29,185,84,0.12); border-color: rgba(29,185,84,0.35); color: var(--s-green); }
+.set-version-dot { opacity: 0.35; }
+.set-version-new { color: var(--s-green); font-size: 10px; }
+
+/* ══ TOAST ══ */
 .set-toast {
   position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
   z-index: 200; padding: 11px 20px; border-radius: 9999px;
@@ -479,7 +506,7 @@ const CSS = `
 .set-toast.error   { background: rgba(255,68,102,0.12); border-color: rgba(255,68,102,0.25); color: #FCA5A5; }
 @keyframes setToastIn { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
 
-/* ─── Update popup ─── */
+/* ══ UPDATE POPUP ══ */
 .sup-overlay {
   position: fixed; inset: 0; z-index: 300;
   background: rgba(0,0,0,0.72); backdrop-filter: blur(18px);
@@ -488,10 +515,8 @@ const CSS = `
 }
 @keyframes supFadeIn { from{opacity:0} to{opacity:1} }
 .sup-box {
-  width: min(480px, 94vw);
-  background: #0C0E10;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 24px; overflow: hidden;
+  width: min(480px, 94vw); background: #0C0E10;
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; overflow: hidden;
   box-shadow: 0 40px 100px rgba(0,0,0,0.85);
   animation: supScaleIn 0.3s cubic-bezier(0.22,1,0.36,1) both;
   max-height: 85vh; display: flex; flex-direction: column;
@@ -520,6 +545,30 @@ const CSS = `
 .sup-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .sup-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.55; }
 .sup-bullet { width: 5px; height: 5px; border-radius: 50%; background: #1DB954; flex-shrink: 0; margin-top: 6px; }
+
+/* ══ MOBILE RESPONSIVE ══ */
+@media (max-width: 600px) {
+  .set-hero-banner { height: 160px; }
+  .set-profile-strip {
+    flex-wrap: wrap; gap: 12px;
+    padding: 0 16px 0; margin-top: -56px;
+  }
+  .set-avatar-wrap { width: 88px; height: 88px; }
+  .set-avatar { width: 88px; height: 88px; }
+  .set-avatar-placeholder { font-size: 30px; }
+  .set-profile-meta { min-width: 0; width: 100%; padding-bottom: 0; }
+  .set-profile-name { font-size: 24px; }
+  .set-profile-actions {
+    width: 100%; justify-content: flex-start;
+    padding: 0 16px 0; flex-wrap: wrap;
+  }
+  .set-stats-row { padding: 12px 16px 0; gap: 20px; }
+  .set-tabs { margin: 16px 16px 0; }
+  .set-content { padding: 16px 16px 100px; }
+  .set-pl-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  .set-version-fab { bottom: 80px; right: 14px; }
+  .set-actions-grid { grid-template-columns: 1fr 1fr; }
+}
 `;
 
 /* ─── primitives ────────────────────────────────────────────────── */
@@ -632,6 +681,7 @@ export default function Settings() {
 
   /* ── Auth ── */
   const { user, profile: authProfile, signOut } = useAuth();
+  const { playlists } = usePlaylists();
   const [signingOut, setSigningOut] = useState(false);
 
   /* profile */
@@ -799,19 +849,29 @@ export default function Settings() {
       {/* Update popup */}
       {showUpdate && <UpdatePopup onClose={() => setShowUpdate(false)} />}
 
+      {/* Floating version FAB — visible on all tabs */}
+      <button
+        className="set-version-fab"
+        onClick={() => setShowUpdate(true)}
+        title="View release notes"
+      >
+        <span>v{VERSION}</span>
+        <span className="set-version-dot">·</span>
+        <span className="set-version-new">What's new</span>
+      </button>
+
       <div className="set-shell">
         <div className="set-scroll">
 
-          {/* ══ SPOTIFY-STYLE PROFILE HERO ══ */}
+          {/* ══ HERO BANNER ══ */}
           <div className="set-hero-banner">
             <div className="set-hero-wash" />
             <div className="set-hero-grain" />
             <div className="set-hero-scrim" />
           </div>
 
-          {/* Profile strip — avatar + name + actions */}
+          {/* ══ PROFILE STRIP ══ */}
           <div className="set-profile-strip">
-            {/* Avatar */}
             <div className="set-avatar-wrap">
               <div className="set-avatar">
                 {avatar
@@ -824,11 +884,8 @@ export default function Settings() {
               </label>
             </div>
 
-            {/* Name + badges */}
             <div className="set-profile-meta">
-              <p className="set-profile-type">
-                {user ? 'Listener' : 'Local Mode'}
-              </p>
+              <p className="set-profile-type">{user ? 'Listener' : 'Local Mode'}</p>
               <h1 className="set-profile-name">{name || 'Music Lover'}</h1>
               <p className="set-profile-email">{user?.email || email || 'No email set'}</p>
               <div className="set-profile-badges">
@@ -847,7 +904,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Save + sign out */}
             <div className="set-profile-actions">
               <button onClick={saveProfile} className={`set-save-btn ${saved ? 'saved' : 'unsaved'}`}>
                 {saved ? <FaCheckCircle /> : <FaSave />}
@@ -862,66 +918,121 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* ══ CONTENT: version btn + tabs + panels ══ */}
+          {/* ══ STATS ROW — followers/following (placeholder for future social) ══ */}
+          <div className="set-stats-row">
+            <div className="set-stat">
+              <span className="set-stat-num">{playlists.filter(p => !p._hidden).length}</span>
+              <span className="set-stat-label">Playlists</span>
+            </div>
+            <div className="set-stat-divider" />
+            <div className="set-stat">
+              <span className="set-stat-num">0</span>
+              <span className="set-stat-label">Following</span>
+            </div>
+            <div className="set-stat-divider" />
+            <div className="set-stat">
+              <span className="set-stat-num">0</span>
+              <span className="set-stat-label">Followers</span>
+            </div>
+          </div>
+
+          {/* ══ TABS ══ */}
+          <div className="set-tabs">
+            {tabs.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`set-tab ${tab === t.key ? 'active' : ''}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ══ TAB CONTENT ══ */}
           <div className="set-content">
 
-            {/* Version button */}
-            <button
-              className="set-version-btn"
-              onClick={() => setShowUpdate(true)}
-              title="View release notes"
-            >
-              <span>v{VERSION}</span>
-              <span className="set-version-dot">·</span>
-              <span style={{ color: '#1DB954', fontSize: 10 }}>What&apos;s new</span>
-            </button>
-
-            {/* Tabs */}
-            <div className="set-tabs">
-              {tabs.map(t => (
-                <button key={t.key} onClick={() => setTab(t.key)} className={`set-tab ${tab === t.key ? 'active' : ''}`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Profile tab ── */}
+            {/* ── Profile tab: playlists grid + edit info ── */}
             {tab === 'profile' && (
               <div>
-                <Card title="Personal Information" icon={<FaUser />} accent="emerald">
-                  <div className="set-form-grid">
-                    <div>
-                      <label className="set-field-label">Display Name</label>
-                      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" className="set-input" />
-                    </div>
-                    <div>
-                      <label className="set-field-label">
-                        Email {user && <span style={{ color: 'var(--s-t3)', fontWeight: 400, fontSize: 10, letterSpacing: 0, textTransform: 'none' }}>— managed by provider</span>}
-                      </label>
-                      <input
-                        type="email"
-                        value={user?.email || email}
-                        onChange={e => !user && setEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        className="set-input"
-                        readOnly={!!user}
-                        title={user ? 'Email is managed by your sign-in provider' : ''}
-                      />
-                    </div>
-                    <div>
-                      <label className="set-field-label">Phone</label>
-                      <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 234 567 8900" className="set-input" />
-                    </div>
-                    <div>
-                      <label className="set-field-label">Location</label>
-                      <input value={location} onChange={e => setLocation(e.target.value)} placeholder="City, Country" className="set-input" />
-                    </div>
-                    <div className="set-span-2">
-                      <label className="set-field-label">Bio</label>
-                      <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Tell us about yourself…" className="set-input set-textarea" />
-                    </div>
+                {/* Playlists made by user */}
+                <div className="set-section-head">
+                  <span className="set-section-dot" />
+                  <h3>Your Playlists</h3>
+                </div>
+                <p className="set-section-sub">Playlists you've created</p>
+
+                {playlists.filter(p => !p._hidden).length === 0 ? (
+                  <div className="set-empty-state">
+                    <div className="set-empty-icon">🎵</div>
+                    <p className="set-empty-title">No playlists yet</p>
+                    <p className="set-empty-sub">Head to Playlists to create your first one</p>
                   </div>
-                </Card>
+                ) : (
+                  <div className="set-pl-grid">
+                    {playlists.filter(p => !p._hidden).map(pl => {
+                      const covers = (pl.songs || []).slice(0, 4).map(s => s.cover).filter(Boolean);
+                      return (
+                        <div key={pl.id} className="set-pl-tile">
+                          {covers.length >= 4 ? (
+                            <div className="set-pl-mosaic">
+                              {covers.map((c, i) => <img key={i} src={c} alt="" onError={e => { e.target.src = '/default-cover.png'; }} />)}
+                            </div>
+                          ) : (
+                            <div className="set-pl-mosaic-single">
+                              <img src={covers[0] || '/default-cover.png'} alt="" onError={e => { e.target.src = '/default-cover.png'; }} />
+                            </div>
+                          )}
+                          <div className="set-pl-info">
+                            <p className="set-pl-name">{pl.name}</p>
+                            <p className="set-pl-count">{(pl.songs || []).length} songs</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Personal info — separate card below playlists */}
+                <div style={{ marginTop: 32 }}>
+                  <div className="set-section-head">
+                    <span className="set-section-dot" />
+                    <h3>Personal Information</h3>
+                  </div>
+                  <p className="set-section-sub">Edit your profile details</p>
+
+                  <Card title="Account Details" icon={<FaUser />} accent="emerald">
+                    <div className="set-form-grid">
+                      <div>
+                        <label className="set-field-label">Display Name</label>
+                        <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" className="set-input" />
+                      </div>
+                      <div>
+                        <label className="set-field-label">
+                          Email {user && <span style={{ color: 'var(--s-t3)', fontWeight: 400, fontSize: 10, letterSpacing: 0, textTransform: 'none' }}>— managed by provider</span>}
+                        </label>
+                        <input
+                          type="email"
+                          value={user?.email || email}
+                          onChange={e => !user && setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          className="set-input"
+                          readOnly={!!user}
+                          title={user ? 'Email is managed by your sign-in provider' : ''}
+                        />
+                      </div>
+                      <div>
+                        <label className="set-field-label">Phone</label>
+                        <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 234 567 8900" className="set-input" />
+                      </div>
+                      <div>
+                        <label className="set-field-label">Location</label>
+                        <input value={location} onChange={e => setLocation(e.target.value)} placeholder="City, Country" className="set-input" />
+                      </div>
+                      <div className="set-span-2">
+                        <label className="set-field-label">Bio</label>
+                        <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Tell us about yourself…" className="set-input set-textarea" />
+                      </div>
+                    </div>
+                  </Card>
+                </div>
               </div>
             )}
 
