@@ -4,6 +4,7 @@ import {
   FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute,
   FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic,
 } from 'react-icons/fa';
+import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
 import { usePlayer } from '../context/PlayerContext';
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -89,35 +90,120 @@ function useLyrics(currentSong, currentTime) {
   return { lines, plainLyrics, activeLine, status };
 }
 
-/* ─── Lava Lamp Background ───────────────────────────────────────── */
-function LavaLampBg({ accentRGB, intensity = 1 }) {
-  const r = accentRGB || '29, 185, 84';
-  const parts = r.split(',').map(s => parseInt(s.trim(), 10));
-  const [pr, pg, pb] = parts;
-  // Derive complementary + tertiary blob colors from accent
-  const comp = `${Math.round(pb * 0.9)}, ${Math.round(pr * 0.35)}, ${Math.round(pg * 0.65)}`;
-  const mid  = `${Math.round((pr * 0.5 + pb * 0.5))}, ${Math.round(pg * 0.25)}, ${Math.round(pb * 0.8)}`;
+/* ─── Iridescence WebGL Background ──────────────────────────────── */
+const VERT = `
+attribute vec2 uv;
+attribute vec2 position;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position, 0, 1);
+}
+`;
+const FRAG = `
+precision highp float;
+uniform float uTime;
+uniform vec3 uColor;
+uniform vec3 uResolution;
+uniform vec2 uMouse;
+uniform float uAmplitude;
+uniform float uSpeed;
+varying vec2 vUv;
+void main() {
+  float mr = min(uResolution.x, uResolution.y);
+  vec2 uv = (vUv.xy * 2.0 - 1.0) * uResolution.xy / mr;
+  uv += (uMouse - vec2(0.5)) * uAmplitude;
+  float d = -uTime * 0.5 * uSpeed;
+  float a = 0.0;
+  for (float i = 0.0; i < 8.0; ++i) {
+    a += cos(i - d - a * uv.x);
+    d += sin(uv.y * i + a);
+  }
+  d += uTime * 0.5 * uSpeed;
+  vec3 col = vec3(cos(uv * vec2(d, a)) * 0.6 + 0.4, cos(a + d) * 0.5 + 0.5);
+  col = cos(col * cos(vec3(d, a, 2.5)) * 0.5 + 0.5) * uColor;
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
+  const ctnRef  = useRef(null);
+  const mouseRef = useRef({ x: 0.5, y: 0.5 });
+
+  // Convert "r, g, b" string (0-255) to normalised [0..1] triplet
+  const color = (accentRGB || '29, 185, 84')
+    .split(',')
+    .map(s => Math.max(0.18, parseInt(s.trim(), 10) / 255));
+
+  useEffect(() => {
+    const ctn = ctnRef.current;
+    if (!ctn) return;
+
+    const renderer = new Renderer({ alpha: false });
+    const gl = renderer.gl;
+    gl.clearColor(0, 0, 0, 1);
+
+    let program;
+    function resize() {
+      renderer.setSize(ctn.offsetWidth, ctn.offsetHeight);
+      if (program) {
+        program.uniforms.uResolution.value = new Color(
+          gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height
+        );
+      }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const geometry = new Triangle(gl);
+    program = new Program(gl, {
+      vertex: VERT,
+      fragment: FRAG,
+      uniforms: {
+        uTime:       { value: 0 },
+        uColor:      { value: new Color(...color) },
+        uResolution: { value: new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height) },
+        uMouse:      { value: new Float32Array([0.5, 0.5]) },
+        uAmplitude:  { value: amplitude },
+        uSpeed:      { value: speed },
+      },
+    });
+
+    const mesh = new Mesh(gl, { geometry, program });
+    let rafId;
+    function update(t) {
+      rafId = requestAnimationFrame(update);
+      program.uniforms.uTime.value = t * 0.001;
+      renderer.render({ scene: mesh });
+    }
+    rafId = requestAnimationFrame(update);
+    ctn.appendChild(gl.canvas);
+
+    function onMouseMove(e) {
+      const rect = ctn.getBoundingClientRect();
+      program.uniforms.uMouse.value[0] = (e.clientX - rect.left) / rect.width;
+      program.uniforms.uMouse.value[1] = 1 - (e.clientY - rect.top) / rect.height;
+    }
+    ctn.addEventListener('mousemove', onMouseMove);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', resize);
+      ctn.removeEventListener('mousemove', onMouseMove);
+      if (ctn.contains(gl.canvas)) ctn.removeChild(gl.canvas);
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    };
+  }, [accentRGB, speed, amplitude]); // eslint-disable-line
 
   return (
-    <div className="llamp-root" aria-hidden="true">
-      <div className="llamp-base" style={{
-        background: `radial-gradient(ellipse at 50% 100%, rgba(${r},0.15) 0%, #020204 65%)`
-      }} />
-      <div className="llamp-blob llamp-b1" style={{
-        background: `radial-gradient(circle, rgba(${r},${(0.58 * intensity).toFixed(2)}) 0%, transparent 70%)`
-      }} />
-      <div className="llamp-blob llamp-b2" style={{
-        background: `radial-gradient(circle, rgba(${comp},${(0.48 * intensity).toFixed(2)}) 0%, transparent 70%)`
-      }} />
-      <div className="llamp-blob llamp-b3" style={{
-        background: `radial-gradient(circle, rgba(${mid},${(0.38 * intensity).toFixed(2)}) 0%, transparent 65%)`
-      }} />
-      <div className="llamp-blob llamp-b4" style={{
-        background: `radial-gradient(circle, rgba(${r},${(0.28 * intensity).toFixed(2)}) 0%, transparent 60%)`
-      }} />
-      <div className="llamp-grain" />
-      <div className="llamp-scrim" />
-    </div>
+    <div
+      ref={ctnRef}
+      aria-hidden="true"
+      style={{
+        position: 'absolute', inset: 0, zIndex: 0,
+        overflow: 'hidden', pointerEvents: 'none',
+      }}
+    />
   );
 }
 
@@ -470,58 +556,8 @@ const CSS = `
   to   { background-position:   0% 0; }
 }
 
-/* ════ LAVA LAMP ════ */
-.llamp-root {
-  position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none;
-}
-.llamp-base { position: absolute; inset: 0; transition: background 2s ease; }
-.llamp-blob {
-  position: absolute; border-radius: 50%;
-  filter: blur(90px); will-change: transform;
-  transition: background 2.5s ease;
-}
-.llamp-b1 { width: 75%; height: 75%; top: -20%; left: -15%; animation: blob1 20s ease-in-out infinite alternate; }
-.llamp-b2 { width: 65%; height: 65%; bottom: -15%; right: -15%; animation: blob2 26s ease-in-out infinite alternate; }
-.llamp-b3 { width: 50%; height: 50%; top: 20%; left: 28%; animation: blob3 17s ease-in-out infinite alternate; }
-.llamp-b4 { width: 38%; height: 38%; top: -8%; right: 8%; animation: blob4 30s ease-in-out infinite alternate; }
-
-@keyframes blob1 {
-  0%   { transform: translate(0,0) scale(1); }
-  25%  { transform: translate(6%,14%) scale(1.07); }
-  50%  { transform: translate(12%,6%) scale(0.94); }
-  75%  { transform: translate(-4%,18%) scale(1.1); }
-  100% { transform: translate(16%,10%) scale(1.04); }
-}
-@keyframes blob2 {
-  0%   { transform: translate(0,0) scale(1); }
-  33%  { transform: translate(-12%,-10%) scale(1.12); }
-  66%  { transform: translate(6%,-18%) scale(0.90); }
-  100% { transform: translate(-18%,-6%) scale(1.08); }
-}
-@keyframes blob3 {
-  0%   { transform: translate(0,0) scale(1); }
-  20%  { transform: translate(-18%,12%) scale(1.18); }
-  40%  { transform: translate(22%,-8%) scale(0.86); }
-  60%  { transform: translate(-10%,-18%) scale(1.08); }
-  80%  { transform: translate(14%,10%) scale(0.92); }
-  100% { transform: translate(-6%,20%) scale(1.14); }
-}
-@keyframes blob4 {
-  0%   { transform: translate(0,0) scale(1); }
-  50%  { transform: translate(-22%,28%) scale(1.22); }
-  100% { transform: translate(12%,16%) scale(0.82); }
-}
-
-.llamp-grain {
-  position: absolute; inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.048'/%3E%3C/svg%3E");
-  background-size: 180px; mix-blend-mode: overlay; opacity: 0.65;
-}
-/* The key: heavy dark scrim keeps contrast high while blobs stay visible as color */
-.llamp-scrim {
-  position: absolute; inset: 0;
-  background: rgba(3,3,7,0.56);
-}
+/* Iridescence canvas fills the container div absolutely via JS — no extra CSS needed */
+/* Dark scrim overlays are handled by .pc-exp-dark-overlay / .pc-mob-dark-overlay / .pc-mob-lyrics-dark */
 
 /* ════ LYRICS PANEL ════ */
 .lp-root {
@@ -641,7 +677,6 @@ const CSS = `
 
 /* ════ DESKTOP EXPANDED — Apple-quality ════ */
 .pc-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
-.pc-expanded > .llamp-root { z-index: 0; }
 .pc-exp-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.40); pointer-events: none; }
 .pc-exp-header {
   position: relative; z-index: 3;
@@ -745,7 +780,6 @@ const CSS = `
 
 /* ════ MOBILE EXPANDED ════ */
 .pc-mob-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
-.pc-mob-expanded > .llamp-root { z-index: 0; }
 .pc-mob-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.44); pointer-events: none; }
 .pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
 .pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.38); }
@@ -778,7 +812,6 @@ const CSS = `
   transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
 }
 .pc-mob-lyrics-fs.open { transform: translateY(0); }
-.pc-mob-lyrics-fs > .llamp-root { z-index: 0; }
 .pc-mob-lyrics-dark { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,5,0.50); pointer-events: none; }
 
 .pc-mob-lyrics-header {
@@ -868,7 +901,7 @@ export default function PlayerControls() {
   /* ── desktop expanded ── */
   const desktopExpanded = showBackgroundDetail && (
     <div className="pc-expanded pc-desktop-bar" style={accentStyle}>
-      <LavaLampBg accentRGB={accentRGB} intensity={0.88} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-exp-dark-overlay" />
       <div className="pc-exp-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}>
@@ -1019,7 +1052,7 @@ export default function PlayerControls() {
   /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
     <div className="pc-mob-expanded" style={accentStyle}>
-      <LavaLampBg accentRGB={accentRGB} intensity={0.82} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-mob-dark-overlay" />
       <div className="pc-mob-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
@@ -1079,7 +1112,7 @@ export default function PlayerControls() {
   /* ── mobile fullscreen lyrics ── */
   const mobileLyricsFs = (
     <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
-      <LavaLampBg accentRGB={accentRGB} intensity={1.0} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-mob-lyrics-dark" />
       <div className="pc-mob-lyrics-header">
         <div className="pc-mob-lyrics-header-info">
