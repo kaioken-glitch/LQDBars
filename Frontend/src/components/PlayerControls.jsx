@@ -4,7 +4,7 @@ import {
   FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute,
   FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic,
 } from 'react-icons/fa';
-import * as THREE from 'three';
+import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
 import { usePlayer } from '../context/PlayerContext';
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -90,238 +90,122 @@ function useLyrics(currentSong, currentTime) {
   return { lines, plainLyrics, activeLine, status };
 }
 
-/* ─── ColorBends WebGL Background ───────────────────────────────── */
-const MAX_COLORS = 8;
-const CB_FRAG = `
-#define MAX_COLORS ${MAX_COLORS}
-uniform vec2 uCanvas;
-uniform float uTime;
-uniform float uSpeed;
-uniform vec2 uRot;
-uniform int uColorCount;
-uniform vec3 uColors[MAX_COLORS];
-uniform int uTransparent;
-uniform float uScale;
-uniform float uFrequency;
-uniform float uWarpStrength;
-uniform vec2 uPointer;
-uniform float uMouseInfluence;
-uniform float uParallax;
-uniform float uNoise;
-varying vec2 vUv;
-void main() {
-  float t = uTime * uSpeed;
-  vec2 p = vUv * 2.0 - 1.0;
-  p += uPointer * uParallax * 0.1;
-  vec2 rp = vec2(p.x * uRot.x - p.y * uRot.y, p.x * uRot.y + p.y * uRot.x);
-  vec2 q = vec2(rp.x * (uCanvas.x / uCanvas.y), rp.y);
-  q /= max(uScale, 0.0001);
-  q /= 0.5 + 0.2 * dot(q, q);
-  q += 0.2 * cos(t) - 7.56;
-  vec2 toward = (uPointer - rp);
-  q += toward * uMouseInfluence * 0.2;
-  vec3 col = vec3(0.0);
-  float a = 1.0;
-  if (uColorCount > 0) {
-    vec2 s = q;
-    vec3 sumCol = vec3(0.0);
-    float cover = 0.0;
-    for (int i = 0; i < MAX_COLORS; ++i) {
-      if (i >= uColorCount) break;
-      s -= 0.01;
-      vec2 r = sin(1.5 * (s.yx * uFrequency) + 2.0 * cos(s * uFrequency));
-      float m0 = length(r + sin(5.0 * r.y * uFrequency - 3.0 * t + float(i)) / 4.0);
-      float kBelow = clamp(uWarpStrength, 0.0, 1.0);
-      float kMix = pow(kBelow, 0.3);
-      float gain = 1.0 + max(uWarpStrength - 1.0, 0.0);
-      vec2 disp = (r - s) * kBelow;
-      vec2 warped = s + disp * gain;
-      float m1 = length(warped + sin(5.0 * warped.y * uFrequency - 3.0 * t + float(i)) / 4.0);
-      float m = mix(m0, m1, kMix);
-      float w = 1.0 - exp(-6.0 / exp(6.0 * m));
-      sumCol += uColors[i] * w;
-      cover = max(cover, w);
-    }
-    col = clamp(sumCol, 0.0, 1.0);
-    a = uTransparent > 0 ? cover : 1.0;
-  } else {
-    vec2 s = q;
-    for (int k = 0; k < 3; ++k) {
-      s -= 0.01;
-      vec2 r = sin(1.5 * (s.yx * uFrequency) + 2.0 * cos(s * uFrequency));
-      float m0 = length(r + sin(5.0 * r.y * uFrequency - 3.0 * t + float(k)) / 4.0);
-      float kBelow = clamp(uWarpStrength, 0.0, 1.0);
-      float kMix = pow(kBelow, 0.3);
-      float gain = 1.0 + max(uWarpStrength - 1.0, 0.0);
-      vec2 disp = (r - s) * kBelow;
-      vec2 warped = s + disp * gain;
-      float m1 = length(warped + sin(5.0 * warped.y * uFrequency - 3.0 * t + float(k)) / 4.0);
-      float m = mix(m0, m1, kMix);
-      col[k] = 1.0 - exp(-6.0 / exp(6.0 * m));
-    }
-    a = uTransparent > 0 ? max(max(col.r, col.g), col.b) : 1.0;
-  }
-  if (uNoise > 0.0001) {
-    float n = fract(sin(dot(gl_FragCoord.xy + vec2(uTime), vec2(12.9898, 78.233))) * 43758.5453123);
-    col += (n - 0.5) * uNoise;
-    col = clamp(col, 0.0, 1.0);
-  }
-  vec3 rgb = (uTransparent > 0) ? col * a : col;
-  gl_FragColor = vec4(rgb, a);
-}
-`;
-const CB_VERT = `
+/* ─── Iridescence WebGL Background ──────────────────────────────── */
+const VERT = `
+attribute vec2 uv;
+attribute vec2 position;
 varying vec2 vUv;
 void main() {
   vUv = uv;
-  gl_Position = vec4(position, 1.0);
+  gl_Position = vec4(position, 0, 1);
+}
+`;
+const FRAG = `
+precision highp float;
+uniform float uTime;
+uniform vec3 uColor;
+uniform vec3 uResolution;
+uniform vec2 uMouse;
+uniform float uAmplitude;
+uniform float uSpeed;
+varying vec2 vUv;
+void main() {
+  float mr = min(uResolution.x, uResolution.y);
+  vec2 uv = (vUv.xy * 2.0 - 1.0) * uResolution.xy / mr;
+  uv += (uMouse - vec2(0.5)) * uAmplitude;
+  float d = -uTime * 0.5 * uSpeed;
+  float a = 0.0;
+  for (float i = 0.0; i < 8.0; ++i) {
+    a += cos(i - d - a * uv.x);
+    d += sin(uv.y * i + a);
+  }
+  d += uTime * 0.5 * uSpeed;
+  vec3 col = vec3(cos(uv * vec2(d, a)) * 0.6 + 0.4, cos(a + d) * 0.5 + 0.5);
+  col = cos(col * cos(vec3(d, a, 2.5)) * 0.5 + 0.5) * uColor;
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
-/* Convert "r, g, b" (0-255) string → array of hex color strings */
-function accentToColors(accentRGB) {
-  const [r, g, b] = (accentRGB || '29, 185, 84').split(',').map(Number);
-  const toHex = (rv, gv, bv) =>
-    '#' + [rv, gv, bv].map(v => Math.min(255, Math.max(0, Math.round(v))).toString(16).padStart(2, '0')).join('');
-  return [
-    toHex(r, g, b),                                           // primary accent
-    toHex(b * 0.85, r * 0.3, g * 0.7),                       // complementary
-    toHex(r * 0.35, g * 0.18, b * 0.9),                      // deep cool shadow
-    toHex(r * 0.6, g * 0.5, b * 0.4),                        // warm mid
-  ];
-}
+function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
+  const ctnRef  = useRef(null);
+  const mouseRef = useRef({ x: 0.5, y: 0.5 });
 
-function ColorBendsBg({ accentRGB }) {
-  const containerRef        = useRef(null);
-  const rendererRef         = useRef(null);
-  const rafRef              = useRef(null);
-  const materialRef         = useRef(null);
-  const resizeObserverRef   = useRef(null);
-  const pointerTargetRef    = useRef(new THREE.Vector2(0, 0));
-  const pointerCurrentRef   = useRef(new THREE.Vector2(0, 0));
+  // Convert "r, g, b" string (0-255) to normalised [0..1] triplet
+  const color = (accentRGB || '29, 185, 84')
+    .split(',')
+    .map(s => Math.max(0.18, parseInt(s.trim(), 10) / 255));
 
-  // Rebuild scene when accentRGB changes
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const ctn = ctnRef.current;
+    if (!ctn) return;
 
-    const colors = accentToColors(accentRGB);
+    const renderer = new Renderer({ alpha: false });
+    const gl = renderer.gl;
+    gl.clearColor(0, 0, 0, 1);
 
-    const scene    = new THREE.Scene();
-    const camera   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const geometry = new THREE.PlaneGeometry(2, 2);
+    let program;
+    function resize() {
+      renderer.setSize(ctn.offsetWidth, ctn.offsetHeight);
+      if (program) {
+        program.uniforms.uResolution.value = new Color(
+          gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height
+        );
+      }
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-    const uColorsArray = Array.from({ length: MAX_COLORS }, () => new THREE.Vector3(0, 0, 0));
-    const toVec3 = hex => {
-      const h = hex.replace('#', '');
-      return new THREE.Vector3(
-        parseInt(h.slice(0,2),16)/255,
-        parseInt(h.slice(2,4),16)/255,
-        parseInt(h.slice(4,6),16)/255
-      );
-    };
-    const colorVecs = colors.slice(0, MAX_COLORS).map(toVec3);
-    colorVecs.forEach((v,i) => uColorsArray[i].copy(v));
-
-    const material = new THREE.ShaderMaterial({
-      vertexShader: CB_VERT,
-      fragmentShader: CB_FRAG,
+    const geometry = new Triangle(gl);
+    program = new Program(gl, {
+      vertex: VERT,
+      fragment: FRAG,
       uniforms: {
-        uCanvas:        { value: new THREE.Vector2(1, 1) },
-        uTime:          { value: 0 },
-        uSpeed:         { value: 0.16 },
-        uRot:           { value: new THREE.Vector2(1, 0) },
-        uColorCount:    { value: colorVecs.length },
-        uColors:        { value: uColorsArray },
-        uTransparent:   { value: 0 },
-        uScale:         { value: 1.1 },
-        uFrequency:     { value: 0.9 },
-        uWarpStrength:  { value: 1.3 },
-        uPointer:       { value: new THREE.Vector2(0, 0) },
-        uMouseInfluence:{ value: 0.55 },
-        uParallax:      { value: 0.4 },
-        uNoise:         { value: 0.05 },
+        uTime:       { value: 0 },
+        uColor:      { value: new Color(...color) },
+        uResolution: { value: new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height) },
+        uMouse:      { value: new Float32Array([0.5, 0.5]) },
+        uAmplitude:  { value: amplitude },
+        uSpeed:      { value: speed },
       },
-      premultipliedAlpha: true,
-      transparent: false,
     });
-    materialRef.current = material;
 
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
+    const mesh = new Mesh(gl, { geometry, program });
+    let rafId;
+    function update(t) {
+      rafId = requestAnimationFrame(update);
+      program.uniforms.uTime.value = t * 0.001;
+      renderer.render({ scene: mesh });
+    }
+    rafId = requestAnimationFrame(update);
+    ctn.appendChild(gl.canvas);
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: false,
-      powerPreference: 'high-performance',
-      alpha: false,
-    });
-    rendererRef.current = renderer;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x000000, 1);
-    renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
-    container.appendChild(renderer.domElement);
-
-    const handleResize = () => {
-      const w = container.clientWidth  || 1;
-      const h = container.clientHeight || 1;
-      renderer.setSize(w, h, false);
-      material.uniforms.uCanvas.value.set(w, h);
-    };
-    handleResize();
-
-    const ro = new ResizeObserver(handleResize);
-    ro.observe(container);
-    resizeObserverRef.current = ro;
-
-    const clock = new THREE.Clock();
-    const loop = () => {
-      const dt      = clock.getDelta();
-      const elapsed = clock.elapsedTime;
-      material.uniforms.uTime.value = elapsed;
-      // Slow gentle rotation
-      const rad = (elapsed * 3) * Math.PI / 180;
-      material.uniforms.uRot.value.set(Math.cos(rad), Math.sin(rad));
-      // Smooth pointer lerp
-      pointerCurrentRef.current.lerp(pointerTargetRef.current, Math.min(1, dt * 6));
-      material.uniforms.uPointer.value.copy(pointerCurrentRef.current);
-      renderer.render(scene, camera);
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-
-    const onPointerMove = e => {
-      const rect = container.getBoundingClientRect();
-      pointerTargetRef.current.set(
-        ((e.clientX - rect.left)  / (rect.width  || 1)) * 2 - 1,
-        -(((e.clientY - rect.top) / (rect.height || 1)) * 2 - 1)
-      );
-    };
-    container.addEventListener('pointermove', onPointerMove);
+    function onMouseMove(e) {
+      const rect = ctn.getBoundingClientRect();
+      program.uniforms.uMouse.value[0] = (e.clientX - rect.left) / rect.width;
+      program.uniforms.uMouse.value[1] = 1 - (e.clientY - rect.top) / rect.height;
+    }
+    ctn.addEventListener('mousemove', onMouseMove);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      ro.disconnect();
-      container.removeEventListener('pointermove', onPointerMove);
-      geometry.dispose();
-      material.dispose();
-      renderer.dispose();
-      renderer.forceContextLoss();
-      if (renderer.domElement.parentElement === container) {
-        container.removeChild(renderer.domElement);
-      }
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', resize);
+      ctn.removeEventListener('mousemove', onMouseMove);
+      if (ctn.contains(gl.canvas)) ctn.removeChild(gl.canvas);
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
     };
-  }, [accentRGB]);
+  }, [accentRGB, speed, amplitude]); // eslint-disable-line
 
   return (
     <div
-      ref={containerRef}
+      ref={ctnRef}
       aria-hidden="true"
-      style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}
+      style={{
+        position: 'absolute', inset: 0, zIndex: 0,
+        overflow: 'hidden', pointerEvents: 'none',
+      }}
     />
   );
 }
-
 /* ─── Shimmer ────────────────────────────────────────────────────── */
 const WIDTHS = ['68%','52%','78%','44%','72%','58%','82%','48%','65%','74%'];
 function LpShimmer() {
@@ -1051,7 +935,7 @@ export default function PlayerControls() {
   /* ── desktop expanded — full-screen lyrics, controls at bottom ── */
   const desktopExpanded = showBackgroundDetail && (
     <div className="pc-expanded pc-desktop-bar" style={accentStyle}>
-      <ColorBendsBg accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-exp-dark-overlay" />
 
       {/* Top nav strip */}
@@ -1211,7 +1095,7 @@ export default function PlayerControls() {
   /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
     <div className="pc-mob-expanded" style={accentStyle}>
-      <ColorBendsBg accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-mob-dark-overlay" />
       <div className="pc-mob-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
@@ -1271,7 +1155,7 @@ export default function PlayerControls() {
   /* ── mobile fullscreen lyrics ── */
   const mobileLyricsFs = (
     <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
-      <ColorBendsBg accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-mob-lyrics-dark" />
       <div className="pc-mob-lyrics-header">
         <div className="pc-mob-lyrics-header-info">
