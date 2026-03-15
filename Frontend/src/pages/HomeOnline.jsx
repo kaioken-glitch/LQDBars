@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import { motion, useMotionValue, useSpring } from 'motion/react';
 import { usePlaylists, LIBRARY_PLAYLIST_ID } from '../hooks/usePlaylists';
 import { useToast } from '../components/Toast';
 import {
@@ -423,98 +424,124 @@ const STYLES = `
   }
   .ho-shelf::-webkit-scrollbar { display: none; }
 
-  /* ── Song card ── */
-  .ho-scard {
+  /* ── TiltedCard ── */
+  .ho-tcard {
     flex-shrink: 0;
-    width: 155px;
+    width: 160px;
+    height: 186px;           /* image 160 + name pill ~26 */
     cursor: pointer;
-    border-radius: 14px;
-    overflow: hidden;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
-    transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
-                border-color 0.22s, box-shadow 0.22s;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    perspective: 800px;
+    border: none;
+    background: none;
   }
-  .ho-scard:hover {
-    transform: translateY(-3px) scale(1.02);
-    border-color: rgba(29,185,84,0.25);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 0 0 rgba(29,185,84,0.1);
-  }
-  .ho-scard-cover {
+  .ho-tcard-inner {
     position: relative;
-    width: 100%;
-    padding-top: 100%;
+    width: 160px;
+    height: 160px;
+    transform-style: preserve-3d;
+    border-radius: 15px;
     overflow: hidden;
-    border-radius: 10px 10px 0 0;
   }
-  .ho-scard-cover img {
+  .ho-tcard-img {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
     object-fit: cover;
-    transition: transform 0.35s ease;
+    border-radius: 15px;
+    display: block;
+    will-change: transform;
   }
-  .ho-scard:hover .ho-scard-cover img { transform: scale(1.04); }
-  .ho-scard-overlay {
+  /* Overlay content floats above image in Z */
+  .ho-tcard-overlay-content {
     position: absolute; inset: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 55%);
-    opacity: 0;
-    transition: opacity 0.22s;
+    border-radius: 15px;
+    pointer-events: none;
   }
-  .ho-scard:hover .ho-scard-overlay { opacity: 1; }
-  .ho-scard-play {
+  /* Badge top-left */
+  .ho-tcard-badge-wrap {
+    position: absolute; top: 8px; left: 8px; z-index: 2;
+  }
+  /* Song name pill pinned at bottom */
+  .ho-tcard-name-pill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 28px 10px 10px;
+    background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, transparent 100%);
+    border-radius: 0 0 15px 15px;
+  }
+  .ho-tcard-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px; font-weight: 700;
+    color: rgba(255,255,255,0.92);
+    display: block;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ho-tcard-name.active { color: var(--lb-green); }
+
+  /* Wave badge */
+  .ho-now-playing-badge {
+    position: absolute; bottom: 10px; left: 10px;
+    background: rgba(0,0,0,0.72); backdrop-filter: blur(8px);
+    border-radius: 6px; padding: 3px 7px; z-index: 2;
+  }
+  .ho-tcard-wave { bottom: 36px !important; }
+
+  /* Play button — slides up on hover */
+  .ho-tcard-play-wrap {
     position: absolute;
     bottom: 10px; right: 10px;
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    background: var(--lb-green);
-    border: none;
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; transform: translateY(6px) scale(0.9);
-    transition: opacity 0.2s, transform 0.2s, background 0.15s, box-shadow 0.2s;
-    cursor: pointer; z-index: 2;
-    box-shadow: 0 6px 20px rgba(29,185,84,0.45);
+    z-index: 4;
+    opacity: 0;
+    transform: translateY(6px) scale(0.88);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
   }
-  .ho-scard:hover .ho-scard-play {
+  .ho-tcard:hover .ho-tcard-play-wrap,
+  .ho-tcard:focus-within .ho-tcard-play-wrap {
     opacity: 1;
     transform: translateY(0) scale(1);
+    pointer-events: auto;
   }
-  .ho-scard-play:hover {
-    background: var(--lb-green-bright);
-    box-shadow: 0 8px 28px rgba(29,185,84,0.65);
-    transform: scale(1.1) !important;
+  .ho-tcard-play {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    transition: background 0.15s, transform 0.15s;
   }
-  .ho-scard-info {
-    padding: 10px 12px 12px;
-  }
-  .ho-scard-name {
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    color: #fff;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-bottom: 2px;
-  }
-  .ho-scard-artist {
-    font-size: 11px;
-    color: rgba(255,255,255,0.42);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ho-scard-name.active { color: var(--lb-green); }
+  .ho-tcard-play:hover  { background: var(--lb-green-bright); transform: scale(1.1); }
+  .ho-tcard-play:active { transform: scale(0.92); }
+  .ho-tcard-play.loading { background: rgba(255,255,255,0.7); cursor: wait; }
 
-  /* Active playing indicator */
-  .ho-now-playing-badge {
+  /* Tooltip */
+  .ho-tcard-tooltip {
+    pointer-events: none;
     position: absolute;
-    bottom: 10px; left: 10px;
-    background: rgba(0,0,0,0.72);
+    left: 0; top: 0;
+    background: rgba(255,255,255,0.92);
     backdrop-filter: blur(8px);
-    border-radius: 6px;
-    padding: 3px 7px;
-    z-index: 2;
+    border-radius: 5px;
+    padding: 4px 10px;
+    font-size: 11px; font-weight: 600;
+    color: #1a1a1a;
+    white-space: nowrap;
+    z-index: 10;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    opacity: 0;
+    display: none;
+  }
+  @media (min-width: 640px) { .ho-tcard-tooltip { display: block; } }
+
+  /* Artist name below card */
+  .ho-tcard-artist-row {
+    width: 160px; margin-top: 8px;
+    font-size: 11px; color: rgba(255,255,255,0.4);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-align: left;
+    font-family: 'DM Sans', sans-serif;
   }
 
   /* Badge pills */
@@ -580,8 +607,9 @@ const STYLES = `
   /* ── Shimmer cards ── */
   .ho-shimmer-card {
     flex-shrink: 0;
-    width: 155px;
-    border-radius: 14px;
+    width: 160px;
+    height: 186px;
+    border-radius: 15px;
     overflow: hidden;
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.06);
@@ -733,47 +761,127 @@ const SpinIcon = () => (
   </svg>
 );
 
-/* Song card — horizontal shelf tile */
+/* ─── TiltedCard — 3D hover card ─────────────────────────────────── */
+const SPRING = { damping: 30, stiffness: 100, mass: 2 };
+
+function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlaying, isLoading, badge }) {
+  const ref        = useRef(null);
+  const x          = useMotionValue(0);
+  const y          = useMotionValue(0);
+  const rotateX    = useSpring(useMotionValue(0), SPRING);
+  const rotateY    = useSpring(useMotionValue(0), SPRING);
+  const scale      = useSpring(1, SPRING);
+  const opacity    = useSpring(0);
+  const rotateFig  = useSpring(0, { stiffness: 350, damping: 30, mass: 1 });
+  const [lastY, setLastY] = useState(0);
+  const showPause = isActive && isPlaying && !isLoading;
+
+  function handleMouse(e) {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const ox = e.clientX - rect.left - rect.width  / 2;
+    const oy = e.clientY - rect.top  - rect.height / 2;
+    rotateX.set((oy / (rect.height / 2)) * -12);
+    rotateY.set((ox / (rect.width  / 2)) *  12);
+    x.set(e.clientX - rect.left);
+    y.set(e.clientY - rect.top);
+    rotateFig.set(-(oy - lastY) * 0.6);
+    setLastY(oy);
+  }
+  function handleEnter() { scale.set(1.05); opacity.set(1); }
+  function handleLeave() {
+    opacity.set(0); scale.set(1);
+    rotateX.set(0); rotateY.set(0); rotateFig.set(0);
+  }
+
+  return (
+    <figure
+      ref={ref}
+      className="ho-tcard ho-fadeup"
+      onMouseMove={handleMouse}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onClick={e => { e.stopPropagation(); if (!isLoading) onPlay(); }}
+    >
+      <motion.div
+        className="ho-tcard-inner"
+        style={{ rotateX, rotateY, scale }}
+      >
+        {/* Cover image */}
+        <motion.img
+          src={imageSrc}
+          alt={altText}
+          className="ho-tcard-img"
+          onError={e => { e.target.src = `https://placehold.co/300x300/1a1a1a/333?text=${encodeURIComponent((altText||'?')[0])}`; }}
+          style={{ transform: 'translateZ(0)' }}
+        />
+
+        {/* Overlay: song name floats above */}
+        <motion.div
+          className="ho-tcard-overlay-content"
+          style={{ transform: 'translateZ(30px)' }}
+        >
+          {/* Badge top-left */}
+          {badge && (
+            <div className="ho-tcard-badge-wrap">
+              <span className={badge==='HOT' ? 'ho-badge-hot' : badge==='NEW' ? 'ho-badge-new' : undefined}
+                style={!['HOT','NEW'].includes(badge) ? {fontSize:14} : undefined}>
+                {badge}
+              </span>
+            </div>
+          )}
+
+          {/* Active wave bottom-left */}
+          {isActive && isPlaying && !isLoading && (
+            <div className="ho-now-playing-badge ho-tcard-wave"><WaveIcon /></div>
+          )}
+
+          {/* Song name pill — always visible at bottom */}
+          <div className="ho-tcard-name-pill">
+            <span className={`ho-tcard-name${isActive ? ' active' : ''}`}>{altText}</span>
+          </div>
+        </motion.div>
+
+        {/* Play/pause button — shows on hover via CSS */}
+        <div className="ho-tcard-play-wrap">
+          <button
+            className={`ho-tcard-play${isLoading ? ' loading' : ''}`}
+            onClick={e => { e.stopPropagation(); if (!isLoading) onPlay(); }}
+            aria-label={`Play ${altText}`}
+            disabled={isLoading}
+          >
+            {isLoading  ? <SpinIcon /> :
+             showPause  ? <FaPause  style={{ color:'#000', fontSize:14 }} /> :
+                          <FaPlay   style={{ color:'#000', fontSize:14, marginLeft:2 }} />}
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Tooltip caption that follows cursor */}
+      <motion.figcaption
+        className="ho-tcard-tooltip"
+        style={{ x, y, opacity, rotate: rotateFig }}
+      >
+        {captionText}
+      </motion.figcaption>
+    </figure>
+  );
+}
+
+/* Song card — wraps TiltedCard with item data */
 const SongCard = memo(({ item, isActive, isPlaying, onPlay, loadingId }) => {
   const isLoading = loadingId === item.id;
-  const showPause = isActive && isPlaying && !isLoading;
   return (
-    <div className="ho-scard ho-fadeup">
-      <div className="ho-scard-cover">
-        <img
-          src={item.cover}
-          alt={item.name}
-          loading="lazy"
-          onError={e => { e.target.src = `https://placehold.co/300x300/1a1a1a/333?text=${encodeURIComponent(item.name[0]||'?')}`; }}
-        />
-        <div className="ho-scard-overlay" />
-        {item.badge && (
-          <div style={{ position:'absolute', top:8, left:8, zIndex:2 }}>
-            <span className={item.badge==='HOT' ? 'ho-badge-hot' : item.badge==='NEW' ? 'ho-badge-new' : undefined}
-              style={!['HOT','NEW'].includes(item.badge) ? {fontSize:14} : undefined}>
-              {item.badge}
-            </span>
-          </div>
-        )}
-        {isActive && isPlaying && !isLoading && (
-          <div className="ho-now-playing-badge"><WaveIcon /></div>
-        )}
-        <button
-          className="ho-scard-play"
-          onClick={e => { e.stopPropagation(); if (!isLoading) onPlay(); }}
-          aria-label={`Play ${item.name}`}
-          disabled={isLoading}
-        >
-          {isLoading  ? <SpinIcon /> :
-           showPause  ? <FaPause  style={{ color:'#fff', fontSize:12 }} /> :
-                        <FaPlay   style={{ color:'#fff', fontSize:12, marginLeft:2 }} />}
-        </button>
-      </div>
-      <div className="ho-scard-info">
-        <p className={`ho-scard-name${isActive?' active':''}`}>{item.name}</p>
-        <p className="ho-scard-artist">{item.artist}</p>
-      </div>
-    </div>
+    <TiltedCard
+      imageSrc={item.cover}
+      altText={item.name}
+      captionText={`${item.name} · ${item.artist}`}
+      onPlay={onPlay}
+      isActive={isActive}
+      isPlaying={isPlaying}
+      isLoading={isLoading}
+      badge={item.badge}
+    />
   );
 });
 
@@ -782,10 +890,9 @@ const ShimmerShelf = ({ count = 6 }) => (
   <div className="ho-shelf">
     {Array.from({ length: count }).map((_, i) => (
       <div key={i} className="ho-shimmer-card">
-        <div className="ho-shimmer" style={{ paddingTop:'100%' }} />
-        <div style={{ padding:'10px 12px 14px', background:'rgba(255,255,255,0.04)' }}>
-          <div className="ho-shimmer" style={{ height:12, width:'70%', borderRadius:6, marginBottom:7 }} />
-          <div className="ho-shimmer" style={{ height:10, width:'45%', borderRadius:6 }} />
+        <div className="ho-shimmer" style={{ height:160, borderRadius:15 }} />
+        <div style={{ padding:'8px 0 0', background:'transparent' }}>
+          <div className="ho-shimmer" style={{ height:11, width:'80%', borderRadius:6 }} />
         </div>
       </div>
     ))}
