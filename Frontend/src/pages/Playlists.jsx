@@ -233,36 +233,54 @@ const CSS = `
 .pl-yt-import-btn:hover:not(:disabled) { background: #cc0000; transform: translateY(-1px); }
 .pl-yt-import-btn:active { transform: scale(.97); }
 .pl-yt-import-btn:disabled { opacity: .45; cursor: not-allowed; }
-.pl-modal { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; animation: plFadeIn .28s var(--spring) both; }
-.pl-modal-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 50% at 20% -10%, rgba(29,185,84,.22) 0%, transparent 60%), linear-gradient(180deg, rgba(4,28,16,.95) 0%, #07080A 50%); }
-.pl-modal-grain { position: absolute; inset: 0; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-size: 200px; opacity: .022; mix-blend-mode: screen; }
-.pl-modal-bar { position: relative; z-index: 2; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-bottom: 1px solid var(--b1); background: rgba(0,0,0,.22); backdrop-filter: blur(24px); }
-.pl-modal-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
-.pl-modal-btn:hover { background: var(--sh); }
-.pl-modal-btn:active { transform: scale(.9); }
-.pl-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 24px 24px 16px; }
-@media(min-width:560px) { .pl-hero { flex-direction: row; align-items: flex-end; padding: 28px 32px 20px; } }
-.pl-hero-art { position: relative; flex-shrink: 0; width: 148px; height: 148px; border-radius: 20px; overflow: hidden; box-shadow: 0 28px 64px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
-@media(min-width:560px) { .pl-hero-art { width: 185px; height: 185px; } }
-.pl-hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.pl-hero-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg, rgba(29,185,84,.18), rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
-.pl-hero-glow { position: absolute; inset: -14px; border-radius: 30px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(14px); animation: heroGlowPL 3.5s ease-in-out infinite; }
-@keyframes heroGlowPL { 0%,100%{opacity:.7;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
-.pl-hero-info { flex: 1; min-width: 0; }
-.pl-hero-tag { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--g); margin-bottom: 9px; }
-.pl-hero-tag-bar { width: 3px; height: 18px; border-radius: 2px; background: var(--g); }
-.pl-hero-title { font-family: 'Syne', sans-serif; font-size: clamp(26px,4.5vw,50px); font-weight: 800; letter-spacing: -.04em; color: var(--t1); line-height: 1.04; margin-bottom: 5px; }
-.pl-hero-count { font-size: 12px; color: var(--t3); margin-bottom: 22px; }
-.pl-hero-actions { display: flex; align-items: center; gap: 12px; }
-.pl-hero-play { width: 56px; height: 56px; border-radius: 50%; background: var(--g); color: #000; font-size: 19px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 28px rgba(29,185,84,.45); transition: transform .18s var(--spring), background .15s; }
-.pl-hero-play:hover { background: var(--g2); transform: scale(1.09); }
-.pl-hero-play:active { transform: scale(.93); }
-.pl-hero-shuffle { width: 42px; height: 42px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t2); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
-.pl-hero-shuffle:hover { background: var(--sh); color: var(--t1); }
-.pl-tracks { position: relative; z-index: 2; flex: 1; overflow-y: auto; padding: 0 22px 36px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
+/* ══ DETAIL VIEW ══ */
+.pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; animation: plFadeIn .3s var(--ease) both; }
+
+/* Blurred album art as full background */
+.pl-detail-bg { position: absolute; inset: -60px; z-index: 0; filter: blur(70px) saturate(1.5) brightness(0.3); background-size: cover; background-position: center; transform: scale(1.15); transition: background-image .6s ease; }
+.pl-detail-bg-scrim { position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgba(5,7,9,.52) 0%, rgba(5,7,9,.75) 38%, rgba(5,7,9,.97) 100%); }
+
+/* Frosted nav */
+.pl-detail-nav { position: relative; z-index: 3; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: rgba(0,0,0,.2); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,.06); }
+.pl-detail-nav-title { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.38); }
+.pl-detail-nav-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.pl-detail-nav-btn:hover { background: rgba(255,255,255,.14); }
+.pl-detail-nav-btn:active { transform: scale(.9); }
+
+/* Two-column hero on wide viewports */
+.pl-detail-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 28px 18px; }
+@media (min-width: 560px) { .pl-detail-hero { flex-direction: row; align-items: flex-end; padding: 32px 36px 22px; } }
+
+/* Art */
+.pl-detail-art-wrap { position: relative; flex-shrink: 0; width: 160px; height: 160px; }
+@media (min-width: 560px) { .pl-detail-art-wrap { width: 200px; height: 200px; } }
+.pl-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(18px); animation: plGlow 3.5s ease-in-out infinite; }
+@keyframes plGlow { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.07)} }
+.pl-detail-art { position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 20px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.08); }
+.pl-detail-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl-detail-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg,rgba(29,185,84,.18),rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
+
+/* Meta */
+.pl-detail-meta { flex: 1; min-width: 0; }
+.pl-detail-tag { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--g); margin-bottom: 10px; }
+.pl-detail-tag-bar { width: 3px; height: 16px; border-radius: 2px; background: var(--g); }
+.pl-detail-name { font-family: 'Syne', sans-serif; font-size: clamp(26px,4.5vw,52px); font-weight: 800; letter-spacing: -.04em; color: #fff; line-height: 1.04; margin-bottom: 5px; }
+.pl-detail-count { font-size: 12px; color: var(--t3); margin-bottom: 22px; }
+.pl-detail-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pl-detail-play { display: flex; align-items: center; gap: 9px; padding: 13px 28px; border-radius: 9999px; background: var(--g); color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 6px 28px rgba(29,185,84,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; }
+.pl-detail-play:hover { background: var(--g2); transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 36px rgba(29,185,84,.52); }
+.pl-detail-play:active { transform: scale(.96); }
+.pl-detail-icon-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.14); color: var(--t2); font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, transform .15s; }
+.pl-detail-icon-btn:hover { background: rgba(255,255,255,.16); color: #fff; transform: scale(1.06); }
+
+/* Divider */
+.pl-detail-divider { position: relative; z-index: 2; height: 1px; background: rgba(255,255,255,.07); margin: 0 28px 2px; flex-shrink: 0; }
+
+/* Track list */
+.pl-tracks { position: relative; z-index: 2; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-tracks::-webkit-scrollbar { width: 4px; }
 .pl-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
-.pl-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 0 12px 14px; }
+.pl-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 14px 12px 12px; }
 .pl-track-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .14s, border-color .14s; }
 .pl-track-row:hover { background: var(--s2); border-color: var(--b1); }
 .pl-track-row.active { background: rgba(29,185,84,.09); border-color: rgba(29,185,84,.2); }
@@ -585,7 +603,7 @@ const PlaylistDotsMenu = memo(({ playlist }) => {
 
   return (
     <div className="pl-dots-wrap" ref={ref}>
-      <button className="pl-modal-btn" onClick={() => setOpen(o => !o)} aria-label="More options">
+      <button className="pl-detail-nav-btn" onClick={() => setOpen(o => !o)} aria-label="More options">
         <FontAwesomeIcon icon={faEllipsisH} />
       </button>
       {open && (
@@ -643,13 +661,16 @@ export default function Playlists() {
   const [showCreate,   setShowCreate]   = useState(false);
   const [showYTImport, setShowYTImport] = useState(false);
   const [selected,     setSelected]     = useState(null);
-  const fileInputRef = useRef(null);
+  const fileInputRef    = useRef(null);
+  const playlistsRef    = useRef(playlists);
+  useEffect(() => { playlistsRef.current = playlists; }, [playlists]);
 
   // Keep selected in sync when hook updates playlists (e.g. song removed from elsewhere)
   useEffect(() => {
     if (!selected) return;
     const fresh = playlists.find(p => p.id === selected.id);
-    if (fresh) setSelected(fresh);
+    if (fresh) setSelected({ ...fresh }); // spread to force re-render
+    else setSelected(null);               // playlist was deleted elsewhere
   }, [playlists]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
@@ -715,7 +736,8 @@ export default function Playlists() {
     }));
     const newPl = { id: `pl_${Date.now()}`, name: `Local Import (${songs.length} tracks)`, songs, source: 'local', createdAt: Date.now() };
     // Read current list fresh from localStorage so we never prepend to stale state
-    const current = loadPL();
+    // Use playlistsRef so we always have the latest list — avoids stale-closure races
+    const current = playlistsRef.current;
     notifyPlaylistHook([newPl, ...current]);
     e.target.value = '';
   }, []);
@@ -724,7 +746,7 @@ export default function Playlists() {
   const handleYTImport = useCallback((name, songs) => {
     const newPl = { id: `pl_${Date.now()}`, name, songs, source: 'youtube', createdAt: Date.now() };
     // Read current list fresh from localStorage so we never prepend to stale state
-    const current = loadPL();
+    const current = playlistsRef.current;
     notifyPlaylistHook([newPl, ...current]);
   }, []);
 
@@ -743,7 +765,7 @@ export default function Playlists() {
             <div className="pl-title-block">
               <div className="pl-eyebrow"><span className="pl-eyebrow-dot" /> Your Music</div>
               <h1 className="pl-title">Playlists</h1>
-              <p className="pl-subtitle">{playlists.length} playlist{playlists.length !== 1 ? 's' : ''}</p>
+              <p className="pl-subtitle">{filtered.length} playlist{filtered.length !== 1 ? 's' : ''}</p>
             </div>
             <div className="pl-header-actions">
               <div className="pl-search-wrap">
@@ -783,102 +805,127 @@ export default function Playlists() {
       {showCreate   && <CreateModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
       {showYTImport && <YouTubeImportModal onClose={() => setShowYTImport(false)} onImport={handleYTImport} />}
 
-      {selected && (
-        <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
-          <div className="pl-modal">
-            <div className="pl-modal-bg" />
-            <div className="pl-modal-grain" />
-            <div className="pl-modal-bar">
-              <button className="pl-modal-btn" onClick={() => setSelected(null)}>
-                <FontAwesomeIcon icon={faChevronLeft} />
-              </button>
-              <PlaylistDotsMenu playlist={selected} />
-            </div>
-            <div className="pl-hero">
-              <div className="pl-hero-art">
-                <div className="pl-hero-glow" />
-                {selected.songs?.length > 0
-                  ? <img src={selected.songs[0]?.cover || FB} alt={selected.name} onError={e => { e.target.src = FB; }} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  : <div className="pl-hero-art-empty"><FaListUl /></div>
-                }
+      {selected && (() => {
+        const bgSrc = selected.songs?.find(s => s.cover)?.cover || '';
+        const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
+        return (
+          <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+            <div className="pl-detail">
+
+              {/* Blurred art background */}
+              <div className="pl-detail-bg"
+                style={{ backgroundImage: bgSrc ? `url(${bgSrc})` : 'none', backgroundColor: '#040c06' }}
+              />
+              <div className="pl-detail-bg-scrim" />
+
+              {/* Nav bar */}
+              <div className="pl-detail-nav">
+                <button className="pl-detail-nav-btn" onClick={() => setSelected(null)}>
+                  <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
+                </button>
+                <span className="pl-detail-nav-title">Playlist</span>
+                <PlaylistDotsMenu playlist={selected} />
               </div>
-              <div className="pl-hero-info">
-                <div className="pl-hero-tag"><span className="pl-hero-tag-bar" /> Playlist</div>
-                <h1 className="pl-hero-title">{selected.name}</h1>
-                <p className="pl-hero-count">{(selected.songs || []).length} songs</p>
-                <div className="pl-hero-actions">
-                  {(selected.songs || []).length > 0 && (
-                    <>
-                      <button className="pl-hero-play" onClick={() => playList(selected.songs)} aria-label="Play all">
-                        <FaPlay style={{ marginLeft: 2 }} />
-                      </button>
-                      <button className="pl-hero-shuffle" onClick={() => shuffleList(selected.songs)}>
-                        <FaRandom />
-                      </button>
-                    </>
-                  )}
+
+              {/* Hero — art + meta */}
+              <div className="pl-detail-hero">
+                <div className="pl-detail-art-wrap">
+                  <div className="pl-detail-art-glow" />
+                  <div className="pl-detail-art">
+                    {selected.songs?.length > 0
+                      ? <img src={selected.songs[0]?.cover || FB} alt={selected.name} onError={e => { e.target.src = FB; }} />
+                      : <div className="pl-detail-art-empty"><FaListUl /></div>
+                    }
+                  </div>
+                </div>
+
+                <div className="pl-detail-meta">
+                  <div className="pl-detail-tag">
+                    <span className="pl-detail-tag-bar" />
+                    {selected.source === 'youtube' ? 'YouTube Playlist' : 'Playlist'}
+                  </div>
+                  <h1 className="pl-detail-name">{selected.name}</h1>
+                  <p className="pl-detail-count">{(selected.songs || []).length} songs</p>
+                  <div className="pl-detail-actions">
+                    {(selected.songs || []).length > 0 && (
+                      <>
+                        <button className="pl-detail-play" onClick={() => playList(selected.songs)}>
+                          {isActivePlaylist && isPlaying
+                            ? <><FaPause style={{ fontSize: 12 }} />{' '}Pause</>
+                            : <><FaPlay  style={{ fontSize: 12, marginLeft: 1 }} />{' '}Play all</>
+                          }
+                        </button>
+                        <button className="pl-detail-icon-btn" onClick={() => shuffleList(selected.songs)} title="Shuffle">
+                          <FaRandom />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="pl-tracks">
-              {!(selected.songs || []).length ? (
-                <div className="pl-tracks-empty">
-                  <FaListUl style={{ fontSize: 30, color: 'rgba(255,255,255,.15)', marginBottom: 6 }} />
-                  <p>This playlist is empty</p>
-                </div>
-              ) : (
-                <>
-                  <div className="pl-tracks-label">Tracks \u00b7 {selected.songs.length}</div>
-                  {selected.songs.map((song, i) => {
-                    const songId = song.id || `song-${i}`;
-                    const isFav  = mockSongStates[songId]?.favorite || false;
-                    const isLiked = mockSongStates[songId]?.liked || false;
-                    return (
-                      <div
-                        key={songId}
-                        className={`pl-track-row${currentSong?.id === song.id ? ' active' : ''}`}
-                        onClick={() => playList(selected.songs, i)}
-                        role="button"
-                      >
-                        <span className="pl-track-num">{String(i + 1).padStart(2, '0')}</span>
-                        <div className="pl-track-thumb">
-                          <img src={song.cover || FB} alt={song.name} onError={e => { e.target.src = FB; }} />
+
+              <div className="pl-detail-divider" />
+
+              {/* Track list */}
+              <div className="pl-tracks">
+                {!(selected.songs || []).length ? (
+                  <div className="pl-tracks-empty">
+                    <FaListUl style={{ fontSize: 30, color: 'rgba(255,255,255,.15)', marginBottom: 6 }} />
+                    <p>This playlist is empty</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="pl-tracks-label">Tracks · {selected.songs.length}</div>
+                    {selected.songs.map((song, i) => {
+                      const songId  = song.id || `song-${i}`;
+                      const isActive = currentSong?.id === song.id;
+                      const isFav   = mockSongStates[songId]?.favorite || false;
+                      const isLiked = mockSongStates[songId]?.liked    || false;
+                      return (
+                        <div
+                          key={songId}
+                          className={`pl-track-row${isActive ? ' active' : ''}`}
+                          onClick={() => playList(selected.songs, i)}
+                        >
+                          <span className="pl-track-num">
+                            {isActive && isPlaying
+                              ? <span style={{ color: 'var(--g)', fontSize: 13 }}>&#9835;</span>
+                              : <span>{String(i + 1).padStart(2, '0')}</span>
+                            }
+                          </span>
+                          <div className="pl-track-thumb">
+                            <img src={song.cover || FB} alt={song.name} onError={e => { e.target.src = FB; }} />
+                          </div>
+                          <div className="pl-track-meta">
+                            <div className="pl-track-name">{song.name}</div>
+                            <div className="pl-track-artist">{song.artist || 'Unknown'}</div>
+                          </div>
+                          <span className="pl-track-dur">{song.formattedDuration || song.duration || ''}</span>
+                          <div className="pl-track-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0 }}>
+                            <button style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
+                              onClick={e => { e.stopPropagation(); updateMockSongState(songId, { favorite: !isFav }); }}>
+                              <FaStar style={{ fontSize: 11, color: isFav ? '#facc15' : 'rgba(255,255,255,.28)' }} />
+                            </button>
+                            <button style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
+                              onClick={e => { e.stopPropagation(); updateMockSongState(songId, { liked: !isLiked }); }}>
+                              <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.28)' }} />
+                            </button>
+                            <button className="pl-track-remove"
+                              onClick={e => { e.stopPropagation(); handleRemoveSong(selected.id, songId); }}
+                              title="Remove">
+                              <FaMinus style={{ fontSize: 9 }} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="pl-track-meta">
-                          <div className="pl-track-name">{song.name}</div>
-                          <div className="pl-track-artist">{song.artist || 'Unknown'}</div>
-                        </div>
-                        <span className="pl-track-dur">{song.formattedDuration || song.duration || ''}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, opacity: 0 }} className="pl-track-actions">
-                          <button
-                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'transparent' }}
-                            onClick={e => { e.stopPropagation(); updateMockSongState(songId, { favorite: !isFav }); }}
-                          >
-                            <FaStar style={{ fontSize: 11, color: isFav ? '#facc15' : 'rgba(255,255,255,.3)' }} />
-                          </button>
-                          <button
-                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'transparent' }}
-                            onClick={e => { e.stopPropagation(); updateMockSongState(songId, { liked: !isLiked }); }}
-                          >
-                            <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.3)' }} />
-                          </button>
-                          <button
-                            className="pl-track-remove"
-                            onClick={e => { e.stopPropagation(); handleRemoveSong(selected.id, songId, song.name); }}
-                            title="Remove from playlist"
-                          >
-                            <FaMinus style={{ fontSize: 9 }} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+                      );
+                    })}
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
