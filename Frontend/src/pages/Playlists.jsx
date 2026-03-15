@@ -4,7 +4,7 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
+  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMicrophone,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylists, notifyAll as notifyPlaylistHook } from '../hooks/usePlaylists';
