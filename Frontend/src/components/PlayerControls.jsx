@@ -674,22 +674,22 @@ const CSS = `
 .pc-vol-label { font-size: 11px; color: var(--pc-text-3); min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
 .pc-track-count { font-size: 11px; color: var(--pc-text-3); white-space: nowrap; }
 
-/* ════ DESKTOP EXPANDED — full-screen lyrics, controls at bottom ════ */
+/* ════ DESKTOP EXPANDED — two-column: art | lyrics ════ */
 .pc-expanded {
   position: fixed; inset: 0; z-index: 55;
   display: flex; flex-direction: column; overflow: hidden;
 }
 .pc-exp-dark-overlay {
   position: absolute; inset: 0; z-index: 1;
-  background: rgba(2,2,6,0.45); pointer-events: none;
+  background: rgba(2,2,6,0.48); pointer-events: none;
 }
 
-/* Header: just the nav strip */
+/* Header */
 .pc-exp-header {
   position: relative; z-index: 3;
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 28px;
-  background: rgba(0,0,0,0.12); backdrop-filter: blur(24px);
+  background: rgba(0,0,0,0.14); backdrop-filter: blur(24px);
   border-bottom: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
 }
@@ -699,46 +699,100 @@ const CSS = `
 }
 .pc-exp-header-btns { display: flex; align-items: center; gap: 6px; }
 
-/* Body: lyrics take everything between header and footer */
+/* Body — two columns */
 .pc-exp-body {
   position: relative; z-index: 2;
-  display: flex; flex-direction: column; flex: 1;
+  display: flex; flex-direction: row; flex: 1;
   overflow: hidden; min-height: 0;
+  gap: 0;
 }
 
-/* Full-width transparent lyrics area */
+/* Left: album art column */
+.pc-exp-art-col {
+  flex-shrink: 0;
+  width: clamp(260px, 28vw, 360px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px 24px 32px 48px;
+  gap: 20px;
+}
+.pc-exp-art-frame {
+  position: relative;
+}
+.pc-exp-art-glow {
+  position: absolute; inset: -20px; border-radius: 32px;
+  background: radial-gradient(circle, rgba(var(--pc-accent),0.38) 0%, transparent 70%);
+  filter: blur(28px);
+  animation: expGlowPulse 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes expGlowPulse {
+  0%,100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.06); }
+}
+.pc-exp-art-img {
+  display: block;
+  width: clamp(220px, 24vw, 320px);
+  height: clamp(220px, 24vw, 320px);
+  border-radius: 22px; object-fit: cover;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.08);
+  transition: transform 0.4s ease;
+}
+.pc-exp-art-img.playing { animation: expArtFloat 7s ease-in-out infinite; }
+@keyframes expArtFloat {
+  0%,100% { transform: translateY(0); }
+  50%     { transform: translateY(-10px); }
+}
+.pc-exp-art-meta { text-align: center; width: 100%; }
+.pc-exp-art-name {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(16px, 1.8vw, 22px); font-weight: 800;
+  letter-spacing: -0.03em; color: #fff; line-height: 1.15;
+  margin-bottom: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pc-exp-art-artist { font-size: 13px; color: rgba(255,255,255,0.48); }
+
+/* Right: lyrics area — centered text */
 .pc-exp-lyrics-area {
-  flex: 1; min-height: 0; overflow: hidden; position: relative;
-  /* transparent — shader shows through */
+  flex: 1; min-width: 0; min-height: 0;
+  overflow: hidden; position: relative;
+}
+/* Centre lyrics in desktop expanded */
+.pc-exp-lyrics-area .lp-list {
+  text-align: center;
+}
+.pc-exp-lyrics-area .lp-line {
+  transform-origin: center center !important;
 }
 
-/* Footer: controls bar pinned to bottom */
+/* Footer: progress + controls */
 .pc-exp-footer {
   position: relative; z-index: 3; flex-shrink: 0;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 16px 40px 24px;
-  background: rgba(0,0,0,0.22); backdrop-filter: blur(28px);
+  padding: 14px 40px 22px;
+  background: rgba(0,0,0,0.24); backdrop-filter: blur(28px);
   border-top: 1px solid rgba(255,255,255,0.07);
 }
 .pc-exp-footer-meta {
-  display: flex; align-items: center; gap: 16px; width: 100%; max-width: 640px;
+  display: flex; align-items: center; gap: 16px; width: 100%; max-width: 680px;
 }
 .pc-exp-footer-thumb {
-  width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+  width: 40px; height: 40px; border-radius: 9px; object-fit: cover; flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
 }
 .pc-exp-footer-text { flex: 1; min-width: 0; }
 .pc-exp-footer-name {
-  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
   color: #fff; letter-spacing: -0.01em; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
+  overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px;
 }
-.pc-exp-footer-artist { font-size: 12px; color: rgba(255,255,255,0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-exp-footer-artist { font-size: 11px; color: rgba(255,255,255,0.42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-exp-footer-heart { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.3); font-size: 14px; padding: 6px; border-radius: 50%; transition: color 0.2s, transform 0.15s; flex-shrink: 0; }
 .pc-exp-footer-heart:hover { color: #FF4455; transform: scale(1.2); }
 .pc-exp-footer-heart.liked { color: #FF4455; }
 
-.pc-exp-progress { width: 100%; max-width: 640px; }
+.pc-exp-progress { width: 100%; max-width: 680px; }
 .pc-exp-ctrl-row { display: flex; align-items: center; gap: 10px; }
 .pc-exp-ctrl-btn {
   background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5);
@@ -959,13 +1013,32 @@ export default function PlayerControls() {
         </div>
       </div>
 
-      {/* Body: full-width transparent lyrics */}
+      {/* Body: art left | lyrics right */}
       <div className="pc-exp-body">
+
+        {/* Left: floating album art */}
+        <div className="pc-exp-art-col">
+          <div className="pc-exp-art-frame">
+            <div className="pc-exp-art-glow" />
+            <img
+              src={currentSong.cover || FALLBACK_COVER}
+              alt={currentSong.name}
+              className={`pc-exp-art-img ${isPlaying ? 'playing' : ''}`}
+              onError={e => { e.target.src = FALLBACK_COVER; }}
+            />
+          </div>
+          <div className="pc-exp-art-meta">
+            <p className="pc-exp-art-name">{currentSong.name}</p>
+            <p className="pc-exp-art-artist">{currentSong.artist}</p>
+          </div>
+        </div>
+
+        {/* Right: centered lyrics */}
         <div className="pc-exp-lyrics-area">
           <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
         </div>
 
-        {/* Queue overlay panel */}
+        {/* Queue overlay */}
         {showQueue && (
           <QueuePanel
             songs={songs}
@@ -976,9 +1049,8 @@ export default function PlayerControls() {
         )}
       </div>
 
-      {/* Footer: mini thumb + song info + full controls */}
+      {/* Footer: progress + controls */}
       <div className="pc-exp-footer">
-        {/* Song identity row */}
         <div className="pc-exp-footer-meta">
           <img
             src={currentSong.cover || FALLBACK_COVER}
