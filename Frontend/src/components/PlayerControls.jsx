@@ -699,61 +699,14 @@ const CSS = `
 }
 .pc-exp-header-btns { display: flex; align-items: center; gap: 6px; }
 
-/* Body — two columns */
+/* Body */
 .pc-exp-body {
   position: relative; z-index: 2;
-  display: flex; flex-direction: row; flex: 1;
+  display: flex; flex-direction: column; flex: 1;
   overflow: hidden; min-height: 0;
-  gap: 0;
 }
 
-/* Left: album art column */
-.pc-exp-art-col {
-  flex-shrink: 0;
-  width: clamp(260px, 28vw, 360px);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 32px 24px 32px 48px;
-  gap: 20px;
-}
-.pc-exp-art-frame {
-  position: relative;
-}
-.pc-exp-art-glow {
-  position: absolute; inset: -20px; border-radius: 32px;
-  background: radial-gradient(circle, rgba(var(--pc-accent),0.38) 0%, transparent 70%);
-  filter: blur(28px);
-  animation: expGlowPulse 4s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes expGlowPulse {
-  0%,100% { opacity: 0.6; transform: scale(1); }
-  50%      { opacity: 1;   transform: scale(1.06); }
-}
-.pc-exp-art-img {
-  display: block;
-  width: clamp(220px, 24vw, 320px);
-  height: clamp(220px, 24vw, 320px);
-  border-radius: 22px; object-fit: cover;
-  box-shadow: 0 40px 100px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.08);
-  transition: transform 0.4s ease;
-}
-.pc-exp-art-img.playing { animation: expArtFloat 7s ease-in-out infinite; }
-@keyframes expArtFloat {
-  0%,100% { transform: translateY(0); }
-  50%     { transform: translateY(-10px); }
-}
-.pc-exp-art-meta { text-align: center; width: 100%; }
-.pc-exp-art-name {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(16px, 1.8vw, 22px); font-weight: 800;
-  letter-spacing: -0.03em; color: #fff; line-height: 1.15;
-  margin-bottom: 4px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.pc-exp-art-artist { font-size: 13px; color: rgba(255,255,255,0.48); }
-
-/* Right: lyrics area — centered text */
+/* Lyrics area — full width, centered text */
 .pc-exp-lyrics-area {
   flex: 1; min-width: 0; min-height: 0;
   overflow: hidden; position: relative;
@@ -1016,24 +969,7 @@ export default function PlayerControls() {
       {/* Body: art left | lyrics right */}
       <div className="pc-exp-body">
 
-        {/* Left: floating album art */}
-        <div className="pc-exp-art-col">
-          <div className="pc-exp-art-frame">
-            <div className="pc-exp-art-glow" />
-            <img
-              src={currentSong.cover || FALLBACK_COVER}
-              alt={currentSong.name}
-              className={`pc-exp-art-img ${isPlaying ? 'playing' : ''}`}
-              onError={e => { e.target.src = FALLBACK_COVER; }}
-            />
-          </div>
-          <div className="pc-exp-art-meta">
-            <p className="pc-exp-art-name">{currentSong.name}</p>
-            <p className="pc-exp-art-artist">{currentSong.artist}</p>
-          </div>
-        </div>
-
-        {/* Right: centered lyrics */}
+        {/* Full-width centered lyrics */}
         <div className="pc-exp-lyrics-area">
           <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
         </div>
@@ -1146,7 +1082,7 @@ export default function PlayerControls() {
 
   /* ── mobile mini bar ── */
   const mobileMini = (
-    <div className={`pc-mobile-bar ${showBackgroundDetail ? 'hidden' : ''}`} style={{ ...accentStyle, bottom: '0px' }}>
+    <div className={`pc-mobile-bar ${showBackgroundDetail ? 'hidden' : ''}`} style={{ ...accentStyle, bottom: '80px' }}>
       <div className="pc-mobile-progress">
         <div className="pc-mobile-progress-fill" style={{ width: `${duration > 0 ? Math.min(100,(currentTime/duration)*100) : 0}%` }} />
       </div>
