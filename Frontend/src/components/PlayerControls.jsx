@@ -676,7 +676,7 @@ const CSS = `
 
 /* ════ DESKTOP EXPANDED — full-screen lyrics, controls at bottom ════ */
 .pc-expanded {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 55;
   display: flex; flex-direction: column; overflow: hidden;
 }
 .pc-exp-dark-overlay {
@@ -813,7 +813,7 @@ const CSS = `
 .pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 /* ════ MOBILE EXPANDED ════ */
-.pc-mob-expanded { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; }
+.pc-mob-expanded { position: fixed; inset: 0; z-index: 55; display: flex; flex-direction: column; overflow: hidden; }
 .pc-mob-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.44); pointer-events: none; }
 .pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
 .pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.38); }
@@ -840,7 +840,7 @@ const CSS = `
 
 /* ════ MOBILE FULLSCREEN LYRICS ════ */
 .pc-mob-lyrics-fs {
-  position: fixed; inset: 0; z-index: 60;
+  position: fixed; inset: 0; z-index: 65;
   display: flex; flex-direction: column; overflow: hidden;
   transform: translateY(100%);
   transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
@@ -861,6 +861,10 @@ const CSS = `
 .pc-mob-lyrics-artist { font-size: 11px; color: rgba(255,255,255,0.42); }
 
 .pc-mob-lyrics-body { position: relative; z-index: 2; flex: 1; min-height: 0; overflow: hidden; }
+/* Centre lyrics text in mobile fullscreen */
+.pc-mob-lyrics-body .lp-list { padding: 0 24px; text-align: center; }
+.pc-mob-lyrics-body .lp-line { transform-origin: center center !important; }
+.pc-mob-lyrics-body .lp-line-inner { padding: 3px 4px; }
 
 .pc-mob-lyrics-footer {
   position: relative; z-index: 3; flex-shrink: 0;
@@ -1070,7 +1074,7 @@ export default function PlayerControls() {
 
   /* ── mobile mini bar ── */
   const mobileMini = (
-    <div className={`pc-mobile-bar ${showBackgroundDetail ? 'hidden' : ''}`} style={{ ...accentStyle, bottom: '80px' }}>
+    <div className={`pc-mobile-bar ${showBackgroundDetail ? 'hidden' : ''}`} style={{ ...accentStyle, bottom: '0px' }}>
       <div className="pc-mobile-progress">
         <div className="pc-mobile-progress-fill" style={{ width: `${duration > 0 ? Math.min(100,(currentTime/duration)*100) : 0}%` }} />
       </div>

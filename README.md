@@ -1,129 +1,315 @@
-# <img src="public/favicon.svg" width="40" style="vertical-align: middle; margin-right: 10px;"> Liquid Bars
-
 <div align="center">
-  <img src="public/og-image.png" alt="Liquid Bars Banner" width="800" style="border-radius: 20px; box-shadow: 0 20px 40px rgba(0,255,150,0.2);">
-  <br>
-  <h1 style="font-size: 4rem; background: linear-gradient(135deg, #10b981, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Liquid Bars</h1>
-  <p><strong>A modern, glass‑like music player for the web</strong></p>
-  <p>
-    <a href="#features"><img src="https://img.shields.io/badge/✨-Features-emerald?style=for-the-badge"></a>
-    <a href="#version-log"><img src="https://img.shields.io/badge/📦-Version%20Log-emerald?style=for-the-badge"></a>
-    <a href="#roadmap"><img src="https://img.shields.io/badge/🚀-Roadmap-emerald?style=for-the-badge"></a>
-    <a href="#api-integration"><img src="https://img.shields.io/badge/🔌-API%20Integration-emerald?style=for-the-badge"></a>
-  </p>
+
+<br>
+
+<img src="public/favicon.svg" width="72" alt="Liquid Bars Logo">
+
+<br><br>
+
+# LIQUID BARS
+
+### *A music player that doesn't feel like software*
+
+<br>
+
+[![Version](https://img.shields.io/badge/version-2.3.0-1DB954?style=flat-square&labelColor=0a0a0a)](./CHANGELOG.md)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white&labelColor=0a0a0a)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white&labelColor=0a0a0a)](https://vitejs.dev)
+[![Supabase](https://img.shields.io/badge/Supabase-Auth-3ECF8E?style=flat-square&logo=supabase&logoColor=white&labelColor=0a0a0a)](https://supabase.com)
+[![License](https://img.shields.io/badge/license-MIT-white?style=flat-square&labelColor=0a0a0a)](./LICENSE)
+
+<br>
+
+<img src="public/og-image.png" alt="Liquid Bars — full-screen player" width="860">
+
+<br><br>
+
+> *Stream anything. Own everything. No compromises.*
+
+<br>
+
 </div>
 
 ---
 
-## 🌟 The Vision
+<br>
 
-**Liquid Bars** isn't just another music player. It’s a sanctuary for your ears – a place where your local files, YouTube discoveries, and imported playlists coalesce under a silky‑smooth glass interface. Whether you're offline with your own collection or streaming the latest tracks, Liquid Bars adapts to you.
+## What is Liquid Bars?
 
-> *“Music should feel fluid, like water – clear, refreshing, and always moving.”*
+Liquid Bars is a full-featured music player built entirely in the browser. It plays your **local files**, streams from **YouTube**, imports **playlists**, and displays **live synced lyrics** — all wrapped in a dark glass interface that reacts to your album art in real time.
 
----
+No Electron. No native app. Just React, a Node.js backend, and an obsessive attention to detail.
 
-## ✨ Features
-
-| | |
-|:---:|:---|
-| **🎵 Play Anywhere** | Local files, YouTube streams, imported playlists – all in one place. |
-| **📂 Import with Ease** | Drag folders, paste YouTube URLs, or create custom playlists on the fly. |
-| **🎨 Liquid Glass Design** | Frosted panels, dynamic blurs, and a color‑adaptive expanded player. |
-| **📱 Responsive to the Core** | Desktop sidebar, mobile bottom navigation, and a unified expanded view. |
-| **🔁 Shuffle & Repeat** | Three repeat modes and true shuffle that respects your current track. |
-| **🎚️ Queue Management** | Drag to reorder, see upcoming tracks, and jump to any song. |
-| **💾 Persistent Library** | Your playlists, favorites, and history survive reloads (localStorage). |
-| **🔍 Smart Search** | Finds songs in your library and suggests YouTube matches instantly. |
-| **📈 Version Tracking** | Click the version badge in Settings to check for updates. |
+<br>
 
 ---
 
-## 🚀 Version Log
+<br>
 
-### v2.3.0 – *The Glass Expansion* (March 2025)
-- Unified expanded player across desktop and mobile – click any cover art for a full‑screen immersive experience.
-- Added togglable queue panel in desktop expanded view.
-- Refined glassmorphism with enhanced backdrop blurs and gradient overlays.
-- Fixed YouTube import duration parsing and playlist sync.
+## Features
 
-### v2.2.0 – *Playlist Renaissance* (February 2025)
-- Completely redesigned Playlists, Library, and Favorites pages with consistent glass cards.
-- Introduced grid/list view toggle in Playlists.
-- Detail views now feature a full‑screen gradient background and sticky headers.
-- Added `UpdatePopup` that checks `/version.json` and notifies users of new releases.
+<br>
 
-### v2.1.0 – *YouTube Unleashed* (January 2025)
-- Import entire YouTube playlists via URL – fetches video IDs and durations.
-- Playback now seamlessly switches between local audio and YouTube iframe.
-- Debounced search and request cancellation to save API quota.
+**Playback**
 
-### v2.0.0 – *The Great Refactor* (December 2024)
-- Migrated all pages to `src/pages/` for better organization.
-- PlayerContext now handles shuffle, repeat, and media session API.
-- Drag‑to‑reorder queue and “Continue Watching” section.
-- First release of the Liquid Bars design system.
+- Local file playback — drag a folder or pick individual tracks
+- YouTube streaming via `yt-dlp` — no API key needed for playback, instant start
+- Gapless and crossfade modes, shuffle, three repeat modes
+- Media Session API — OS-level controls and lock screen artwork
 
----
+<br>
 
-## 🛣️ Roadmap
+**Library & Playlists**
 
-| Quarter | Focus | Planned Features |
-|:--------|:------|:-----------------|
-| **Q2 2026** | **User Accounts** | AuthContext, login/signup, profile sync, cross‑device playlists |
-| **Q3 2026** | **Smart Suggestions** | Personalized recommendations based on listening history, liked songs, and frequently played artists |
-| **Q4 2026** | **Cloud Sync** | Playlist backup, offline availability, listening stats dashboard |
-| **2027** | **Social & Sharing** | Share playlists, follow friends, collaborative queues |
+- Persistent library via `localStorage` — survives reloads, no account required
+- Import YouTube playlists by URL (Piped API — zero quota cost)
+- Create, rename, and reorder playlists; drag-to-sort queue
+- Favorites, recently played, and auto-generated library playlist
 
----
+<br>
 
-## 🔌 API Integration
+**Now Playing**
 
-Liquid Bars is built to play nice with third‑party services. Here’s what’s currently integrated and what’s coming:
+- Full-screen expanded player on desktop and mobile
+- Album art–derived accent color — the UI changes hue with every track
+- WebGL iridescence shader background (OGL) — reacts to mouse movement
+- Synced karaoke-style lyrics via [LRCLIB](https://lrclib.net) — green fill sweep animation
+- Mobile fullscreen lyrics with playback controls pinned at the bottom
 
-### ✅ Current
-- **YouTube Data API v3** – Import public playlists, fetch video durations, search for tracks.
-- **Last.fm API** – Top tracks, artist info (used for suggestions).
-- **File System Access API** – Import local folders (desktop only).
+<br>
 
-### 🔜 In Development
-- **Spotify Web API** – Import user playlists (requires OAuth).  
-- **Apple Music API** – (Under consideration) would allow importing from Apple Music.
-- **Deezer / Tidal** – If demand grows, we’ll add more sources.
+**Search**
 
-### 💡 Planned
-- **Lyrics API** – Fetch and display synced lyrics (e.g., Musixmatch).
-- **Web Bluetooth** – Connect to Bluetooth devices for playback info.
-- **Web Audio API** – 10‑band equalizer with presets.
+- Instant local library search
+- Live YouTube search with debounce — results appear as you type
+- Quality filter strips mixes, compilations, Shorts, and lyric-farm channels automatically
+
+<br>
+
+**Settings & Profile**
+
+- Spotify-style profile hero with avatar upload (Supabase Storage or local preview)
+- Social stats row (Playlists · Following · Followers) — wired for future social features
+- Playlist tiles on the profile tab — your music, your identity
+- Playback: crossfade slider, gapless toggle, EQ presets
+- Storage: cache control, export/import settings as JSON
+
+<br>
 
 ---
 
-## 🎨 Design Philosophy
+<br>
 
-Every pixel of Liquid Bars is crafted with intention. The design borrows from **Apple’s clarity** and **Spotify’s boldness**, fusing them into a unique liquid glass aesthetic.
+## Tech Stack
 
-- **Backdrop‑blur** creates depth without distraction.
-- **Emerald gradients** guide the eye and indicate interactivity.
-- **Consistent spacing** and rounded corners make the interface feel approachable.
-- **Adaptive colors** – the expanded player picks the dominant hue from album art.
+<br>
 
-> *“The interface should fade into the background, letting the music take center stage.”*
+| Layer | Technology |
+|:------|:-----------|
+| **Frontend** | React 18, Vite 5 |
+| **Styling** | Scoped CSS-in-JS · Syne + DM Sans (Google Fonts) |
+| **WebGL** | OGL — lightweight iridescence shader |
+| **Backend** | Node.js + Express |
+| **YouTube** | `yt-dlp` for audio streams · Piped API for playlist import |
+| **Lyrics** | LRCLIB — free, no key, synced + plain text |
+| **Auth & DB** | Supabase — Auth · Postgres profiles · Storage |
+| **Icons** | React Icons (FA6), FontAwesome |
+
+<br>
+
+---
+
+<br>
+
+## Getting Started
+
+<br>
+
+### Prerequisites
+
+- Node.js 18+
+- `yt-dlp` installed and on your `PATH` — [install guide](https://github.com/yt-dlp/yt-dlp#installation)
+- A Supabase project (free tier works) — optional, the app runs fully offline without it
+
+<br>
+
+### Installation
+
+```bash
+# 1. Clone
+git clone https://github.com/yourusername/liquid-bars.git
+cd liquid-bars
+
+# 2. Install
+cd Frontend && npm install
+cd ../Backend && npm install
+
+# 3. Configure
+cp Frontend/.env.example Frontend/.env
+# Add your Supabase URL and anon key (optional)
+
+# 4. Run
+cd Backend && npm run dev      # :3001
+cd Frontend && npm run dev     # :5173
+```
+
+Open [localhost:5173](http://localhost:5173) and drop in some music.
+
+<br>
+
+### Environment Variables
+
+```env
+# Frontend/.env
+
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+
+# Without these the app works in local-only mode — no account needed
+```
+
+<br>
 
 ---
 
-## 🙌 Credits & Contributions
+<br>
 
-Built with ❤️ using React, Tailwind CSS, and a lot of caffeine. Special thanks to:
+## Project Structure
 
-- The open‑source community for React, FontAwesome, and countless utilities.
-- **You** – for using Liquid Bars and shaping its future.
+```
+liquid-bars/
+├── Frontend/
+│   ├── src/
+│   │   ├── components/       # PlayerControls, Toast, Sidebar
+│   │   ├── context/          # PlayerContext, AuthContext
+│   │   ├── hooks/            # usePlaylists
+│   │   ├── pages/            # Home, HomeOnline, Library,
+│   │   │                     # Playlists, Settings, RecentlyPlayed
+│   │   ├── services/         # api.js (backend calls)
+│   │   └── utils/            # youtubeConverter, Splashscreen
+│   └── public/
+├── Backend/
+│   ├── server.js             # Express API + yt-dlp bridge
+│   └── routes/               # /api/songs  /api/stream  /api/search
+└── docker-compose.yml
+```
 
-Want to contribute? Check out the [GitHub repository](https://github.com/yourusername/liquid-bars) and open an issue or PR. Feedback and ideas are always welcome.
+<br>
 
 ---
+
+<br>
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                    Browser                       │
+│                                                 │
+│   ┌──────────┐   ┌──────────┐   ┌──────────┐   │
+│   │  Pages   │   │ Player   │   │Playlists │   │
+│   │ (React)  │   │ Context  │   │  Hook    │   │
+│   └────┬─────┘   └────┬─────┘   └────┬─────┘   │
+│        └──────────────┴──────────────┘          │
+│                        │                         │
+│                ┌───────▼───────┐                 │
+│                │   Supabase    │                 │
+│                │  Auth · DB    │                 │
+│                └───────────────┘                 │
+└────────────────────────┬────────────────────────┘
+                         │ HTTP
+┌────────────────────────▼────────────────────────┐
+│                Node.js Backend                   │
+│                                                 │
+│  /api/stream  →  yt-dlp  →  audio byte stream  │
+│  /api/search  →  YouTube Data API               │
+│  /api/songs   →  local file index               │
+└─────────────────────────────────────────────────┘
+```
+
+<br>
+
+---
+
+<br>
+
+## Roadmap
+
+```
+2026 Q2 ── User Accounts      AuthContext ✓   Profile sync   Cross-device playlists
+     Q3 ── Smart Discovery    Personalised sections from listening history
+     Q4 ── Cloud Sync         Playlist backup   Listening stats dashboard
+2027     ── Social            Follow friends   Shared queues   Playlist sharing
+```
+
+<br>
+
+| Status | Feature |
+|:------:|:--------|
+| ✅ | Local file playback |
+| ✅ | YouTube streaming via yt-dlp |
+| ✅ | Synced karaoke lyrics (LRCLIB) |
+| ✅ | Supabase auth + profile |
+| ✅ | Mobile fullscreen player + lyrics |
+| ✅ | WebGL animated background (OGL) |
+| ✅ | Horizontal shelf HomeOnline (Apple Music–style) |
+| 🔄 | Followers / following system |
+| 🔄 | Listening history + play count stats |
+| 📋 | Spotify playlist import (OAuth) |
+| 📋 | 10-band Web Audio EQ |
+| 📋 | Collaborative queues |
+| 📋 | Verified artist badges |
+
+<br>
+
+---
+
+<br>
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first.
+
+```bash
+# Fork → clone → branch
+git checkout -b feat/your-feature
+
+# Commit
+git commit -m "feat: describe your change"
+git push origin feat/your-feature
+# Open a PR
+```
+
+Keep PRs focused — one feature or fix per request. Match the existing style: scoped CSS-in-JS, functional components, hooks over class components.
+
+<br>
+
+---
+
+<br>
+
+## License
+
+MIT © 2026 Liquid Bars — see [LICENSE](./LICENSE).
+
+You're free to use, modify, and distribute this. If you build something with it, a star goes a long way. ⭐
+
+<br>
+
+---
+
+<br>
 
 <div align="center">
-  <img src="public/favicon.svg" width="60" style="opacity:0.5;">
-  <br>
-  <small>© 2026 Liquid Bars – Made with 🎵 for music lovers everywhere.</small>
+
+<img src="public/favicon.svg" width="36" alt="Liquid Bars">
+
+<br><br>
+
+**[⬆ back to top](#liquid-bars)**
+
+<br>
+
+*Built for people who care how their music sounds **and** looks.*
+
 </div>
