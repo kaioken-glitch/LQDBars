@@ -4,10 +4,10 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMicrophone,
+  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
-import { usePlaylists, notifyAll as notifyPlaylistHook } from '../hooks/usePlaylists';
+import { usePlaylists } from '../hooks/usePlaylists';
 import { fetchPlaylistWithDurations } from '../utils/youtubePlaylist';
 import { useToast } from '../components/Toast';
 
@@ -234,21 +234,21 @@ const CSS = `
 .pl-yt-import-btn:active { transform: scale(.97); }
 .pl-yt-import-btn:disabled { opacity: .45; cursor: not-allowed; }
 /* ══ DETAIL VIEW ══ */
-.pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; animation: plFadeIn .3s var(--ease) both; }
+.pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: plFadeIn .3s var(--ease) both; }
 
 /* Blurred album art as full background */
-.pl-detail-bg { position: absolute; inset: -60px; z-index: 0; filter: blur(70px) saturate(1.5) brightness(0.3); background-size: cover; background-position: center; transform: scale(1.15); transition: background-image .6s ease; }
-.pl-detail-bg-scrim { position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgba(5,7,9,.52) 0%, rgba(5,7,9,.75) 38%, rgba(5,7,9,.97) 100%); }
+.pl-detail-bg { position: absolute; inset: -60px; z-index: 1; filter: blur(70px) saturate(1.5) brightness(0.3); background-size: cover; background-position: center; transform: scale(1.15); transition: background-image .6s ease; }
+.pl-detail-bg-scrim { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, rgba(5,7,9,.55) 0%, rgba(5,7,9,.8) 45%, rgba(5,7,9,.98) 100%); }
 
 /* Frosted nav */
-.pl-detail-nav { position: relative; z-index: 3; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: rgba(0,0,0,.2); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,.06); }
+.pl-detail-nav { position: relative; z-index: 5; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: rgba(0,0,0,.2); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,.06); }
 .pl-detail-nav-title { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.38); }
 .pl-detail-nav-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
 .pl-detail-nav-btn:hover { background: rgba(255,255,255,.14); }
 .pl-detail-nav-btn:active { transform: scale(.9); }
 
 /* Two-column hero on wide viewports */
-.pl-detail-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 28px 18px; }
+.pl-detail-hero { position: relative; z-index: 5; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 28px 18px; }
 @media (min-width: 560px) { .pl-detail-hero { flex-direction: row; align-items: flex-end; padding: 32px 36px 22px; } }
 
 /* Art */
@@ -274,10 +274,10 @@ const CSS = `
 .pl-detail-icon-btn:hover { background: rgba(255,255,255,.16); color: #fff; transform: scale(1.06); }
 
 /* Divider */
-.pl-detail-divider { position: relative; z-index: 2; height: 1px; background: rgba(255,255,255,.07); margin: 0 28px 2px; flex-shrink: 0; }
+.pl-detail-divider { position: relative; z-index: 5; height: 1px; background: rgba(255,255,255,.07); margin: 0 28px 2px; flex-shrink: 0; }
 
 /* Track list */
-.pl-tracks { position: relative; z-index: 2; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
+.pl-tracks { position: relative; z-index: 5; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-tracks::-webkit-scrollbar { width: 4px; }
 .pl-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
 .pl-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 14px 12px 12px; }
@@ -624,6 +624,136 @@ const PlaylistDotsMenu = memo(({ playlist }) => {
   );
 });
 
+/* ── DETAIL VIEW COMPONENT ── */
+function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuffle, onRemove, mockStates, onMockUpdate }) {
+  const bgSrc = selected.songs?.find(s => s.cover)?.cover || '';
+  const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
+
+  return (
+    <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+      <div className="pl-detail">
+
+        {/* Blurred art background */}
+        {bgSrc && (
+          <div className="pl-detail-bg" style={{ backgroundImage: `url(${bgSrc})` }} />
+        )}
+        <div className="pl-detail-bg-scrim" />
+
+        {/* Nav */}
+        <div className="pl-detail-nav">
+          <button className="pl-detail-nav-btn" onClick={onClose}>
+            <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
+          </button>
+          <span className="pl-detail-nav-title">Playlist</span>
+          <PlaylistDotsMenu playlist={selected} />
+        </div>
+
+        {/* Hero */}
+        <div className="pl-detail-hero">
+          <div className="pl-detail-art-wrap">
+            <div className="pl-detail-art-glow" />
+            <div className="pl-detail-art">
+              {selected.songs?.length > 0
+                ? <img src={selected.songs[0]?.cover || FB} alt={selected.name}
+                    onError={e => { e.target.src = FB; }} />
+                : <div className="pl-detail-art-empty"><FaListUl /></div>
+              }
+            </div>
+          </div>
+
+          <div className="pl-detail-meta">
+            <div className="pl-detail-tag">
+              <span className="pl-detail-tag-bar" />
+              {selected.source === 'youtube' ? 'YouTube Playlist' : 'Playlist'}
+            </div>
+            <h1 className="pl-detail-name">{selected.name}</h1>
+            <p className="pl-detail-count">{(selected.songs || []).length} songs</p>
+            <div className="pl-detail-actions">
+              {(selected.songs || []).length > 0 && (
+                <>
+                  <button className="pl-detail-play" onClick={() => onPlay(selected.songs)}>
+                    {isActivePlaylist && isPlaying
+                      ? <><FaPause style={{ fontSize: 12 }} /> Pause</>
+                      : <><FaPlay  style={{ fontSize: 12, marginLeft: 1 }} /> Play all</>
+                    }
+                  </button>
+                  <button className="pl-detail-icon-btn" onClick={() => onShuffle(selected.songs)} title="Shuffle">
+                    <FaRandom />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="pl-detail-divider" />
+
+        {/* Tracks */}
+        <div className="pl-tracks">
+          {!(selected.songs || []).length ? (
+            <div className="pl-tracks-empty">
+              <FaListUl style={{ fontSize: 30, color: 'rgba(255,255,255,.15)', marginBottom: 6 }} />
+              <p>This playlist is empty</p>
+            </div>
+          ) : (
+            <>
+              <div className="pl-tracks-label" style={{ marginTop: 14 }}>
+                Tracks · {selected.songs.length}
+              </div>
+              {selected.songs.map((song, i) => {
+                const songId  = song.id || `song-${i}`;
+                const isActive = currentSong?.id === song.id;
+                const isFav   = mockStates[songId]?.favorite || false;
+                const isLiked = mockStates[songId]?.liked    || false;
+                return (
+                  <div
+                    key={songId}
+                    className={`pl-track-row${isActive ? ' active' : ''}`}
+                    onClick={() => onPlay(selected.songs, i)}
+                  >
+                    <span className="pl-track-num">
+                      {isActive && isPlaying
+                        ? <span style={{ color: 'var(--g)' }}>♫</span>
+                        : <span>{String(i + 1).padStart(2, '0')}</span>
+                      }
+                    </span>
+                    <div className="pl-track-thumb">
+                      <img src={song.cover || FB} alt={song.name}
+                        onError={e => { e.target.src = FB; }} />
+                    </div>
+                    <div className="pl-track-meta">
+                      <div className="pl-track-name">{song.name}</div>
+                      <div className="pl-track-artist">{song.artist || 'Unknown'}</div>
+                    </div>
+                    <span className="pl-track-dur">{song.formattedDuration || song.duration || ''}</span>
+                    <div className="pl-track-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0 }}>
+                      <button
+                        style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
+                        onClick={e => { e.stopPropagation(); onMockUpdate(songId, { favorite: !isFav }); }}>
+                        <FaStar style={{ fontSize: 11, color: isFav ? '#facc15' : 'rgba(255,255,255,.28)' }} />
+                      </button>
+                      <button
+                        style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
+                        onClick={e => { e.stopPropagation(); onMockUpdate(songId, { liked: !isLiked }); }}>
+                        <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.28)' }} />
+                      </button>
+                      <button className="pl-track-remove"
+                        onClick={e => { e.stopPropagation(); onRemove(selected.id, songId); }}
+                        title="Remove">
+                        <FaMinus style={{ fontSize: 9 }} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── MAIN ── */
 export default function Playlists() {
   const {
@@ -635,6 +765,7 @@ export default function Playlists() {
     playlists,
     createPlaylist: hookCreatePlaylist,
     deletePlaylist: hookDeletePlaylist,
+    addPlaylist,
     addSongToPlaylist,
     removeSongFromPlaylist,
     refreshFromStorage,
@@ -661,9 +792,7 @@ export default function Playlists() {
   const [showCreate,   setShowCreate]   = useState(false);
   const [showYTImport, setShowYTImport] = useState(false);
   const [selected,     setSelected]     = useState(null);
-  const fileInputRef    = useRef(null);
-  const playlistsRef    = useRef(playlists);
-  useEffect(() => { playlistsRef.current = playlists; }, [playlists]);
+  const fileInputRef = useRef(null);
 
   // Keep selected in sync when hook updates playlists (e.g. song removed from elsewhere)
   useEffect(() => {
@@ -735,20 +864,16 @@ export default function Playlists() {
       source: 'local',
     }));
     const newPl = { id: `pl_${Date.now()}`, name: `Local Import (${songs.length} tracks)`, songs, source: 'local', createdAt: Date.now() };
-    // Read current list fresh from localStorage so we never prepend to stale state
-    // Use playlistsRef so we always have the latest list — avoids stale-closure races
-    const current = playlistsRef.current;
-    notifyPlaylistHook([newPl, ...current]);
+    addPlaylist(newPl);
     e.target.value = '';
-  }, []);
+  }, [addPlaylist]);
 
   /* Songs saved as-is — PlayerContext handles YouTube playback via IFrame API */
   const handleYTImport = useCallback((name, songs) => {
     const newPl = { id: `pl_${Date.now()}`, name, songs, source: 'youtube', createdAt: Date.now() };
     // Read current list fresh from localStorage so we never prepend to stale state
-    const current = playlistsRef.current;
-    notifyPlaylistHook([newPl, ...current]);
-  }, []);
+    addPlaylist(newPl);
+  }, [addPlaylist]);
 
   return (
     <div className="pl-root" style={{ width: '100%', height: '100%' }}>
@@ -805,127 +930,19 @@ export default function Playlists() {
       {showCreate   && <CreateModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
       {showYTImport && <YouTubeImportModal onClose={() => setShowYTImport(false)} onImport={handleYTImport} />}
 
-      {selected && (() => {
-        const bgSrc = selected.songs?.find(s => s.cover)?.cover || '';
-        const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
-        return (
-          <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
-            <div className="pl-detail">
-
-              {/* Blurred art background */}
-              <div className="pl-detail-bg"
-                style={{ backgroundImage: bgSrc ? `url(${bgSrc})` : 'none', backgroundColor: '#040c06' }}
-              />
-              <div className="pl-detail-bg-scrim" />
-
-              {/* Nav bar */}
-              <div className="pl-detail-nav">
-                <button className="pl-detail-nav-btn" onClick={() => setSelected(null)}>
-                  <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
-                </button>
-                <span className="pl-detail-nav-title">Playlist</span>
-                <PlaylistDotsMenu playlist={selected} />
-              </div>
-
-              {/* Hero — art + meta */}
-              <div className="pl-detail-hero">
-                <div className="pl-detail-art-wrap">
-                  <div className="pl-detail-art-glow" />
-                  <div className="pl-detail-art">
-                    {selected.songs?.length > 0
-                      ? <img src={selected.songs[0]?.cover || FB} alt={selected.name} onError={e => { e.target.src = FB; }} />
-                      : <div className="pl-detail-art-empty"><FaListUl /></div>
-                    }
-                  </div>
-                </div>
-
-                <div className="pl-detail-meta">
-                  <div className="pl-detail-tag">
-                    <span className="pl-detail-tag-bar" />
-                    {selected.source === 'youtube' ? 'YouTube Playlist' : 'Playlist'}
-                  </div>
-                  <h1 className="pl-detail-name">{selected.name}</h1>
-                  <p className="pl-detail-count">{(selected.songs || []).length} songs</p>
-                  <div className="pl-detail-actions">
-                    {(selected.songs || []).length > 0 && (
-                      <>
-                        <button className="pl-detail-play" onClick={() => playList(selected.songs)}>
-                          {isActivePlaylist && isPlaying
-                            ? <><FaPause style={{ fontSize: 12 }} />{' '}Pause</>
-                            : <><FaPlay  style={{ fontSize: 12, marginLeft: 1 }} />{' '}Play all</>
-                          }
-                        </button>
-                        <button className="pl-detail-icon-btn" onClick={() => shuffleList(selected.songs)} title="Shuffle">
-                          <FaRandom />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pl-detail-divider" />
-
-              {/* Track list */}
-              <div className="pl-tracks">
-                {!(selected.songs || []).length ? (
-                  <div className="pl-tracks-empty">
-                    <FaListUl style={{ fontSize: 30, color: 'rgba(255,255,255,.15)', marginBottom: 6 }} />
-                    <p>This playlist is empty</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="pl-tracks-label">Tracks · {selected.songs.length}</div>
-                    {selected.songs.map((song, i) => {
-                      const songId  = song.id || `song-${i}`;
-                      const isActive = currentSong?.id === song.id;
-                      const isFav   = mockSongStates[songId]?.favorite || false;
-                      const isLiked = mockSongStates[songId]?.liked    || false;
-                      return (
-                        <div
-                          key={songId}
-                          className={`pl-track-row${isActive ? ' active' : ''}`}
-                          onClick={() => playList(selected.songs, i)}
-                        >
-                          <span className="pl-track-num">
-                            {isActive && isPlaying
-                              ? <span style={{ color: 'var(--g)', fontSize: 13 }}>&#9835;</span>
-                              : <span>{String(i + 1).padStart(2, '0')}</span>
-                            }
-                          </span>
-                          <div className="pl-track-thumb">
-                            <img src={song.cover || FB} alt={song.name} onError={e => { e.target.src = FB; }} />
-                          </div>
-                          <div className="pl-track-meta">
-                            <div className="pl-track-name">{song.name}</div>
-                            <div className="pl-track-artist">{song.artist || 'Unknown'}</div>
-                          </div>
-                          <span className="pl-track-dur">{song.formattedDuration || song.duration || ''}</span>
-                          <div className="pl-track-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0 }}>
-                            <button style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
-                              onClick={e => { e.stopPropagation(); updateMockSongState(songId, { favorite: !isFav }); }}>
-                              <FaStar style={{ fontSize: 11, color: isFav ? '#facc15' : 'rgba(255,255,255,.28)' }} />
-                            </button>
-                            <button style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
-                              onClick={e => { e.stopPropagation(); updateMockSongState(songId, { liked: !isLiked }); }}>
-                              <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.28)' }} />
-                            </button>
-                            <button className="pl-track-remove"
-                              onClick={e => { e.stopPropagation(); handleRemoveSong(selected.id, songId); }}
-                              title="Remove">
-                              <FaMinus style={{ fontSize: 9 }} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+            {selected && (
+        <DetailView
+          selected={selected}
+          currentSong={currentSong}
+          isPlaying={isPlaying}
+          onClose={() => setSelected(null)}
+          onPlay={playList}
+          onShuffle={shuffleList}
+          onRemove={handleRemoveSong}
+          mockStates={mockSongStates}
+          onMockUpdate={updateMockSongState}
+        />
+      )}
     </div>
   );
 }

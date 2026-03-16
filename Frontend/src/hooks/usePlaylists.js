@@ -66,6 +66,12 @@ export function usePlaylists() {
     return pl;
   }, []);
 
+  // addPlaylist: safely prepend a fully-formed playlist object using _cache
+  // Use this instead of calling notifyAll directly from components
+  const addPlaylist = useCallback((pl) => {
+    notifyAll([pl, ..._cache]);
+  }, []);
+
   const deletePlaylist = useCallback((id) => {
     notifyAll(_cache.filter(p => p.id !== id));
   }, []);
@@ -119,6 +125,7 @@ export function usePlaylists() {
   return {
     playlists,
     createPlaylist,
+    addPlaylist,
     deletePlaylist,
     addSongToPlaylist,
     removeSongFromPlaylist,
