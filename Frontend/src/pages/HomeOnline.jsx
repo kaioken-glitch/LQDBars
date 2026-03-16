@@ -484,10 +484,11 @@ const STYLES = `
   /* Wave badge */
   .ho-now-playing-badge {
     position: absolute; bottom: 10px; left: 10px;
-    background: rgba(0,0,0,0.72); backdrop-filter: blur(8px);
-    border-radius: 6px; padding: 3px 7px; z-index: 2;
+    background: rgba(0,0,0,0.68); backdrop-filter: blur(10px);
+    border-radius: 8px; padding: 5px 8px; z-index: 4;
+    display: flex; align-items: center;
   }
-  .ho-tcard-wave { bottom: 36px !important; }
+  .ho-tcard-wave { bottom: 40px !important; }
 
   /* Play button — slides up on hover */
   .ho-tcard-play-wrap {
@@ -694,14 +695,7 @@ const STYLES = `
   }
 
   /* ── Wave bars ── */
-  .ho-wave { display:inline-flex; align-items:flex-end; height:14px; gap:2px; }
-  .ho-wave span { display:inline-block; width:3px; border-radius:2px; background:var(--lb-green); }
-  .ho-wave span:nth-child(1) { animation: ho-b1 .8s ease-in-out infinite; }
-  .ho-wave span:nth-child(2) { animation: ho-b2 .8s ease-in-out infinite .1s; }
-  .ho-wave span:nth-child(3) { animation: ho-b3 .8s ease-in-out infinite .2s; }
-  @keyframes ho-b1 { 0%,100%{height:3px}  50%{height:13px} }
-  @keyframes ho-b2 { 0%,100%{height:9px}  50%{height:3px}  }
-  @keyframes ho-b3 { 0%,100%{height:6px}  50%{height:14px} }
+  /* Wave SVG renders inline — no extra CSS needed */
 
   /* ── Spin ── */
   @keyframes ho-spin { to { transform:rotate(360deg); } }
@@ -751,7 +745,24 @@ function cleanTitle(title) {
    SUB-COMPONENTS
 ───────────────────────────────────────────────────────────────────────────── */
 const WaveIcon = () => (
-  <span className="ho-wave"><span /><span /><span /></span>
+  <svg width="18" height="14" viewBox="0 0 18 14" fill="none"
+    style={{ display:'block', flexShrink:0 }} aria-hidden="true">
+    {[
+      { x:0,  y1:6,  y2:1,  y3:11, dur:'0.55s', delay:'0s'    },
+      { x:4,  y1:9,  y2:1,  y3:13, dur:'0.7s',  delay:'0.1s'  },
+      { x:8,  y1:3,  y2:0,  y3:12, dur:'0.5s',  delay:'0.05s' },
+      { x:12, y1:7,  y2:2,  y3:12, dur:'0.65s', delay:'0.15s' },
+    ].map((b, i) => (
+      <rect key={i} x={b.x} y={b.y1} width="2.5" height={14-b.y1} rx="1.2" fill="#1DB954">
+        <animate attributeName="y"
+          values={`${b.y1};${b.y2};${b.y3};${b.y1}`}
+          dur={b.dur} repeatCount="indefinite" begin={b.delay} />
+        <animate attributeName="height"
+          values={`${14-b.y1};${14-b.y2};${14-b.y3};${14-b.y1}`}
+          dur={b.dur} repeatCount="indefinite" begin={b.delay} />
+      </rect>
+    ))}
+  </svg>
 );
 
 const SpinIcon = () => (

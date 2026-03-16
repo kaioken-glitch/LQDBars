@@ -9,40 +9,12 @@ import Settings from './pages/Settings';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
-import MobilePlayer from './components/MobilePlayer';
 import BottomNav from './components/BottomNav';
-import TinyPlayer from './components/TinyPlayer';
+import MobilePlayer from './components/MobilePlayer';
 import SplashScreen from './utils/Splashscreen';
 import Login from './pages/Login';           // you'll create this
 import './index.css';
 
-/* ─── Mobile floating TinyPlayer ─────────────────────────────────────────
-   Fixed pill that floats above BottomNav on mobile.
-   Must be INSIDE <PlayerProvider> to access usePlayer().
-   Hidden on desktop via CSS.
-─────────────────────────────────────────────────────────────────────── */
-function MobileTinyPlayer({ active }) {
-  const {
-    currentSong, isPlaying, setIsPlaying,
-    playNext, playPrev, isMuted, toggleMute,
-  } = usePlayer();
-
-  if (!currentSong || active === 'Home') return null;
-
-  return (
-    <div className="mobile-tiny-pill">
-      <TinyPlayer
-        song={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(p => !p)}
-        onPrev={playPrev}
-        onNext={playNext}
-        isMuted={isMuted}
-        onMuteToggle={toggleMute}
-      />
-    </div>
-  );
-}
 
 /* ─── Inner app (needs PlayerProvider + AuthProvider context) ────────── */
 function AppInner() {
@@ -138,35 +110,23 @@ function AppInner() {
         {/* Bottom bar — hide when not logged in */}
         {user && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
-            {active !== 'Home' && <MobilePlayer />}
+              {active !== 'Home' && <MobilePlayer />}
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* ── Mobile TinyPlayer — fixed above BottomNav, mobile only ── */}
-      {user && <MobileTinyPlayer active={active} />}
 
       <style>{`
         /* Desktop */
         @media (min-width: 768px) {
           .sidebar-slot                  { display: flex !important; }
           .bottom-slot .bottom-nav-root  { display: none  !important; }
-          .mobile-tiny-pill              { display: none  !important; }
         }
 
         /* Mobile */
         @media (max-width: 767px) {
           .sidebar-slot { display: none !important; }
-          .mobile-tiny-pill {
-            position: fixed;
-            bottom: calc(70px + env(safe-area-inset-bottom, 0px) + 14px);
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 200;
-            pointer-events: all;
-            filter: drop-shadow(0 8px 24px rgba(0,0,0,0.7));
-          }
         }
       `}</style>
     </>
