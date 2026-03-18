@@ -237,18 +237,18 @@ const CSS = `
 .pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: plFadeIn .3s var(--ease) both; }
 
 /* Blurred album art as full background */
-.pl-detail-bg { position: absolute; inset: -60px; z-index: 1; filter: blur(70px) saturate(1.5) brightness(0.3); background-size: cover; background-position: center; transform: scale(1.15); transition: background-image .6s ease; }
-.pl-detail-bg-scrim { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, rgba(5,7,9,.55) 0%, rgba(5,7,9,.8) 45%, rgba(5,7,9,.98) 100%); }
+.pl-detail-bg { position: absolute; inset: -60px; z-index: 1; pointer-events: none; filter: blur(70px) saturate(1.5) brightness(0.3); background-size: cover; background-position: center; transform: scale(1.15); transition: background-image .6s ease; }
+.pl-detail-bg-scrim { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, rgba(5,7,9,.35) 0%, rgba(5,7,9,.6) 45%, rgba(5,7,9,.85) 100%); pointer-events: none; }
 
 /* Frosted nav */
-.pl-detail-nav { position: relative; z-index: 5; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: rgba(0,0,0,.2); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,.06); }
+.pl-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: rgba(0,0,0,.2); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,.06); }
 .pl-detail-nav-title { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.38); }
 .pl-detail-nav-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
 .pl-detail-nav-btn:hover { background: rgba(255,255,255,.14); }
 .pl-detail-nav-btn:active { transform: scale(.9); }
 
 /* Two-column hero on wide viewports */
-.pl-detail-hero { position: relative; z-index: 5; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 28px 18px; }
+.pl-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 28px 18px; }
 @media (min-width: 560px) { .pl-detail-hero { flex-direction: row; align-items: flex-end; padding: 32px 36px 22px; } }
 
 /* Art */
@@ -274,10 +274,10 @@ const CSS = `
 .pl-detail-icon-btn:hover { background: rgba(255,255,255,.16); color: #fff; transform: scale(1.06); }
 
 /* Divider */
-.pl-detail-divider { position: relative; z-index: 5; height: 1px; background: rgba(255,255,255,.07); margin: 0 28px 2px; flex-shrink: 0; }
+.pl-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 0 28px 2px; flex-shrink: 0; }
 
 /* Track list */
-.pl-tracks { position: relative; z-index: 5; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
+.pl-tracks { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-tracks::-webkit-scrollbar { width: 4px; }
 .pl-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
 .pl-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 14px 12px 12px; }
@@ -633,9 +633,8 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
     <div className="pl-detail" style={{ zIndex: 50 }}>
 
         {/* Blurred art background */}
-        {bgSrc && (
-          <div className="pl-detail-bg" style={{ backgroundImage: `url(${bgSrc})` }} />
-        )}
+        <div className="pl-detail-bg"
+          style={{ backgroundImage: bgSrc ? `url(${bgSrc})` : 'none', backgroundColor: '#0d1a12' }} />
         <div className="pl-detail-bg-scrim" />
 
         {/* Nav */}

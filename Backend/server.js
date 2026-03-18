@@ -71,6 +71,13 @@ let db;
   }
 
   console.log('SQLite database ready ✅');
+
+  // Start listening AFTER db is ready — Render needs this to detect the port
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend running on ${
+      process.env.NODE_ENV === 'production' ? 'cloud URL' : `http://localhost:${PORT}`
+    }`);
+  });
 })();
 
 /* ── Songs routes (unchanged) ── */
@@ -152,10 +159,4 @@ app.post('/cache', async (req, res) => {
 /* ── Health check ── */
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
-});
-
-app.listen(PORT, () => {
-  console.log(`Backend running on ${
-    process.env.NODE_ENV === 'production' ? 'cloud URL' : `http://localhost:${PORT}`
-  }`);
 });

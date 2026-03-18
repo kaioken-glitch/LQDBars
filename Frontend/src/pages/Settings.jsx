@@ -101,10 +101,10 @@ const CSS = `
 .set-root *,.set-root *::before,.set-root *::after{box-sizing:border-box;margin:0;padding:0;}
 
 /* ── Shell ── */
-.set-shell{width:100%;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+.set-shell{width:100%;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;height:100%;}
 
 /* ── Scrollable content ── */
-.set-scroll{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.07) transparent;}
+.set-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.07) transparent;}
 .set-scroll::-webkit-scrollbar{width:4px;}
 .set-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:3px;}
 
@@ -461,13 +461,13 @@ function Toggle({ checked, onChange, label, description }) {
   return (
     <div className="set-row">
       <div className="set-row-text">
-        {label && <p className="set-row-label">{label}</p>}
+        {label       && <p className="set-row-label">{label}</p>}
         {description && <p className="set-row-desc">{description}</p>}
       </div>
       <button type="button" role="switch" aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`set-toggle ${checked ? 'on' : 'off'}`}>
-        <div className="set-toggle-thumb" />
+        className={`set-switch ${checked ? 'on' : 'off'}`}>
+        <div className="set-switch-thumb" />
       </button>
     </div>
   );
@@ -476,15 +476,20 @@ function Toggle({ checked, onChange, label, description }) {
 function Slider({ value, onChange, min = 0, max = 100, label, unit = '', description }) {
   const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div className="set-slider-wrap">
+    <div className="set-slider-row">
       <div className="set-slider-top">
-        <div><p className="set-slider-title">{label}</p>{description && <p className="set-slider-desc">{description}</p>}</div>
+        <div className="set-slider-meta">
+          <span className="set-slider-label">{label}</span>
+          {description && <span className="set-slider-desc">{description}</span>}
+        </div>
         <span className="set-slider-val">{value}{unit}</span>
       </div>
       <div className="set-track">
-        <div className="set-track-fill" style={{ width: `${pct}%` }} />
-        <div className="set-track-thumb" style={{ left: `${pct}%` }} />
-        <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))} className="set-track-input" />
+        <div className="set-fill"  style={{ width: `${pct}%` }} />
+        <div className="set-thumb" style={{ left: `${pct}%` }} />
+        <input type="range" min={min} max={max} value={value}
+          onChange={e => onChange(Number(e.target.value))}
+          className="set-range" />
       </div>
     </div>
   );
@@ -492,7 +497,7 @@ function Slider({ value, onChange, min = 0, max = 100, label, unit = '', descrip
 
 function Select({ label, value, onChange, options, description }) {
   return (
-    <div className="set-row">
+    <div className="set-select-row">
       <div className="set-row-text">
         <p className="set-row-label">{label}</p>
         {description && <p className="set-row-desc">{description}</p>}
@@ -506,19 +511,20 @@ function Select({ label, value, onChange, options, description }) {
 
 function NumberInput({ label, value, onChange, min, max, description }) {
   return (
-    <div className="set-row">
+    <div className="set-num-row">
       <div className="set-row-text">
         <p className="set-row-label">{label}</p>
         {description && <p className="set-row-desc">{description}</p>}
       </div>
-      <div className="set-num">
-        <button className="set-num-btn" onClick={() => onChange(Math.max(min, value - 1))}>-</button>
+      <div className="set-num-controls">
+        <button className="set-num-btn" onClick={() => onChange(Math.max(min, value - 1))}>−</button>
         <span className="set-num-val">{value}</span>
         <button className="set-num-btn" onClick={() => onChange(Math.min(max, value + 1))}>+</button>
       </div>
     </div>
   );
 }
+
 
 function Card({ icon, iconStyle = 'green', title, subtitle, children, note }) {
   return (
