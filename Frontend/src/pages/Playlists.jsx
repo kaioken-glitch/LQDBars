@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from '
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
-  FaSearch, FaPlay, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
+  FaSearch, FaPlay, FaPause, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
   FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
 } from 'react-icons/fa';
@@ -630,8 +630,7 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
   const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
 
   return (
-    <div className="pl-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
-      <div className="pl-detail">
+    <div className="pl-detail" style={{ zIndex: 50 }}>
 
         {/* Blurred art background */}
         {bgSrc && (
@@ -749,7 +748,6 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
             </>
           )}
         </div>
-      </div>
     </div>
   );
 }

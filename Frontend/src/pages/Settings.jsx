@@ -490,7 +490,7 @@ function Slider({ value, onChange, min = 0, max = 100, label, unit = '', descrip
   );
 }
 
-function SelectRow({ label, value, onChange, options, description }) {
+function Select({ label, value, onChange, options, description }) {
   return (
     <div className="set-row">
       <div className="set-row-text">
@@ -504,7 +504,7 @@ function SelectRow({ label, value, onChange, options, description }) {
   );
 }
 
-function NumberRow({ label, value, onChange, min, max, description }) {
+function NumberInput({ label, value, onChange, min, max, description }) {
   return (
     <div className="set-row">
       <div className="set-row-text">
@@ -630,21 +630,53 @@ export default function Settings() {
   }, []);
 
   const saveProfile = async () => {
-    localStorage.setItem('lb:profileName', name);
-    localStorage.setItem('lb:profileEmail', email);
-    localStorage.setItem('lb:profilePhone', phone);
+    const trimmedName = name.trim();
+    if (!trimmedName) { showToast('Display name cannot be empty', 'error'); return; }
+    if (trimmedName.length < 2) { showToast('Name must be at least 2 characters', 'error'); return; }
+    if (trimmedName.length > 40) { showToast('Name must be 40 characters or less', 'error'); return; }
+
+    // Persist locally
+    localStorage.setItem('lb:profileName',     trimmedName);
+    localStorage.setItem('lb:profileEmail',    email);
+    localStorage.setItem('lb:profilePhone',    phone);
     localStorage.setItem('lb:profileLocation', location);
-    localStorage.setItem('lb:profileBio', bio);
-    localStorage.setItem('lb:profileAvatar', avatar);
+    localStorage.setItem('lb:profileBio',      bio);
+    localStorage.setItem('lb:profileAvatar',   avatar);
+
     if (user) {
+      // Check if display_name is already taken by another user
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('display_name', trimmedName)
+        .neq('id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        showToast('That username is already taken', 'error');
+        return;
+      }
+
       const { error } = await supabase.from('profiles').upsert({
-        id: user.id, display_name: name, avatar_url: avatar,
-        phone, location, bio, updated_at: new Date().toISOString(),
+        id:           user.id,
+        display_name: trimmedName,
+        avatar_url:   avatar,
+        phone,
+        location,
+        bio,
+        updated_at:   new Date().toISOString(),
       });
       if (error) { showToast('Save failed: ' + error.message, 'error'); return; }
+
+      // Sync local name state to trimmed version
+      setName(trimmedName);
     }
-    setSaved(true); setTimeout(() => setSaved(false), 2200); showToast('Profile saved!');
-  };
+
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2200);
+    showToast('Profile saved!');
+  }
+;
 
   const handleAvatar = async (e) => {
     const f = e.target.files?.[0];
@@ -658,7 +690,15 @@ export default function Settings() {
         showToast('Upload failed — using local preview', 'error'); return;
       }
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-      setAvatar(data.publicUrl); showToast('Avatar updated!');
+      const publicUrl = data.publicUrl;
+      setAvatar(publicUrl);
+      // Auto-persist avatar_url to profiles table immediately — no Save click needed
+      await supabase.from('profiles').upsert({
+        id:         user.id,
+        avatar_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      });
+      showToast('Avatar updated!');
     } else {
       const r = new FileReader(); r.onload = ev => setAvatar(ev.target.result); r.readAsDataURL(f);
     }
