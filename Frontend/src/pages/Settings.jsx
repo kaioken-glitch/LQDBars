@@ -3,7 +3,7 @@ import {
   FaUser, FaCamera, FaSave, FaDownload, FaSlidersH,
   FaMoon, FaShieldAlt, FaCheckCircle, FaExclamationCircle,
   FaClipboard, FaFileImport, FaRedoAlt, FaSignOutAlt, FaTimes,
-  FaListUl, FaCog, FaIdCard, FaMusic,
+  FaListUl, FaCog, FaIdCard, FaMusic,FaSearch
 } from 'react-icons/fa';
 import { VERSION, BUILD_DATE } from '../version';
 import { useAuth } from '../context/AuthContext';
