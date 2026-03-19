@@ -1,3 +1,4 @@
+import dotenv       from 'dotenv';
 import express      from 'express';
 import cors         from 'cors';
 import bodyParser   from 'body-parser';
@@ -5,7 +6,6 @@ import sqlite3      from 'sqlite3';
 import { open }     from 'sqlite';
 import path         from 'path';
 import { fileURLToPath } from 'url';
-import dotenv       from 'dotenv';
 import recommendationsRouter from './recommendationsRouter.js';
 import youtubeSearchRouter   from './youtubeSearchRouter.js';
 
