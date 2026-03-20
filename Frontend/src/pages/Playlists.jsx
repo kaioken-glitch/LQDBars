@@ -152,8 +152,8 @@ const CSS = `
 .pl-import-item-label { font-size: 13px; font-weight: 500; }
 .pl-import-item-sub { font-size: 10px; color: var(--t3); margin-top: 1px; }
 .pl-import-sep { height: 1px; background: var(--b1); margin: 4px 0; }
-.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: var(--g); color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.45); letter-spacing: 0.01em; transition: background .15s var(--ease), transform .15s var(--spring), box-shadow .15s var(--ease); }
-.pl-new-btn:hover { background: var(--g2); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(29,185,84,.5); }
+.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: #1DB954; color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.45); letter-spacing: 0.01em; transition: background .15s, transform .15s cubic-bezier(0.22,1,0.36,1), box-shadow .15s; border: none; cursor: pointer; }
+.pl-new-btn:hover { background: #23E065; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(29,185,84,.5); }
 .pl-new-btn:active { transform: scale(.96); }
 .pl-divider { height: 1px; background: var(--b1); margin: 18px 0 0; }
 .pl-content { flex: 1; overflow-y: auto; padding: 24px 28px 40px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
@@ -895,7 +895,7 @@ export default function Playlists() {
                 <input
                   className="pl-search" type="text" value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search playlists\u2026"
+                  placeholder="Search playlists…"
                 />
               </div>
 
@@ -911,8 +911,8 @@ export default function Playlists() {
           {filtered.length === 0 ? (
             <div className="pl-empty">
               <div className="pl-empty-icon"><FaListUl /></div>
-              <h3>{playlists.length === 0 ? 'No playlists yet' : 'No results'}</h3>
-              <p>{playlists.length === 0 ? 'Create a new playlist or import from YouTube.' : 'Try a different search term.'}</p>
+              <h3>{playlists.filter(p => !p._hidden).length === 0 ? 'No playlists yet' : 'No results'}</h3>
+              <p>{playlists.filter(p => !p._hidden).length === 0 ? 'Create a new playlist or import from YouTube.' : 'Try a different search term.'}</p>
             </div>
           ) : (
             <div className="pl-grid">
