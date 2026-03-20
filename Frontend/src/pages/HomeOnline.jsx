@@ -924,6 +924,7 @@ const DotsMenu = memo(({ song, songList, onAddToQueue }) => {
   const { show: showToast } = useToast();
   const { user, profile: authProfile } = useAuth();
   const { addToLibrary } = usePlaylists();
+  const BACKEND = import.meta.env.VITE_YT_BACKEND_URL || 'http://localhost:3001';
   useOutsideClick(ref, () => setOpen(false));
 
   const handleShare = useCallback(() => {
@@ -1063,10 +1064,21 @@ export default function HomeOnline() {
   const [ytSearching,     setYtSearching]     = useState(false);
   const [selectedGenre,   setSelectedGenre]   = useState('All');
   const [sections,        setSections]        = useState([]);
+  const [forYou,          setForYou]          = useState([]);
+  const [forYouLoading,   setForYouLoading]   = useState(false);
   const [showDetail,      setShowDetail]      = useState(false);
   const [selectedItem,    setSelectedItem]    = useState(null);
-  const [trackStates,     setTrackStates]     = useState({});
-  const [loadingId,       setLoadingId]       = useState(null);
+  const [trackStates, setTrackStates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lb:track_states') || '{}'); }
+    catch { return {}; }
+  });
+  const [loadingId, setLoadingId] = useState(null);
+
+  // Persist track interaction states across sessions
+  useEffect(() => {
+    try { localStorage.setItem('lb:track_states', JSON.stringify(trackStates)); }
+    catch (_) {}
+  }, [trackStates]);
   const [loading,         setLoading]         = useState(true);
   const [errorMsg,        setErrorMsg]        = useState(null);
   const [detailBg,        setDetailBg]        = useState('#1a1a1a');
@@ -1141,10 +1153,13 @@ export default function HomeOnline() {
 
   /* ── Patch local song ── */
   const patchSong = useCallback(async (id, patch) => {
-    try {
-      await apiPatchSong(id, patch);
-      setPlayerSongs(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-    } catch (e) { console.error('patchSong:', e); }
+    // Always update the player queue in memory
+    setPlayerSongs(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+    // Only hit the SQLite API for local songs (not YouTube streams)
+    if (id && !String(id).startsWith('yt_') && !String(id).startsWith('local_')) {
+      try { await apiPatchSong(id, patch); }
+      catch (e) { console.error('patchSong API:', e); }
+    }
   }, [setPlayerSongs]);
 
   /* ── Play YouTube video (direct, no backend call) ── */
@@ -1215,13 +1230,15 @@ export default function HomeOnline() {
   }, [setPlayerSongs, currentIndex]);
 
   const toggleFav = useCallback((id, current) => {
-    setTrackStates(p => ({ ...p, [id]: { ...p[id], fav: !current } }));
-    patchSong(id, { favorite: !current });
+    const next = !current;
+    setTrackStates(p => ({ ...p, [id]: { ...p[id], fav: next } }));
+    patchSong(id, { favorite: next });
   }, [patchSong]);
 
   const toggleLiked = useCallback((id, current) => {
-    setTrackStates(p => ({ ...p, [id]: { ...p[id], liked: !current } }));
-    patchSong(id, { liked: !current });
+    const next = !current;
+    setTrackStates(p => ({ ...p, [id]: { ...p[id], liked: next } }));
+    patchSong(id, { liked: next });
   }, [patchSong]);
 
   /* ── Fetch sections — multiple queries per section for diversity ── */
@@ -1283,6 +1300,18 @@ export default function HomeOnline() {
       return `yt_${activeSong.youtubeId}` === item.id || activeSong.name?.toLowerCase() === item.name?.toLowerCase();
     return activeSong.name?.toLowerCase() === item.name?.toLowerCase();
   }, [activeSong]);
+
+  /* ── Fetch personalised "For You" recommendations ── */
+  useEffect(() => {
+    if (!user?.id) return;
+    setForYouLoading(true);
+    const BACKEND_URL = import.meta.env.VITE_YT_BACKEND_URL || 'http://localhost:3001';
+    fetch(`${BACKEND_URL}/api/recommendations/${user.id}?limit=20`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.songs?.length) setForYou(data.songs); })
+      .catch(() => {})
+      .finally(() => setForYouLoading(false));
+  }, [user?.id]); // eslint-disable-line
 
   const showDropdown = searchFocused && query.trim() && (localResults.length > 0 || ytResults.length > 0 || ytSearching);
 
@@ -1483,6 +1512,46 @@ export default function HomeOnline() {
 
             {/* ── SCROLLABLE CONTENT ── */}
             <div style={{ flex:1, overflowY:'auto', paddingBottom:100 }}>
+
+              {/* ── FOR YOU shelf — personalised recommendations ── */}
+              {(forYou.length > 0 || forYouLoading) && (
+                <section style={{ marginBottom:32 }}>
+                  <div className="ho-section-head">
+                    <div className="ho-section-title">
+                      <span className="ho-section-dot" />
+                      <span className="ho-section-name">For You</span>
+                    </div>
+                    <span style={{ fontSize:11, color:'rgba(255,255,255,0.35)' }}>
+                      Based on your taste
+                    </span>
+                  </div>
+                  <div className="ho-shelf">
+                    {forYouLoading
+                      ? Array.from({ length: 6 }).map((_,i) => (
+                          <div key={i} className="ho-shimmer-card">
+                            <div className="ho-shimmer" style={{ height:160, borderRadius:15 }} />
+                            <div style={{ padding:'8px 0 0' }}>
+                              <div className="ho-shimmer" style={{ height:11, width:'80%', borderRadius:6 }} />
+                            </div>
+                          </div>
+                        ))
+                      : forYou.map(item => {
+                          const isActive = currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId;
+                          return (
+                            <SongCard
+                              key={item.id}
+                              item={item}
+                              isActive={isActive}
+                              isPlaying={isPlaying}
+                              onPlay={() => handlePlay(item)}
+                              loadingId={loadingId}
+                            />
+                          );
+                        })
+                    }
+                  </div>
+                </section>
+              )}
 
               {/* Dynamic sections — horizontal shelves */}
               {sections.map(sec => (
