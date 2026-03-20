@@ -1,13 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const LS_KEY = 'lb:playlists';
-const load = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } };
-const save = (data) => { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {} };
+
+const load = () => {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+  catch { return []; }
+};
+
+const save = (data) => {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); }
+  catch (_) {}
+};
 
 const listeners = new Set();
+
+// _cache is the module-level singleton — always kept in sync with localStorage
 let _cache = load();
 
-/* ── Reserved playlist ID for the Library tab ── */
 export const LIBRARY_PLAYLIST_ID = '__library__';
 
 function ensureLibraryPlaylist(list) {
@@ -16,32 +25,42 @@ function ensureLibraryPlaylist(list) {
   return [...list, { id: LIBRARY_PLAYLIST_ID, name: 'Library', songs: [], createdAt: 0, _hidden: true }];
 }
 
-// Always make sure __library__ exists in the cache on load
 _cache = ensureLibraryPlaylist(_cache);
 
 export function notifyAll(next) {
   if (!Array.isArray(next)) next = [];
   const withLib = ensureLibraryPlaylist(next);
   _cache = withLib;
-  save(withLib);                                  // persist immediately
+  save(withLib);
   listeners.forEach(fn => { try { fn([...withLib]); } catch (_) {} });
 }
 
 export function usePlaylists() {
-  const [playlists, setPlaylists] = useState(() => [..._cache]);
+  // Always read from localStorage on init — never trust _cache alone
+  // This handles Electron renderer reloads and Vite HMR module re-evaluation
+  const [playlists, setPlaylists] = useState(() => {
+    const fresh = ensureLibraryPlaylist(load());
+    // Sync _cache with what's actually in storage
+    _cache = fresh;
+    return [...fresh];
+  });
 
   useEffect(() => {
     const handler = (next) => setPlaylists([...next]);
     listeners.add(handler);
 
-    // Sync once on mount — picks up any writes that happened before this component mounted
+    // Re-sync on mount in case storage changed while this component was unmounted
+    // (e.g. another tab wrote to it, or module was re-evaluated)
     const fresh = ensureLibraryPlaylist(load());
-    if (JSON.stringify(fresh) !== JSON.stringify(_cache)) {
+    const cacheStr = JSON.stringify(_cache);
+    const freshStr = JSON.stringify(fresh);
+
+    if (freshStr !== cacheStr) {
+      // Storage has newer/different data — update _cache and notify everyone
       _cache = fresh;
-      // Notify ALL listeners (including this one via handler)
       listeners.forEach(fn => { try { fn([...fresh]); } catch (_) {} });
     } else {
-      // Still update local state so this component reflects current _cache
+      // In sync — just make sure this component's state is current
       setPlaylists([..._cache]);
     }
 
@@ -66,10 +85,13 @@ export function usePlaylists() {
     return pl;
   }, []);
 
-  // addPlaylist: safely prepend a fully-formed playlist object using _cache
-  // Use this instead of calling notifyAll directly from components
   const addPlaylist = useCallback((pl) => {
-    notifyAll([pl, ..._cache]);
+    // Always read fresh from storage before prepending
+    // This prevents stale _cache from overwriting playlists created elsewhere
+    const current = ensureLibraryPlaylist(load());
+    // Avoid duplicates
+    if (current.some(p => p.id === pl.id)) return;
+    notifyAll([pl, ...current]);
   }, []);
 
   const deletePlaylist = useCallback((id) => {
@@ -97,17 +119,18 @@ export function usePlaylists() {
     notifyAll(_cache.map(p => p.id === id ? { ...p, ...updates } : p));
   }, []);
 
+  // Reads fresh from localStorage and notifies ALL subscribers
+  // Safe to call on every mount
   const refreshFromStorage = useCallback(() => {
     const fresh = ensureLibraryPlaylist(load());
     _cache = fresh;
+    // Use notifyAll so every subscriber (Settings, Library etc) gets updated
+    listeners.forEach(fn => { try { fn([...fresh]); } catch (_) {} });
     setPlaylists([...fresh]);
   }, []);
 
-  // Add a song to the hidden Library playlist.
-  // Returns false if already present, true if added.
   const addToLibrary = useCallback((song) => {
     if (!song) return false;
-    // Always read _cache fresh — avoids stale closure
     const current = _cache;
     const libPl = current.find(p => p.id === LIBRARY_PLAYLIST_ID)
       || { id: LIBRARY_PLAYLIST_ID, name: 'Library', songs: [], createdAt: 0, _hidden: true };

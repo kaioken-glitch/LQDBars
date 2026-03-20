@@ -11,10 +11,6 @@ import { usePlaylists } from '../hooks/usePlaylists';
 import { fetchPlaylistWithDurations } from '../utils/youtubePlaylist';
 import { useToast } from '../components/Toast';
 
-/* ── STORAGE — kept only for legacy reads; all writes go through usePlaylists hook ── */
-const LS     = 'lb:playlists';
-const loadPL = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
-
 /* ── YOUTUBE PLAYLIST IMPORT ──
    Uses Piped API (open-source, no API key, CORS-safe).
    Playback is handled by PlayerContext via YouTube IFrame Player API.
@@ -765,11 +761,7 @@ export default function Playlists() {
     addPlaylist,
     addSongToPlaylist,
     removeSongFromPlaylist,
-    refreshFromStorage,
   } = usePlaylists();
-
-  // Re-sync from storage every time this page mounts (handles login/nav back)
-  useEffect(() => { refreshFromStorage(); }, [refreshFromStorage]);
 
   const { show: showToast } = useToast();
 
