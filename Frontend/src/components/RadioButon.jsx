@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { useRadio } from '../hooks/Usesmartradio';
+import { useRadio } from '../hooks/useSmartRadio';
 
 const CSS = `
   .rb-root {

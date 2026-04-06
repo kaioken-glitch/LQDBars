@@ -7,6 +7,7 @@ import Playlists from './pages/Playlists';
 import Recent from './pages/Recent';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import { useAuth } from '../contexts/AuthContext';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
@@ -48,6 +49,7 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
+  const { user } = useAuth();
 
   /* Connectivity check */
   useEffect(() => {
@@ -173,6 +175,7 @@ function App() {
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
+  
 
   return (
     <AuthProvider>
