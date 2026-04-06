@@ -7,7 +7,6 @@ import Playlists from './pages/Playlists';
 import Recent from './pages/Recent';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import { useAuth } from '../contexts/AuthContext';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
@@ -49,7 +48,6 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
-  const { user } = useAuth();
 
   /* Connectivity check */
   useEffect(() => {
@@ -182,7 +180,7 @@ function App() {
       <ToastProvider>
         <PlayerProvider>
           <AppInner>
-            {user && (
+            {(
               <div style={{ position:'fixed', bottom:'calc(70px + env(safe-area-inset-bottom) + 6px)', left:'50%', transform:'translateX(-50%)', zIndex:200 }}>
                 <RadioStation />
               </div>
