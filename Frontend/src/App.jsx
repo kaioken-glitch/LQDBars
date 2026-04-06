@@ -10,11 +10,9 @@ import Login from './pages/Login';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
-import { LayerProvider, AppLayers, Layer, useLayer } from './context/LayerContext';
 import MobilePlayer from './components/MobilePlayer';
 import BottomNav from './components/BottomNav';
 import TinyPlayer from './components/TinyPlayer';
-import PlayerControls from './components/PlayerControls';
 import SplashScreen from './utils/Splashscreen';
 import './index.css';
 
@@ -46,7 +44,6 @@ function MobileTinyPlayer({ active }) {
 function AppInner() {
   const [active, setActive]     = useState('Home');
   const { user, loading }       = useAuth();
-  const { focus, unfocus }      = useLayer();
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -78,7 +75,7 @@ function AppInner() {
     };
   }, []);
 
-  /* Keep Render backend warm — ping every 10 minutes to prevent spin-down */
+  /* Keep Render backend warm */
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_API_URL;
     if (!backendUrl) return;
@@ -102,17 +99,18 @@ function AppInner() {
   }
 
   return (
-    <AppLayers>
+    <>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        background: 'var(--lb-bg-base, #07080A)',
+      }}>
+        {/* Content row: Sidebar + Page */}
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-      {/* ── base: page content (sidebar + current page) ── */}
-      <Layer name="base">
-        <div style={{
-          display: 'flex',
-          width: '100%',
-          height: '100%',
-          background: 'var(--lb-bg-base, #07080A)',
-          overflow: 'hidden',
-        }}>
           {/* Sidebar — desktop only, hidden when not logged in */}
           {user && (
             <div className="sidebar-slot" style={{ display: 'none', flexShrink: 0 }}>
@@ -128,40 +126,18 @@ function AppInner() {
             {renderPage()}
           </div>
         </div>
-      </Layer>
 
-      {/* ── player: desktop compact bar + expanded player ── */}
-      <Layer name="player">
+        {/* Bottom bar — hidden when not logged in */}
         {user && (
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
-            <PlayerControls
-              onExpand={() => focus('overlay')}
-              onCollapse={unfocus}
-            />
+          <div className="bottom-slot" style={{ flexShrink: 0 }}>
+            {active !== 'Home' && <MobilePlayer />}
+            <BottomNav active={active} setActive={setActive} />
           </div>
         )}
-      </Layer>
+      </div>
 
-      {/* ── nav: BottomNav + TinyPlayer pill — never blurs ── */}
-      <Layer name="nav" noBlur>
-        {user && (
-          <>
-            <div className="bottom-slot" style={{
-              position: 'absolute', bottom: 0, left: 0, right: 0,
-            }}>
-              {active !== 'Home' && <MobilePlayer />}
-              <BottomNav active={active} setActive={setActive} />
-            </div>
-            <MobileTinyPlayer active={active} />
-          </>
-        )}
-      </Layer>
-
-      {/* ── overlay: full-screen expanded player takeover ── */}
-      <Layer name="overlay" />
-
-      {/* ── toast: notifications, always on top, never blurs ── */}
-      <Layer name="toast" noBlur />
+      {/* Mobile TinyPlayer — fixed above BottomNav */}
+      {user && <MobileTinyPlayer active={active} />}
 
       <style>{`
         /* Desktop */
@@ -179,12 +155,13 @@ function AppInner() {
             bottom: calc(70px + env(safe-area-inset-bottom, 0px) + 14px);
             left: 50%;
             transform: translateX(-50%);
+            z-index: 200;
             pointer-events: all;
             filter: drop-shadow(0 8px 24px rgba(0,0,0,0.7));
           }
         }
       `}</style>
-    </AppLayers>
+    </>
   );
 }
 
@@ -200,9 +177,7 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <PlayerProvider>
-          <LayerProvider>
-            <AppInner />
-          </LayerProvider>
+          <AppInner />
         </PlayerProvider>
       </ToastProvider>
     </AuthProvider>
