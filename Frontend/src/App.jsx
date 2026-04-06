@@ -11,6 +11,7 @@ import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import MobilePlayer from './components/MobilePlayer';
+import RadioStation from './components/RadioStation';
 import BottomNav from './components/BottomNav';
 import TinyPlayer from './components/TinyPlayer';
 import SplashScreen from './utils/Splashscreen';
@@ -177,7 +178,13 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <PlayerProvider>
-          <AppInner />
+          <AppInner>
+            {user && (
+              <div style={{ position:'fixed', bottom:'calc(70px + env(safe-area-inset-bottom) + 6px)', left:'50%', transform:'translateX(-50%)', zIndex:200 }}>
+                <RadioStation />
+              </div>
+            )}
+          </AppInner>
         </PlayerProvider>
       </ToastProvider>
     </AuthProvider>
