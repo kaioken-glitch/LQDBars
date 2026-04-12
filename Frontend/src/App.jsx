@@ -111,10 +111,6 @@ function AppInner() {
         )}
       </div>
 
-      {/* Global player — handles both desktop bar and mobile mini bar */}
-      {user && <PlayerControls />}
-
-      {/* Radio station pill — fixed above BottomNav */}
       {user && (
         <div style={{
           position: 'fixed',
@@ -127,6 +123,10 @@ function AppInner() {
         </div>
       )}
 
+      {/* Global player — handles both desktop bar and mobile mini bar */}
+      {user && <PlayerControls />}
+
+      {/* Radio station pill — fixed above BottomNav */}
       <style>{`
         /* Desktop */
         @media (min-width: 768px) {
