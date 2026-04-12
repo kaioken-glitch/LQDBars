@@ -18,7 +18,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useRadio } from '../hooks/useSmartRadio';
+import { useSmartRadio as useRadio } from '../hooks/useSmartRadio';
 import { usePlayer } from '../context/PlayerContext';
 import {
   FaPlay, FaPause, FaStepForward, FaRandom,
