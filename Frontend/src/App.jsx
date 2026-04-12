@@ -10,7 +10,6 @@ import Login from './pages/Login';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
-import RadioStation from './components/RadioStation';
 import BottomNav from './components/BottomNav';
 import PlayerControls from './components/PlayerControls';
 import SplashScreen from './utils/Splashscreen';
@@ -110,18 +109,6 @@ function AppInner() {
           </div>
         )}
       </div>
-
-      {user && (
-        <div style={{
-          position: 'fixed',
-          bottom: 'calc(70px + env(safe-area-inset-bottom) + 6px)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 200,
-        }}>
-          <RadioStation />
-        </div>
-      )}
 
       {/* Global player — handles both desktop bar and mobile mini bar */}
       {user && <PlayerControls />}
