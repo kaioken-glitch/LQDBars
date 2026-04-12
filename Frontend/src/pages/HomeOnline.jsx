@@ -17,6 +17,7 @@ import { usePlayer } from '../context/PlayerContext';
 import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
+import RadioTile, { RadioDetailView } from '../components/RadioTile';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -1328,6 +1329,9 @@ export default function HomeOnline() {
     const title     = selectedItem.name || 'Downloaded';
     const subtitle  = selectedItem.songCount ? `${selectedItem.songCount} songs` : (selectedItem.artist || '');
     const typeLabel = selectedItem.type === 'downloaded' ? 'LOCAL LIBRARY' : (selectedItem.type?.replace('-',' ').toUpperCase() || 'PLAYLIST');
+    if (selectedItem?.type === 'radio') {
+      return <RadioDetailView onClose={closeDetail} />;
+    }
 
     return (
       <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', position:'relative' }}>
@@ -1615,6 +1619,7 @@ export default function HomeOnline() {
                 {dlSongs.length > 0 ? (
                   <div className="ho-shelf">
                     {/* Summary mosaic tile */}
+                    <RadioTile onShowDetail={() => openDetail({ type: 'radio' })} />
                     <div className="ho-dl-tile" onClick={() => openDetail({
                       type:'downloaded', name:'Downloaded Songs',
                       cover:dlSongs[0]?.cover, accent:'#1DB954',
