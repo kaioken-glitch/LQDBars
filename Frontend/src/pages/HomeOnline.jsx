@@ -14,7 +14,7 @@ import {
 import { fetchSongs, patchSong as apiPatchSong } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
-import PlayerControls from '../components/PlayerControls';
+import RadioStation from '../components/RadioStation';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
 
@@ -95,8 +95,6 @@ function isSingleTrack(video) {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SECTION DEFINITIONS
-   Each section has a pool of queries. We pick MULTIPLE queries per load and
-   merge results so each section shows diverse tracks, not duplicates.
 ───────────────────────────────────────────────────────────────────────────── */
 const SECTION_DEFINITIONS = [
   {
@@ -238,8 +236,6 @@ const SECTION_DEFINITIONS = [
   },
 ];
 
-/* Pick sections for the active genre. For each section, pick MULTIPLE queries
-   from the pool so results are diverse. */
 function getSectionsForGenre(genre) {
   if (genre === 'All') {
     const bonus  = SECTION_DEFINITIONS.filter(s => s.genre === null);
@@ -255,7 +251,6 @@ function getSectionsForGenre(genre) {
   return [{ ...match, queries: pickQueries(match.pool, 6) }];
 }
 
-/* Pick N distinct queries at random from the pool */
 function pickQueries(pool, n) {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(n, pool.length));
@@ -284,6 +279,13 @@ const STYLES = `
     position: relative;
     flex-shrink: 0;
   }
+  .ho-hero-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
   .ho-greeting {
     font-family: 'Syne', sans-serif;
     font-size: clamp(26px, 3.5vw, 40px);
@@ -297,6 +299,10 @@ const STYLES = `
     font-size: 13px;
     color: rgba(255,255,255,0.38);
     font-weight: 400;
+  }
+  .ho-hero-radio {
+    flex-shrink: 0;
+    align-self: center;
   }
 
   /* ── Search bar ── */
@@ -428,7 +434,7 @@ const STYLES = `
   .ho-tcard {
     flex-shrink: 0;
     width: 160px;
-    height: 186px;           /* image 160 + name pill ~26 */
+    height: 186px;
     cursor: pointer;
     position: relative;
     display: flex;
@@ -454,17 +460,14 @@ const STYLES = `
     display: block;
     will-change: transform;
   }
-  /* Overlay content floats above image in Z */
   .ho-tcard-overlay-content {
     position: absolute; inset: 0;
     border-radius: 15px;
     pointer-events: none;
   }
-  /* Badge top-left */
   .ho-tcard-badge-wrap {
     position: absolute; top: 8px; left: 8px; z-index: 2;
   }
-  /* Song name pill pinned at bottom */
   .ho-tcard-name-pill {
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -481,7 +484,6 @@ const STYLES = `
   }
   .ho-tcard-name.active { color: var(--lb-green); }
 
-  /* Wave badge */
   .ho-now-playing-badge {
     position: absolute; bottom: 10px; left: 10px;
     background: rgba(0,0,0,0.68); backdrop-filter: blur(10px);
@@ -490,7 +492,6 @@ const STYLES = `
   }
   .ho-tcard-wave { bottom: 40px !important; }
 
-  /* Play button — slides up on hover */
   .ho-tcard-play-wrap {
     position: absolute;
     bottom: 10px; right: 10px;
@@ -517,7 +518,6 @@ const STYLES = `
   .ho-tcard-play:active { transform: scale(0.92); }
   .ho-tcard-play.loading { background: rgba(255,255,255,0.7); cursor: wait; }
 
-  /* Tooltip */
   .ho-tcard-tooltip {
     pointer-events: none;
     position: absolute;
@@ -536,7 +536,6 @@ const STYLES = `
   }
   @media (min-width: 640px) { .ho-tcard-tooltip { display: block; } }
 
-  /* Artist name below card */
   .ho-tcard-artist-row {
     width: 160px; margin-top: 8px;
     font-size: 11px; color: rgba(255,255,255,0.4);
@@ -545,7 +544,6 @@ const STYLES = `
     font-family: 'DM Sans', sans-serif;
   }
 
-  /* Badge pills */
   .ho-badge-new {
     background: linear-gradient(135deg,#FF4B4B,#FF2D55);
     color: #fff; font-size: 9px; font-weight: 800;
@@ -694,14 +692,9 @@ const STYLES = `
     background: rgba(255,255,255,0.06);
   }
 
-  /* ── Wave bars ── */
-  /* Wave SVG renders inline — no extra CSS needed */
-
-  /* ── Spin ── */
   @keyframes ho-spin { to { transform:rotate(360deg); } }
   .ho-spin { animation: ho-spin .7s linear infinite; }
 
-  /* ── Fade up ── */
   @keyframes ho-fadeup { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
   .ho-fadeup { animation: ho-fadeup .32s ease both; }
 
@@ -818,7 +811,6 @@ function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlayin
         className="ho-tcard-inner"
         style={{ rotateX, rotateY, scale }}
       >
-        {/* Cover image */}
         <motion.img
           src={imageSrc}
           alt={altText}
@@ -827,12 +819,10 @@ function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlayin
           style={{ transform: 'translateZ(0)' }}
         />
 
-        {/* Overlay: song name floats above */}
         <motion.div
           className="ho-tcard-overlay-content"
           style={{ transform: 'translateZ(30px)' }}
         >
-          {/* Badge top-left */}
           {badge && (
             <div className="ho-tcard-badge-wrap">
               <span className={badge==='HOT' ? 'ho-badge-hot' : badge==='NEW' ? 'ho-badge-new' : undefined}
@@ -842,18 +832,15 @@ function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlayin
             </div>
           )}
 
-          {/* Active wave bottom-left */}
           {isActive && isPlaying && !isLoading && (
             <div className="ho-now-playing-badge ho-tcard-wave"><WaveIcon /></div>
           )}
 
-          {/* Song name pill — always visible at bottom */}
           <div className="ho-tcard-name-pill">
             <span className={`ho-tcard-name${isActive ? ' active' : ''}`}>{altText}</span>
           </div>
         </motion.div>
 
-        {/* Play/pause button — shows on hover via CSS */}
         <div className="ho-tcard-play-wrap">
           <button
             className={`ho-tcard-play${isLoading ? ' loading' : ''}`}
@@ -868,7 +855,6 @@ function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlayin
         </div>
       </motion.div>
 
-      {/* Tooltip caption that follows cursor */}
       <motion.figcaption
         className="ho-tcard-tooltip"
         style={{ x, y, opacity, rotate: rotateFig }}
@@ -879,7 +865,6 @@ function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlayin
   );
 }
 
-/* Song card — wraps TiltedCard with item data */
 const SongCard = memo(({ item, isActive, isPlaying, onPlay, loadingId }) => {
   const isLoading = loadingId === item.id;
   return (
@@ -896,7 +881,6 @@ const SongCard = memo(({ item, isActive, isPlaying, onPlay, loadingId }) => {
   );
 });
 
-/* Shimmer shelf */
 const ShimmerShelf = ({ count = 6 }) => (
   <div className="ho-shelf">
     {Array.from({ length: count }).map((_, i) => (
@@ -924,7 +908,6 @@ const DotsMenu = memo(({ song, songList, onAddToQueue }) => {
   const { show: showToast } = useToast();
   const { user, profile: authProfile } = useAuth();
   const { addToLibrary } = usePlaylists();
-  const BACKEND = import.meta.env.VITE_YT_BACKEND_URL || 'http://localhost:3001';
   useOutsideClick(ref, () => setOpen(false));
 
   const handleShare = useCallback(() => {
@@ -979,7 +962,6 @@ const AddToPlaylistBtn = memo(({ song }) => {
   const { playlists: allPlaylists, addSongToPlaylist } = usePlaylists();
   const playlists = allPlaylists.filter(p => !p._hidden);
   const { show: showToast } = useToast();
-  const { user, profile: authProfile } = useAuth();
   useOutsideClick(ref, () => setOpen(false));
   const handle = useCallback((pl) => { addSongToPlaylist(pl.id, song); showToast(`Added to ${pl.name} ✓`,'success'); setOpen(false); }, [song, addSongToPlaylist, showToast]);
   return (
@@ -1010,7 +992,7 @@ const AddToPlaylistBtn = memo(({ song }) => {
 const TrackRow = memo(({ song, index, isActive, isPlaying, onPlay, isFav, isLiked, onFav, onLike }) => (
   <div className={`ho-track${isActive?' active':''}`} onClick={onPlay}>
     <span style={{ width:28, textAlign:'center', fontSize:12, color:'var(--lb-text-3)', flexShrink:0 }}>
-      {isActive && isPlaying ? <WaveIcon /> : String(index+1).padStart(2,'0')}
+      {isActive && isPlaying ? <WaveIcon /> : String(index+1).padStart(2,'00')}
     </span>
     <div style={{ width:40, height:40, borderRadius:8, overflow:'hidden', flexShrink:0 }}>
       <img src={song.cover} alt={song.name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
@@ -1074,11 +1056,11 @@ export default function HomeOnline() {
   });
   const [loadingId, setLoadingId] = useState(null);
 
-  // Persist track interaction states across sessions
   useEffect(() => {
     try { localStorage.setItem('lb:track_states', JSON.stringify(trackStates)); }
     catch (_) {}
   }, [trackStates]);
+
   const [loading,         setLoading]         = useState(true);
   const [errorMsg,        setErrorMsg]        = useState(null);
   const [detailBg,        setDetailBg]        = useState('#1a1a1a');
@@ -1102,15 +1084,11 @@ export default function HomeOnline() {
     currentSong,
   } = usePlayer();
 
-  // downloadedSongs is the persisted library — never overwritten by queue changes
-  // songs is the current playback queue — can include YouTube tracks
   const activeSong = currentSong ?? songs[currentIndex];
 
-  // Greeting + username
   const greeting  = useMemo(() => getGreeting(), []);
   const firstName = useMemo(() => getFirstName(authProfile, user), [authProfile, user]);
 
-  /* ── Initial load ── */
   useEffect(() => { if (volume === 1) setVolume(0.2); }, []); // eslint-disable-line
 
   useEffect(() => {
@@ -1127,17 +1105,14 @@ export default function HomeOnline() {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line
 
-  /* ── Debounce ── */
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(query), 280);
     return () => clearTimeout(t);
   }, [query]);
 
-  /* ── Search — ONLY searches, never touches the player queue ── */
   useEffect(() => {
     if (!debouncedQ.trim()) { setLocalResults([]); setYtResults([]); return; }
     const q = debouncedQ.toLowerCase();
-    // Search in downloadedSongs (the persisted list), not songs (the queue)
     const base = (downloadedSongs && downloadedSongs.length > 0) ? downloadedSongs : songs;
     setLocalResults(base.filter(s =>
       s.name?.toLowerCase().includes(q) ||
@@ -1151,18 +1126,14 @@ export default function HomeOnline() {
       .finally(() => setYtSearching(false));
   }, [debouncedQ]); // eslint-disable-line
 
-  /* ── Patch local song ── */
   const patchSong = useCallback(async (id, patch) => {
-    // Always update the player queue in memory
     setPlayerSongs(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-    // Only hit the SQLite API for local songs (not YouTube streams)
     if (id && !String(id).startsWith('yt_') && !String(id).startsWith('local_')) {
       try { await apiPatchSong(id, patch); }
       catch (e) { console.error('patchSong API:', e); }
     }
   }, [setPlayerSongs]);
 
-  /* ── Play YouTube video (direct, no backend call) ── */
   const playYoutubeVideo = useCallback((video, itemId) => {
     setLoadingId(itemId ?? video.id);
     try {
@@ -1179,7 +1150,6 @@ export default function HomeOnline() {
     }
   }, [downloadedSongs, songs, setPlayerSongs, setIsPlaying]);
 
-  /* ── Play streaming song (uses youtubeId directly, search as fallback) ── */
   const playStreamingSong = useCallback(async (item) => {
     const knownId = item.youtubeId || (item.id?.startsWith('yt_') ? item.id.replace('yt_','') : null);
     if (knownId && /^[A-Za-z0-9_-]{11}$/.test(knownId)) {
@@ -1206,7 +1176,6 @@ export default function HomeOnline() {
     }
   }, [playYoutubeVideo]);
 
-  /* ── Detail view (only for Downloaded and future album tiles) ── */
   const openDetail = useCallback((item) => {
     setSelectedItem(item);
     setDetailBg(item.accent || '#1a2a1a');
@@ -1241,7 +1210,6 @@ export default function HomeOnline() {
     patchSong(id, { liked: next });
   }, [patchSong]);
 
-  /* ── Fetch sections — multiple queries per section for diversity ── */
   const fetchSections = useCallback((genre) => {
     const chosen = getSectionsForGenre(genre);
 
@@ -1253,7 +1221,6 @@ export default function HomeOnline() {
     chosen.forEach((sec, idx) => {
       if (getSectionCache(genre, sec.id)) return;
 
-      // Fire multiple queries in parallel, merge + dedupe results
       const queryPromises = sec.queries.map(q =>
         youtubeConverter.searchVideos(q, 6).catch(() => [])
       );
@@ -1293,7 +1260,6 @@ export default function HomeOnline() {
 
   useEffect(() => { fetchSections(selectedGenre); }, [selectedGenre, fetchSections]); // eslint-disable-line
 
-  /* ── Is card active ── */
   const isCardActive = useCallback((item) => {
     if (!activeSong) return false;
     if (activeSong.youtube && activeSong.youtubeId)
@@ -1301,7 +1267,6 @@ export default function HomeOnline() {
     return activeSong.name?.toLowerCase() === item.name?.toLowerCase();
   }, [activeSong]);
 
-  /* ── Fetch personalised "For You" recommendations ── */
   useEffect(() => {
     if (!user?.id) return;
     setForYouLoading(true);
@@ -1315,11 +1280,10 @@ export default function HomeOnline() {
 
   const showDropdown = searchFocused && query.trim() && (localResults.length > 0 || ytResults.length > 0 || ytSearching);
 
-  // The downloaded list to show — always from downloadedSongs, never the queue
   const dlSongs = (downloadedSongs && downloadedSongs.length > 0) ? downloadedSongs : songs.filter(s => !s.youtube);
 
   /* ─────────────────────────────────────────────────────────────────────
-     DETAIL VIEW (Downloaded / future album tiles)
+     DETAIL VIEW
   ───────────────────────────────────────────────────────── */
   const renderDetail = () => {
     if (!selectedItem) return null;
@@ -1333,7 +1297,6 @@ export default function HomeOnline() {
       <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', position:'relative' }}>
         <div style={{ position:'absolute', inset:0, zIndex:0, background:`linear-gradient(160deg,${detailBg}55 0%,#0A0A0A 45%)`, pointerEvents:'none' }} />
 
-        {/* Header */}
         <div style={{ position:'sticky', top:0, zIndex:20, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(10,10,10,.7)', backdropFilter:'blur(24px)', borderBottom:'1px solid var(--lb-border-1)', flexShrink:0 }}>
           <button onClick={closeDetail} className="lb-icon-btn">
             <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize:14 }} />
@@ -1345,7 +1308,6 @@ export default function HomeOnline() {
           </div>
         </div>
 
-        {/* Hero */}
         <div style={{ position:'relative', zIndex:1, padding:'20px 24px 16px', display:'flex', gap:20, alignItems:'center', flexShrink:0 }}>
           <div style={{ position:'relative', flexShrink:0 }}>
             <div style={{ position:'absolute', inset:-6, borderRadius:20, background:`radial-gradient(circle,${detailBg}60 0%,transparent 70%)`, filter:'blur(16px)', zIndex:0 }} />
@@ -1374,7 +1336,6 @@ export default function HomeOnline() {
 
         <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'0 20px', flexShrink:0 }} />
 
-        {/* Track list */}
         <div style={{ position:'relative', zIndex:1, flex:1, overflowY:'auto', padding:'12px 16px 24px' }}>
           {songList.length === 0 ? (
             <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--lb-text-3)' }}>
@@ -1422,13 +1383,20 @@ export default function HomeOnline() {
           <>
             {/* ── GREETING HERO ── */}
             <div className="ho-hero">
-              <h1 className="ho-greeting">
-                {firstName ? <>{greeting}, {firstName}</> : greeting}
-              </h1>
-              <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
+              <div className="ho-hero-row">
+                <div>
+                  <h1 className="ho-greeting">
+                    {firstName ? <>{greeting}, {firstName}</> : greeting}
+                  </h1>
+                  <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
+                </div>
+                <div className="ho-hero-radio">
+                  <RadioStation />
+                </div>
+              </div>
             </div>
 
-            {/* ── SEARCH + GENRE CHIPS ── */}
+            {/* ── SEARCH ── */}
             <div className="ho-search-wrap">
               <div className="ho-search-box" style={{ position:'relative' }}>
                 <FaSearch className="ho-search-icon" />
@@ -1449,7 +1417,6 @@ export default function HomeOnline() {
                         {localResults.slice(0,4).map((song,i) => (
                           <div key={song.id??i} className="ho-search-row" onClick={() => {
                             setQuery(song.name);
-                            // Play from the downloaded list, not the current queue
                             const baseList = (downloadedSongs?.length>0) ? downloadedSongs : songs;
                             const idx = baseList.findIndex(s => s.id === song.id);
                             if (idx !== -1) {
@@ -1513,7 +1480,7 @@ export default function HomeOnline() {
             {/* ── SCROLLABLE CONTENT ── */}
             <div style={{ flex:1, overflowY:'auto', paddingBottom:100 }}>
 
-              {/* ── FOR YOU shelf — personalised recommendations ── */}
+              {/* ── FOR YOU ── */}
               {(forYou.length > 0 || forYouLoading) && (
                 <section style={{ marginBottom:32 }}>
                   <div className="ho-section-head">
@@ -1553,7 +1520,7 @@ export default function HomeOnline() {
                 </section>
               )}
 
-              {/* Dynamic sections — horizontal shelves */}
+              {/* ── DYNAMIC SECTIONS ── */}
               {sections.map(sec => (
                 <section key={sec.id} style={{ marginBottom:32 }}>
                   <div className="ho-section-head">
@@ -1614,7 +1581,6 @@ export default function HomeOnline() {
 
                 {dlSongs.length > 0 ? (
                   <div className="ho-shelf">
-                    {/* Summary mosaic tile */}
                     <div className="ho-dl-tile" onClick={() => openDetail({
                       type:'downloaded', name:'Downloaded Songs',
                       cover:dlSongs[0]?.cover, accent:'#1DB954',
@@ -1643,7 +1609,6 @@ export default function HomeOnline() {
                       </button>
                     </div>
 
-                    {/* Individual song tiles (first 8) */}
                     {dlSongs.slice(0,8).map(song => {
                       const isActive = activeSong?.id === song.id;
                       return (
@@ -1676,8 +1641,6 @@ export default function HomeOnline() {
             </div>
           </>
         )}
-
-        <PlayerControls />
       </div>
     </>
   );
