@@ -13,7 +13,7 @@
 import React, { useCallback } from 'react';
 import { FaPlay, FaPause, FaStepForward, FaTimes, FaInfinity } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
-import { useRadio } from '../hooks/useRadio';
+import { useRadio } from '../hooks/useSmartRadio';
 
 /* ─── shared mini wave ─────────────────────────────────────────── */
 function WaveIcon() {
