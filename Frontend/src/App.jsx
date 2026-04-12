@@ -10,36 +10,11 @@ import Login from './pages/Login';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
-import MobilePlayer from './components/MobilePlayer';
 import RadioStation from './components/RadioStation';
 import BottomNav from './components/BottomNav';
-import TinyPlayer from './components/TinyPlayer';
+import PlayerControls from './components/PlayerControls';
 import SplashScreen from './utils/Splashscreen';
 import './index.css';
-
-/* ─── Mobile TinyPlayer pill ─────────────────────────────────── */
-function MobileTinyPlayer({ active }) {
-  const {
-    currentSong, isPlaying, setIsPlaying,
-    playNext, playPrev, isMuted, toggleMute,
-  } = usePlayer();
-
-  if (!currentSong || active === 'Home') return null;
-
-  return (
-    <div className="mobile-tiny-pill">
-      <TinyPlayer
-        song={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(p => !p)}
-        onPrev={playPrev}
-        onNext={playNext}
-        isMuted={isMuted}
-        onMuteToggle={toggleMute}
-      />
-    </div>
-  );
-}
 
 /* ─── Inner App ───────────────────────────────────────────────── */
 function AppInner() {
@@ -128,38 +103,40 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom bar — hidden when not logged in */}
+        {/* Bottom nav — hidden when not logged in */}
         {user && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
-            {active !== 'Home' && <MobilePlayer />}
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* Mobile TinyPlayer — fixed above BottomNav */}
-      {user && <MobileTinyPlayer active={active} />}
+      {/* Global player — handles both desktop bar and mobile mini bar */}
+      {user && <PlayerControls />}
+
+      {/* Radio station pill — fixed above BottomNav */}
+      {user && (
+        <div style={{
+          position: 'fixed',
+          bottom: 'calc(70px + env(safe-area-inset-bottom) + 6px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 200,
+        }}>
+          <RadioStation />
+        </div>
+      )}
 
       <style>{`
         /* Desktop */
         @media (min-width: 768px) {
-          .sidebar-slot                  { display: flex !important; }
-          .bottom-slot .bottom-nav-root  { display: none  !important; }
-          .mobile-tiny-pill              { display: none  !important; }
+          .sidebar-slot                 { display: flex !important; }
+          .bottom-slot .bottom-nav-root { display: none !important; }
         }
 
         /* Mobile */
         @media (max-width: 767px) {
           .sidebar-slot { display: none !important; }
-          .mobile-tiny-pill {
-            position: fixed;
-            bottom: calc(70px + env(safe-area-inset-bottom, 0px) + 14px);
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 200;
-            pointer-events: all;
-            filter: drop-shadow(0 8px 24px rgba(0,0,0,0.7));
-          }
         }
       `}</style>
     </>
@@ -173,19 +150,12 @@ function App() {
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
-  
 
   return (
     <AuthProvider>
       <ToastProvider>
         <PlayerProvider>
-          <AppInner>
-            {(
-              <div style={{ position:'fixed', bottom:'calc(70px + env(safe-area-inset-bottom) + 6px)', left:'50%', transform:'translateX(-50%)', zIndex:200 }}>
-                <RadioStation />
-              </div>
-            )}
-          </AppInner>
+          <AppInner />
         </PlayerProvider>
       </ToastProvider>
     </AuthProvider>
