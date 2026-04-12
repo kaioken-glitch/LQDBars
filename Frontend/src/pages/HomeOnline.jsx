@@ -17,7 +17,7 @@ import { usePlayer } from '../context/PlayerContext';
 import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
-import RadioTile, { RadioDetailView } from '../components/RadioTile';
+import RadioTile, { RadioDetailView } from '../components/Radiotile';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
