@@ -95,42 +95,50 @@ export function PlayerProvider({ children }) {
 
       cleanupYouTube();
 
-      let container = document.getElementById('youtube-player-container');
-      if (!container) {
-        container = document.createElement('div');
-        container.id = 'youtube-player-container';
-        container.style.display = 'none';
-        document.body.appendChild(container);
-      }
+      // Always recreate the container so IFrame API gets a fresh DOM node.
+      const oldCtn = document.getElementById('youtube-player-container');
+      if (oldCtn) oldCtn.remove();
+      const container = document.createElement('div');
+      container.id = 'youtube-player-container';
+      container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+      document.body.appendChild(container);
 
       const initPlayer = () => {
         if (!window.YT || !window.YT.Player) { setTimeout(initPlayer, 100); return; }
         try {
           youtubePlayerRef.current = new window.YT.Player('youtube-player-container', {
-            height: '0', width: '0',
+            height: '1', width: '1',
             videoId,
             playerVars: {
-              autoplay: isPlaying ? 1 : 0,
+              autoplay: 1,          // always 1 — user triggered this
               controls: 0, disablekb: 1, fs: 0,
               iv_load_policy: 3, modestbranding: 1, rel: 0,
+              playsinline: 1,       // critical on iOS to avoid fullscreen hijack
             },
             events: {
               onReady: (event) => {
-                setDuration(event.target.getDuration());
-                if (isPlaying) event.target.playVideo();
+                try {
+                  event.target.setVolume(volume * 100);
+                  const dur = event.target.getDuration();
+                  if (dur > 0) setDuration(dur);
+                  event.target.playVideo();
+                  setIsPlaying(true);
+                } catch (e) { console.warn('YT onReady:', e); }
               },
               onStateChange: (event) => {
-                if (event.data === window.YT.PlayerState.ENDED) {
+                const S = window.YT.PlayerState;
+                if (event.data === S.ENDED) {
                   if (currentIndex < songs.length - 1) setCurrentIndex(prev => prev + 1);
                   else setIsPlaying(false);
-                } else if (event.data === window.YT.PlayerState.PLAYING) {
+                } else if (event.data === S.PLAYING) {
+                  try { const d = event.target.getDuration(); if (d > 0) setDuration(d); } catch (_) {}
                   setIsPlaying(true);
-                } else if (event.data === window.YT.PlayerState.PAUSED) {
+                } else if (event.data === S.PAUSED) {
                   setIsPlaying(false);
                 }
               },
               onError: (event) => {
-                console.error('YouTube player error:', event.data);
+                console.error('YouTube player error code:', event.data);
                 if (songs.length > 0 && currentIndex < songs.length - 1) setCurrentIndex(prev => prev + 1);
                 else setIsPlaying(false);
               },
@@ -144,11 +152,15 @@ export function PlayerProvider({ children }) {
 
         if (timeUpdateInterval.current) clearInterval(timeUpdateInterval.current);
         timeUpdateInterval.current = setInterval(() => {
-          if (youtubePlayerRef.current?.getCurrentTime) {
-            const time = youtubePlayerRef.current.getCurrentTime();
-            if (!isNaN(time)) setCurrentTime(time);
-          }
-        }, 1000);
+          try {
+            if (youtubePlayerRef.current?.getCurrentTime) {
+              const t = youtubePlayerRef.current.getCurrentTime();
+              if (!isNaN(t) && t > 0) setCurrentTime(t);
+              const d = youtubePlayerRef.current.getDuration?.();
+              if (d > 0) setDuration(prev => prev > 0 ? prev : d);
+            }
+          } catch (_) {}
+        }, 500);
       };
 
       initPlayer();
@@ -158,14 +170,12 @@ export function PlayerProvider({ children }) {
       if (!src) { console.error('No audio source for song:', currentSong); return; }
       audioRef.current.src = src;
       audioRef.current.load();
-      if (isPlaying) {
-        audioRef.current.play().catch(err => {
-          console.error('Audio play error:', err);
-          setIsPlaying(false);
-        });
-      }
+      audioRef.current.play().catch(err => {
+        console.warn('Audio autoplay blocked:', err.message);
+      });
     }
-  }, [currentSong, currentIndex, songs.length, needsYouTubePlayer, extractYouTubeId, cleanupYouTube, isPlaying]);
+  // isPlaying intentionally NOT in deps — it would cause re-init on every play/pause.
+  }, [currentSong?.id, currentIndex, songs.length, needsYouTubePlayer, extractYouTubeId, cleanupYouTube]); // eslint-disable-line
 
   // Play/pause effect
   useEffect(() => {
