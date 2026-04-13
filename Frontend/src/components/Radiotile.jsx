@@ -10,7 +10,7 @@
 import React, { useCallback } from 'react';
 import { FaPlay, FaPause, FaStepForward, FaTimes, FaInfinity } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
-import { useRadio } from '../hooks/useRadio';
+import { useSmartRadio as useRadio } from '../hooks/useSmartRadio';
 
 /* ─── Wave bars ─────────────────────────────────────────────────── */
 function WaveIcon() {
