@@ -111,7 +111,7 @@ async function buildBatch(seedArtist, seedTitle, excludeIds = new Set()) {
 }
 
 /* ─── Hook ───────────────────────────────────────────────────── */
-export function useRadio() {
+export function useSmartRadio() {
   const {
     currentSong,
     currentIndex,
