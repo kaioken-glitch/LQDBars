@@ -31,21 +31,28 @@ export function PlayerProvider({ children }) {
 
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
-  const toggleBackgroundDetail = useCallback(() => setShowBackgroundDetail(p => !p), []);
+  const toggleBackgroundDetail = useCallback(() => setShowBackgroundDetail(prev => !prev), []);
 
   const needsYouTube = useCallback((song) => {
     if (!song) return false;
-    return song.source === 'youtube' || !!(song.youtubeId && /^[A-Za-z0-9_-]{1,}$/.test(song.youtubeId));
+    const hasYtId = song.youtubeId && /^[A-Za-z0-9_-]{1,}$/.test(song.youtubeId);
+    return song.source === 'youtube' || hasYtId;
   }, []);
 
   const extractYouTubeId = useCallback((url) => {
     if (!url) return null;
-    const patterns = [/youtube\.com\/watch\?v=([^&]+)/, /youtu\.be\/([^?]+)/, /youtube\.com\/embed\/([^?]+)/];
-    for (const p of patterns) { const m = url.match(p); if (m) return m[1]; }
+    const patterns = [
+      /youtube\.com\/watch\?v=([^&]+)/,
+      /youtu\.be\/([^?]+)/,
+      /youtube\.com\/embed\/([^?]+)/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
+    }
     return null;
   }, []);
 
-  // Time tracking interval for YouTube
   const startTimeTracking = useCallback(() => {
     if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
     timeIntervalRef.current = setInterval(() => {
@@ -72,7 +79,6 @@ export function PlayerProvider({ children }) {
   // ──────────────────────────────────────────────────────────────────────────
   const ensureYouTubePlayer = useCallback((videoId, shouldPlay = true) => {
     return new Promise((resolve, reject) => {
-      // If player already exists and is ready, just load the video
       if (ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.loadVideoById(videoId);
@@ -88,7 +94,6 @@ export function PlayerProvider({ children }) {
         return;
       }
 
-      // Prevent overlapping creation attempts
       if (ytCreatingRef.current) {
         setTimeout(() => ensureYouTubePlayer(videoId, shouldPlay).then(resolve).catch(reject), 100);
         return;
@@ -102,13 +107,12 @@ export function PlayerProvider({ children }) {
           return;
         }
 
-        // Ensure container exists
-        let ctn = document.getElementById('yt-player-singleton');
-        if (!ctn) {
-          ctn = document.createElement('div');
-          ctn.id = 'yt-player-singleton';
-          ctn.style.cssText = 'position:fixed;top:-2px;left:-2px;width:2px;height:2px;opacity:0;pointer-events:none;';
-          document.body.appendChild(ctn);
+        let container = document.getElementById('yt-player-singleton');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'yt-player-singleton';
+          container.style.cssText = 'position:fixed;top:-2px;left:-2px;width:2px;height:2px;opacity:0;pointer-events:none;';
+          document.body.appendChild(container);
         }
 
         try {
@@ -130,7 +134,6 @@ export function PlayerProvider({ children }) {
               onReady: () => {
                 ytReadyRef.current = true;
                 ytCreatingRef.current = false;
-                // Load the requested video now that player is ready
                 ytPlayerRef.current.loadVideoById(videoId);
                 if (shouldPlay) {
                   setTimeout(() => {
@@ -184,9 +187,9 @@ export function PlayerProvider({ children }) {
 
       waitForAPI();
     });
-  }, [startTimeTracking, songs.length]); // songs.length used in error handler
+  }, [startTimeTracking, songs.length]);
 
-  // Inject YouTube IFrame API script (only once)
+  // Inject YouTube IFrame API script
   useEffect(() => {
     if (!document.getElementById('yt-iframe-api')) {
       const tag = document.createElement('script');
@@ -196,7 +199,6 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  // Cleanup time tracking on unmount
   useEffect(() => {
     return () => {
       stopTimeTracking();
@@ -204,7 +206,7 @@ export function PlayerProvider({ children }) {
   }, [stopTimeTracking]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Song change effect – switches between audio and YouTube
+  // Song change effect
   // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentSong) {
@@ -227,26 +229,18 @@ export function PlayerProvider({ children }) {
         return;
       }
 
-      // Pause audio element
       try { audioRef.current.pause(); audioRef.current.src = ''; } catch (_) {}
 
-      // Reset time display
       setCurrentTime(0);
       setDuration(0);
 
-      // The magic: call ensureYouTubePlayer synchronously.
-      // Because this effect runs after a user‑initiated state change
-      // (like setCurrentIndex from a click), the call stack is still
-      // considered part of the user gesture.
       ensureYouTubePlayer(videoId, true).catch(err => {
         console.error('Failed to setup YouTube player:', err);
         setIsPlaying(false);
       });
 
-      // We set isPlaying optimistically; the player's onStateChange will confirm
       setIsPlaying(true);
     } else {
-      // ── AUDIO element ──
       playerTypeRef.current = 'audio';
       stopTimeTracking();
       try { ytPlayerRef.current?.pauseVideo(); } catch (_) {}
@@ -300,7 +294,7 @@ export function PlayerProvider({ children }) {
   }, [volume]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Record play to Supabase listening_history
+  // Record play to Supabase
   // ──────────────────────────────────────────────────────────────────────────
   const { user } = useAuth();
   useEffect(() => {
@@ -422,7 +416,7 @@ export function PlayerProvider({ children }) {
   }, []);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Set player songs (called when user selects a new playlist or song)
+  // Set player songs
   // ──────────────────────────────────────────────────────────────────────────
   const setPlayerSongs = useCallback((newSongsOrUpdater, startIndex = 0) => {
     if (typeof newSongsOrUpdater === 'function') {
