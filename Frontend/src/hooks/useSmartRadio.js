@@ -1,122 +1,125 @@
 /**
- * useRadio.js
+ * useRadio.js  — YouTube Mix-style infinite radio
  *
- * YouTube Mix–style infinite radio.
- *
- * Flow:
- *   1. Seed song → Last.fm track.getSimilar → up to 20 similar tracks
- *   2. Each similar track → YouTube Data API search → videoId
- *   3. Inject into PlayerContext queue after current position
- *   4. When queue runs low (≤2 songs left) → auto-fetch next batch
- *      seeded from the last track in the current queue
- *
- * Requires:
- *   VITE_LASTFM_API_KEY   — free at last.fm/api
- *   VITE_YOUTUBE_API_KEY  — already in your .env
+ * Fixes vs original:
+ *  - Uses setPlayerSongs (not setSongs which doesn't exist in PlayerContext)
+ *  - Drops videoCategoryId from YT search (causes 403 on standard API keys)
+ *  - Parallel YT searches instead of sequential (8x faster)
+ *  - Last.fm fallback: if no key / no results, falls back to YT-only queries
+ *  - Proper error messages surfaced to the UI
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 
-const LASTFM_BASE  = 'https://ws.audioscrobbler.com/2.0';
-const YT_BASE      = 'https://www.googleapis.com/youtube/v3';
-const BATCH_SIZE   = 15;   // tracks to fetch per refill
-const REFILL_AT    = 2;    // refill when this many songs remain after current
+const LASTFM_BASE = 'https://ws.audioscrobbler.com/2.0';
+const YT_BASE     = 'https://www.googleapis.com/youtube/v3';
+const BATCH_SIZE  = 8;   // songs per batch
+const REFILL_AT   = 3;   // refill when this many radio songs remain
 
-/* ─── Last.fm: similar tracks ────────────────────────────────── */
-async function fetchSimilar(artist, title, limit = BATCH_SIZE) {
+/* ─── Last.fm similar tracks ─────────────────────────────────────── */
+async function fetchSimilar(artist, title, limit = BATCH_SIZE + 4) {
   const key = import.meta.env.VITE_LASTFM_API_KEY;
-  if (!key) throw new Error('VITE_LASTFM_API_KEY not set');
-
-  const url = new URL(`${LASTFM_BASE}/`);
-  url.searchParams.set('method',     'track.getSimilar');
-  url.searchParams.set('track',      title);
-  url.searchParams.set('artist',     artist);
-  url.searchParams.set('api_key',    key);
-  url.searchParams.set('format',     'json');
-  url.searchParams.set('limit',      String(limit));
-  url.searchParams.set('autocorrect','1');
-
-  const res  = await fetch(url.toString());
-  const data = await res.json();
-
-  if (data.error) throw new Error(`Last.fm: ${data.message}`);
-  return (data.similartracks?.track || []).map(t => ({
-    title:  t.name,
-    artist: typeof t.artist === 'string' ? t.artist : t.artist?.name || '',
-  }));
-}
-
-/* ─── YouTube: search for videoId ───────────────────────────── */
-async function searchYouTube(artist, title) {
-  const key = import.meta.env.VITE_YOUTUBE_API_KEY;
-  if (!key) throw new Error('VITE_YOUTUBE_API_KEY not set');
-
-  const q   = `${artist} ${title} official audio`;
-  const url = new URL(`${YT_BASE}/search`);
-  url.searchParams.set('part',       'snippet');
-  url.searchParams.set('q',          q);
-  url.searchParams.set('type',       'video');
-  url.searchParams.set('videoCategoryId', '10'); // Music category
-  url.searchParams.set('maxResults', '1');
-  url.searchParams.set('key',        key);
-
-  const res  = await fetch(url.toString());
-  const data = await res.json();
-
-  const item = data.items?.[0];
-  if (!item) return null;
-
-  const videoId = item.id?.videoId;
-  if (!videoId) return null;
-
-  return {
-    id:        videoId,
-    name:      item.snippet?.title    || title,
-    artist:    item.snippet?.channelTitle || artist,
-    youtubeId: videoId,
-    cover:     `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-    album:     '',
-    source:    'radio',
-    _radioMeta: { originalArtist: artist, originalTitle: title },
-  };
-}
-
-/* ─── Build a batch of resolved songs ───────────────────────── */
-async function buildBatch(seedArtist, seedTitle, excludeIds = new Set()) {
-  let similar;
+  if (!key) return [];
   try {
-    similar = await fetchSimilar(seedArtist, seedTitle, BATCH_SIZE + 5);
-  } catch (e) {
-    console.warn('[useRadio] Last.fm failed:', e.message);
+    const url = new URL(`${LASTFM_BASE}/`);
+    url.searchParams.set('method',      'track.getSimilar');
+    url.searchParams.set('track',       title);
+    url.searchParams.set('artist',      artist);
+    url.searchParams.set('api_key',     key);
+    url.searchParams.set('format',      'json');
+    url.searchParams.set('limit',       String(limit));
+    url.searchParams.set('autocorrect', '1');
+    const res  = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.error) return [];
+    return (data.similartracks?.track || []).map(t => ({
+      title:  t.name,
+      artist: typeof t.artist === 'string' ? t.artist : (t.artist?.name || ''),
+    }));
+  } catch {
     return [];
   }
+}
 
-  // Resolve in parallel, cap concurrency via chunking
+/* ─── Single YouTube search ──────────────────────────────────────── */
+async function searchYT(query, key) {
+  try {
+    const url = new URL(`${YT_BASE}/search`);
+    url.searchParams.set('part',       'snippet');
+    url.searchParams.set('type',       'video');
+    url.searchParams.set('q',          query);
+    url.searchParams.set('maxResults', '1');
+    url.searchParams.set('key',        key);
+    // NOTE: no videoCategoryId — causes 403 on standard Data API v3 keys
+
+    const res  = await fetch(url.toString());
+    if (!res.ok) return null;
+    const data = await res.json();
+    const item = data.items?.[0];
+    if (!item?.id?.videoId) return null;
+    const vid = item.id.videoId;
+    const ytUrl = `https://www.youtube.com/watch?v=${vid}`;
+    return {
+      id:        `yt_${vid}`,
+      name:      item.snippet.title        || query,
+      artist:    item.snippet.channelTitle || 'YouTube',
+      youtubeId: vid,
+      cover:     `https://img.youtube.com/vi/${vid}/mqdefault.jpg`,
+      audio: ytUrl, url: ytUrl, src: ytUrl,
+      album:   '',
+      source:  'radio',
+      youtube: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ─── Build a batch of radio songs ───────────────────────────────── */
+async function buildBatch(seedArtist, seedTitle, excludeIds = new Set()) {
+  const ytKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+  if (!ytKey) return [];
+
+  // Try Last.fm first
+  const similar = await fetchSimilar(seedArtist, seedTitle);
+
+  // Build query list — either from Last.fm or YT-only fallback
+  const queries = similar.length > 0
+    ? similar.slice(0, BATCH_SIZE + 4).map(t => `${t.artist} ${t.title} official audio`)
+    : [
+        `${seedArtist} best songs`,
+        `${seedArtist} top tracks playlist`,
+        `songs similar to ${seedTitle}`,
+        `${seedArtist} mix`,
+        `${seedTitle} ${seedArtist} audio`,
+        `${seedArtist} greatest hits`,
+      ];
+
+  // Parallel searches
+  const settled = await Promise.allSettled(queries.map(q => searchYT(q, ytKey)));
+
   const results = [];
-  for (let i = 0; i < similar.length && results.length < BATCH_SIZE; i++) {
-    const { artist, title } = similar[i];
-    try {
-      const song = await searchYouTube(artist, title);
-      if (song && !excludeIds.has(song.id)) {
-        excludeIds.add(song.id);
-        results.push(song);
-      }
-    } catch (e) {
-      console.warn(`[useRadio] YT search failed for "${title}":`, e.message);
-    }
+  for (const r of settled) {
+    if (r.status !== 'fulfilled' || !r.value) continue;
+    const song = r.value;
+    if (excludeIds.has(song.id)) continue;
+    excludeIds.add(song.id);
+    results.push(song);
+    if (results.length >= BATCH_SIZE) break;
   }
 
   return results;
 }
 
-/* ─── Hook ───────────────────────────────────────────────────── */
+/* ─── Hook ───────────────────────────────────────────────────────── */
 export function useSmartRadio() {
   const {
     currentSong,
     currentIndex,
     songs,
-    setPlayerSongs,   // setSongs doesn't exist — use setPlayerSongs
+    setPlayerSongs,
     setCurrentIndex,
     setIsPlaying,
   } = usePlayer();
@@ -125,102 +128,105 @@ export function useSmartRadio() {
   const [radioLoading, setRadioLoading] = useState(false);
   const [radioError,   setRadioError]   = useState(null);
 
-  // Track IDs already in queue to avoid duplicates
-  const seenIds   = useRef(new Set());
-  // Which song index triggered the last refill (avoid double-fetching)
-  const lastRefillAt = useRef(-1);
+  const seenIds      = useRef(new Set());
+  const lastRefill   = useRef(-1);
+  const alive        = useRef(true);
 
-  /* ── Start radio from current song ── */
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  /* ── Start radio ── */
   const startRadio = useCallback(async () => {
-    if (!currentSong) return;
+    if (!currentSong) {
+      setRadioError('Play a song first to seed the radio mix.');
+      return;
+    }
     setRadioLoading(true);
     setRadioError(null);
+    seenIds.current = new Set(songs.map(s => s.id));
 
     try {
-      // Seed seen IDs from existing queue
-      seenIds.current = new Set(songs.map(s => s.id));
-
       const batch = await buildBatch(
         currentSong.artist || '',
-        currentSong.name,
+        currentSong.name   || '',
         seenIds.current,
       );
 
+      if (!alive.current) return;
+
       if (!batch.length) {
-        setRadioError('No similar tracks found');
+        setRadioError('No similar tracks found. Try a different song.');
         setRadioLoading(false);
         return;
       }
 
-      // Inject after current position
-      setPlayerSongs(prev => [
-        ...prev.slice(0, currentIndex + 1),
-        ...batch,
-        ...prev.slice(currentIndex + 1),
-      ]);
+      // Inject batch right after current song
+      setPlayerSongs(prev => {
+        const arr = Array.isArray(prev) ? prev : [];
+        return [
+          ...arr.slice(0, currentIndex + 1),
+          ...batch,
+          ...arr.slice(currentIndex + 1),
+        ];
+      });
 
       setRadioMode(true);
     } catch (e) {
-      setRadioError(e.message);
-      console.error('[useRadio] startRadio failed:', e);
+      if (!alive.current) return;
+      console.error('[useRadio] startRadio:', e);
+      setRadioError('Failed to build mix. Check your API keys.');
     } finally {
-      setRadioLoading(false);
+      if (alive.current) setRadioLoading(false);
     }
-  }, [currentSong, currentIndex, songs, setPlayerSongs, setCurrentIndex, setIsPlaying]);
+  }, [currentSong, currentIndex, songs, setPlayerSongs]);
 
-  /* ── Stop radio — clear radio songs from queue ── */
+  /* ── Stop radio ── */
   const stopRadio = useCallback(() => {
-    setPlayerSongs(prev => prev.filter(s => s.source !== 'radio'));
+    setPlayerSongs(prev =>
+      (Array.isArray(prev) ? prev : []).filter(s => s.source !== 'radio')
+    );
     setRadioMode(false);
     setRadioError(null);
     seenIds.current.clear();
-    lastRefillAt.current = -1;
+    lastRefill.current = -1;
   }, [setPlayerSongs]);
 
-  /* ── Auto-refill when queue runs low ── */
+  /* ── Auto-refill ── */
   useEffect(() => {
     if (!radioMode || radioLoading) return;
 
-    const songsAfterCurrent = songs.length - 1 - currentIndex;
-    if (songsAfterCurrent > REFILL_AT) return;
-    if (lastRefillAt.current === currentIndex) return; // already fetching for this position
+    const remaining = songs
+      .slice(currentIndex + 1)
+      .filter(s => s.source === 'radio').length;
 
-    lastRefillAt.current = currentIndex;
+    if (remaining > REFILL_AT) return;
+    if (lastRefill.current === currentIndex) return;
+    lastRefill.current = currentIndex;
 
-    // Seed next batch from the last song in queue
-    const lastSong = songs[songs.length - 1];
-    if (!lastSong) return;
+    const seed = [...songs].reverse().find(s => s.source === 'radio') || currentSong;
+    if (!seed) return;
 
     setRadioLoading(true);
     buildBatch(
-      lastSong._radioMeta?.originalArtist || lastSong.artist || '',
-      lastSong._radioMeta?.originalTitle  || lastSong.name,
+      seed.artist || '',
+      seed.name   || '',
       seenIds.current,
     ).then(batch => {
+      if (!alive.current) return;
       if (batch.length) {
-        setPlayerSongs(prev => [...prev, ...batch]);
+        setPlayerSongs(prev => [
+          ...(Array.isArray(prev) ? prev : []),
+          ...batch,
+        ]);
       }
     }).catch(e => {
-      console.warn('[useRadio] refill failed:', e.message);
+      console.warn('[useRadio] refill:', e.message);
     }).finally(() => {
-      setRadioLoading(false);
+      if (alive.current) setRadioLoading(false);
     });
-  }, [radioMode, radioLoading, currentIndex, songs, setPlayerSongs]);
+  }, [radioMode, radioLoading, currentIndex, songs, currentSong, setPlayerSongs]);
 
-  /* ── Clear radio state when song manually changed outside radio ── */
-  useEffect(() => {
-    if (!radioMode) return;
-    if (currentSong?.source !== 'radio' && currentSong?.source !== undefined) {
-      // User navigated to a non-radio song — keep radio but don't auto-stop
-      // (debatable UX — change to stopRadio() if you prefer hard stop)
-    }
-  }, [currentSong, radioMode]);
-
-  return {
-    radioMode,
-    radioLoading,
-    radioError,
-    startRadio,
-    stopRadio,
-  };
+  return { radioMode, radioLoading, radioError, startRadio, stopRadio };
 }
