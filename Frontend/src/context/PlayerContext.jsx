@@ -19,14 +19,14 @@ export function PlayerProvider({ children }) {
   const [shuffledOrder, setShuffledOrder] = useState([]);
   const [showBackgroundDetail, setShowBackgroundDetail] = useState(false);
 
-  const audioRef         = useRef(new Audio());
-  const ytPlayerRef      = useRef(null);
-  const ytReadyRef       = useRef(false);
-  const ytCreatingRef    = useRef(false);
-  const playerTypeRef    = useRef('audio');
-  const timeIntervalRef  = useRef(null);
-  const isChangingSongRef = useRef(false); // Prevents overlapping song changes
-  const pendingPlayRef    = useRef(false); // Whether we should play after loading
+  const audioRef          = useRef(new Audio());
+  const ytPlayerRef       = useRef(null);
+  const ytReadyRef        = useRef(false);
+  const ytCreatingRef     = useRef(false);
+  const playerTypeRef     = useRef('audio');
+  const timeIntervalRef   = useRef(null);
+  const isChangingSongRef = useRef(false);
+  const pendingPlayRef    = useRef(false);
 
   const currentSong = songs[currentIndex];
 
@@ -74,15 +74,71 @@ export function PlayerProvider({ children }) {
   }, []);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Synchronous YouTube player creation – MUST be called inside a user gesture
+  // Next / Previous – defined early to avoid reference errors
+  // ──────────────────────────────────────────────────────────────────────────
+  const playNext = useCallback(() => {
+    if (!songs.length) return;
+    if (repeatMode === 'one') {
+      if (playerTypeRef.current === 'youtube') {
+        try { ytPlayerRef.current?.seekTo(0, true); ytPlayerRef.current?.playVideo(); } catch (_) {}
+      } else {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      }
+      return;
+    }
+    let next;
+    if (shuffle && shuffledOrder.length) {
+      const idx = shuffledOrder.indexOf(currentIndex);
+      if (idx < shuffledOrder.length - 1) next = shuffledOrder[idx + 1];
+      else if (repeatMode === 'all') next = shuffledOrder[0];
+      else { setIsPlaying(false); return; }
+    } else {
+      if (currentIndex < songs.length - 1) next = currentIndex + 1;
+      else if (repeatMode === 'all') next = 0;
+      else { setIsPlaying(false); return; }
+    }
+    pendingPlayRef.current = true;
+    setCurrentIndex(next);
+  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode]);
+
+  const playPrev = useCallback(() => {
+    if (!songs.length) return;
+    if (playerTypeRef.current === 'audio' && audioRef.current.currentTime > 3) {
+      audioRef.current.currentTime = 0;
+      return;
+    }
+    if (playerTypeRef.current === 'youtube') {
+      try {
+        if (ytPlayerRef.current?.getCurrentTime?.() > 3) {
+          ytPlayerRef.current.seekTo(0, true);
+          return;
+        }
+      } catch (_) {}
+    }
+    let prev;
+    if (shuffle && shuffledOrder.length) {
+      const idx = shuffledOrder.indexOf(currentIndex);
+      if (idx > 0) prev = shuffledOrder[idx - 1];
+      else if (repeatMode === 'all') prev = shuffledOrder[shuffledOrder.length - 1];
+      else prev = 0;
+    } else {
+      if (currentIndex > 0) prev = currentIndex - 1;
+      else if (repeatMode === 'all') prev = songs.length - 1;
+      else prev = 0;
+    }
+    pendingPlayRef.current = true;
+    setCurrentIndex(prev);
+  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode]);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // YouTube player creation – now safely references playNext
   // ──────────────────────────────────────────────────────────────────────────
   const ensureYouTubePlayer = useCallback((videoId) => {
     return new Promise((resolve, reject) => {
-      // Player already ready → just load the new video
       if (ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.loadVideoById(videoId);
-          // loadVideoById starts buffering; we'll let the play/pause effect handle actual playback
           resolve();
         } catch (e) {
           reject(e);
@@ -90,7 +146,6 @@ export function PlayerProvider({ children }) {
         return;
       }
 
-      // Avoid concurrent creation
       if (ytCreatingRef.current) {
         setTimeout(() => ensureYouTubePlayer(videoId).then(resolve).catch(reject), 100);
         return;
@@ -131,7 +186,6 @@ export function PlayerProvider({ children }) {
               onReady: () => {
                 ytReadyRef.current = true;
                 ytCreatingRef.current = false;
-                // Load the requested video now that player is ready
                 ytPlayerRef.current.loadVideoById(videoId);
                 resolve();
                 startTimeTracking();
@@ -141,7 +195,6 @@ export function PlayerProvider({ children }) {
                 if (!S) return;
 
                 if (event.data === S.ENDED) {
-                  // Auto‑advance to next song (allowed in ended callback)
                   if (!isChangingSongRef.current) {
                     playNext();
                   }
@@ -173,7 +226,7 @@ export function PlayerProvider({ children }) {
 
       waitForAPI();
     });
-  }, [startTimeTracking, playNext]); // playNext is defined later, but we can move it up or add to deps
+  }, [startTimeTracking, playNext]); // Safe because playNext is now defined above
 
   // Inject YouTube IFrame API script
   useEffect(() => {
@@ -192,10 +245,10 @@ export function PlayerProvider({ children }) {
   }, [stopTimeTracking]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Song change effect – switches between audio and YouTube
+  // Song change effect
   // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isChangingSongRef.current) return; // Prevent overlapping changes
+    if (isChangingSongRef.current) return;
     if (!currentSong) {
       stopTimeTracking();
       try { ytPlayerRef.current?.pauseVideo(); } catch (_) {}
@@ -221,23 +274,18 @@ export function PlayerProvider({ children }) {
             return;
           }
 
-          // Pause audio element
           try { audioRef.current.pause(); audioRef.current.src = ''; } catch (_) {}
 
           setCurrentTime(0);
           setDuration(0);
 
-          // Ensure player exists and load the video
           await ensureYouTubePlayer(videoId);
 
-          // After loading, respect the current isPlaying state
           if (pendingPlayRef.current) {
             try { ytPlayerRef.current?.playVideo(); } catch (_) {}
             pendingPlayRef.current = false;
           }
-          // Note: isPlaying state will be set by onStateChange when PLAYING fires
         } else {
-          // Audio element
           playerTypeRef.current = 'audio';
           stopTimeTracking();
           try { ytPlayerRef.current?.pauseVideo(); } catch (_) {}
@@ -272,7 +320,7 @@ export function PlayerProvider({ children }) {
   }, [currentSong?.id, currentIndex, ensureYouTubePlayer, extractYouTubeId, needsYouTube, stopTimeTracking]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Play / Pause toggle – this is the only place that changes isPlaying state
+  // Play / Pause toggle
   // ──────────────────────────────────────────────────────────────────────────
   const play = useCallback(() => {
     if (!currentSong) return;
@@ -280,18 +328,10 @@ export function PlayerProvider({ children }) {
 
     if (playerTypeRef.current === 'youtube') {
       if (ytPlayerRef.current) {
-        // If player already exists and has a video loaded, just play
         try {
           ytPlayerRef.current.playVideo();
-        } catch (_) {
-          // If play fails, we might need to reload (rare)
-        }
+        } catch (_) {}
       } else {
-        // Player not yet created – the song change effect will handle it
-        // Trigger a re-run of the song change effect by updating a dummy state?
-        // Actually, the song is already loaded, but player wasn't created because
-        // creation is deferred. We can force creation by re-triggering the effect.
-        // For simplicity, we can call ensureYouTubePlayer here as well.
         const videoId = currentSong.youtubeId
           || extractYouTubeId(currentSong.streamUrl)
           || extractYouTubeId(currentSong.audio);
@@ -390,64 +430,6 @@ export function PlayerProvider({ children }) {
     }
   }, [shuffle, songs, currentIndex]);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Next / Previous
-  // ──────────────────────────────────────────────────────────────────────────
-  const playNext = useCallback(() => {
-    if (!songs.length) return;
-    if (repeatMode === 'one') {
-      if (playerTypeRef.current === 'youtube') {
-        try { ytPlayerRef.current?.seekTo(0, true); ytPlayerRef.current?.playVideo(); } catch (_) {}
-      } else {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      }
-      return;
-    }
-    let next;
-    if (shuffle && shuffledOrder.length) {
-      const idx = shuffledOrder.indexOf(currentIndex);
-      if (idx < shuffledOrder.length - 1) next = shuffledOrder[idx + 1];
-      else if (repeatMode === 'all') next = shuffledOrder[0];
-      else { setIsPlaying(false); return; }
-    } else {
-      if (currentIndex < songs.length - 1) next = currentIndex + 1;
-      else if (repeatMode === 'all') next = 0;
-      else { setIsPlaying(false); return; }
-    }
-    pendingPlayRef.current = true; // We want the next song to play
-    setCurrentIndex(next);
-  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode]);
-
-  const playPrev = useCallback(() => {
-    if (!songs.length) return;
-    if (playerTypeRef.current === 'audio' && audioRef.current.currentTime > 3) {
-      audioRef.current.currentTime = 0;
-      return;
-    }
-    if (playerTypeRef.current === 'youtube') {
-      try {
-        if (ytPlayerRef.current?.getCurrentTime?.() > 3) {
-          ytPlayerRef.current.seekTo(0, true);
-          return;
-        }
-      } catch (_) {}
-    }
-    let prev;
-    if (shuffle && shuffledOrder.length) {
-      const idx = shuffledOrder.indexOf(currentIndex);
-      if (idx > 0) prev = shuffledOrder[idx - 1];
-      else if (repeatMode === 'all') prev = shuffledOrder[shuffledOrder.length - 1];
-      else prev = 0;
-    } else {
-      if (currentIndex > 0) prev = currentIndex - 1;
-      else if (repeatMode === 'all') prev = songs.length - 1;
-      else prev = 0;
-    }
-    pendingPlayRef.current = true;
-    setCurrentIndex(prev);
-  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode]);
-
   const toggleShuffle    = useCallback(() => setShuffle(p => !p), []);
   const toggleRepeatMode = useCallback(() => setRepeatMode(p => p === 'off' ? 'all' : p === 'all' ? 'one' : 'off'), []);
 
@@ -473,7 +455,7 @@ export function PlayerProvider({ children }) {
       setSongs(newSongsOrUpdater);
       setCurrentIndex(startIndex);
     }
-    pendingPlayRef.current = true; // Assume we want to play the new selection
+    pendingPlayRef.current = true;
   }, []);
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -504,7 +486,7 @@ export function PlayerProvider({ children }) {
       audio.removeEventListener('ended',          onEnded);
       audio.removeEventListener('error',          onError);
     };
-  }, [playNext]); // playNext is stable
+  }, [playNext]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Context value
@@ -528,7 +510,7 @@ export function PlayerProvider({ children }) {
     setDownloadedSongs,
     seekTo,
     playerType: playerTypeRef.current,
-    play: togglePlay,   // Use togglePlay for UI buttons
+    play: togglePlay,
     playNext,
     playPrev,
     shuffle,
