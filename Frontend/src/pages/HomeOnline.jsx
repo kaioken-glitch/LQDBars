@@ -17,7 +17,6 @@ import { usePlayer } from '../context/PlayerContext';
 import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
-import RadioTile, { RadioDetailView } from '../components/Radiotile';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -1329,9 +1328,6 @@ export default function HomeOnline() {
     const title     = selectedItem.name || 'Downloaded';
     const subtitle  = selectedItem.songCount ? `${selectedItem.songCount} songs` : (selectedItem.artist || '');
     const typeLabel = selectedItem.type === 'downloaded' ? 'LOCAL LIBRARY' : (selectedItem.type?.replace('-',' ').toUpperCase() || 'PLAYLIST');
-    if (selectedItem?.type === 'radio') {
-      return <RadioDetailView onClose={closeDetail} />;
-    }
 
     return (
       <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', position:'relative' }}>
@@ -1365,7 +1361,7 @@ export default function HomeOnline() {
             <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:'clamp(18px,3.5vw,32px)', fontWeight:800, letterSpacing:'-0.03em', lineHeight:1.1, color:'#fff', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title}</h1>
             <p style={{ fontSize:13, color:'var(--lb-text-2)', marginBottom:14 }}>{subtitle}</p>
             <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-              <button onClick={() => { if (songList.length) { setPlayerSongs(songList); setCurrentIndex(0); setTimeout(() => setIsPlaying(true), 50); } }}
+              <button onClick={() => { if (songList.length) { setPlayerSongs(songList, 0); setTimeout(() => setIsPlaying(true), 50); } }}
                 className="lb-btn-primary" style={{ width:52, height:52, padding:0, borderRadius:'50%' }}>
                 <FaPlay style={{ fontSize:18, marginLeft:3 }} />
               </button>
@@ -1457,8 +1453,7 @@ export default function HomeOnline() {
                             const baseList = (downloadedSongs?.length>0) ? downloadedSongs : songs;
                             const idx = baseList.findIndex(s => s.id === song.id);
                             if (idx !== -1) {
-                              setPlayerSongs(baseList);
-                              setCurrentIndex(idx);
+                              setPlayerSongs(baseList, idx);
                               setTimeout(() => setIsPlaying(true), 50);
                             }
                           }}>
@@ -1619,7 +1614,6 @@ export default function HomeOnline() {
                 {dlSongs.length > 0 ? (
                   <div className="ho-shelf">
                     {/* Summary mosaic tile */}
-                    <RadioTile onShowDetail={() => openDetail({ type: 'radio' })} />
                     <div className="ho-dl-tile" onClick={() => openDetail({
                       type:'downloaded', name:'Downloaded Songs',
                       cover:dlSongs[0]?.cover, accent:'#1DB954',
@@ -1640,8 +1634,7 @@ export default function HomeOnline() {
                       </div>
                       <button className="ho-dl-play" onClick={e => {
                         e.stopPropagation();
-                        setPlayerSongs(dlSongs);
-                        setCurrentIndex(0);
+                        setPlayerSongs(dlSongs, 0);
                         setTimeout(() => setIsPlaying(true), 50);
                       }}>
                         <FaPlay style={{ color:'#fff', fontSize:12, marginLeft:2 }} />
@@ -1661,8 +1654,7 @@ export default function HomeOnline() {
                           onPlay={() => {
                             const idx = dlSongs.findIndex(s => s.id === song.id);
                             if (idx !== -1) {
-                              setPlayerSongs(dlSongs);
-                              setCurrentIndex(idx);
+                              setPlayerSongs(dlSongs, idx);
                               setTimeout(() => setIsPlaying(true), 50);
                             }
                           }}
@@ -1681,6 +1673,8 @@ export default function HomeOnline() {
             </div>
           </>
         )}
+
+        <PlayerControls />
       </div>
     </>
   );
