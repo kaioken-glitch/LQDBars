@@ -10,7 +10,7 @@ const PlayerContext = createContext();
 
 export function PlayerProvider({ children }) {
 
-  /* ─── State ─────────────────────────────────────────────────────── */
+  /* ── State ──────────────────────────────────────────────────────── */
   const [songs,                setSongs]                = useState([]);
   const [currentIndex,         setCurrentIndex]         = useState(0);
   const [isPlaying,            setIsPlaying]            = useState(false);
@@ -24,300 +24,288 @@ export function PlayerProvider({ children }) {
   const [shuffledOrder,        setShuffledOrder]        = useState([]);
   const [showBackgroundDetail, setShowBackgroundDetail] = useState(false);
 
-  /* ─── Refs ───────────────────────────────────────────────────────── */
-  const audioRef        = useRef(new Audio());
-  const ytPlayerRef     = useRef(null);   // single YT instance, never destroyed
-  const ytReadyRef      = useRef(false);  // true once onReady fires
-  const playerTypeRef   = useRef('audio');
-  const timeIntervalRef = useRef(null);
+  /* ── Refs ───────────────────────────────────────────────────────── */
+  const audioRef      = useRef(new Audio());
+  const ytRef         = useRef(null);       // single YT player, lives forever
+  const ytReadyRef    = useRef(false);
+  const playerType    = useRef('audio');
+  const timerRef      = useRef(null);
 
-  // Mirror refs — always hold the current value so YT callbacks
-  // (which are created once and never re-bound) can read fresh state
-  // without being in any dependency array.
-  const songsRef      = useRef([]);
-  const idxRef        = useRef(0);
-  const playingRef    = useRef(false);
-  const repeatRef     = useRef('off');
-  const shuffleRef    = useRef(false);
-  const shuffledRef   = useRef([]);
+  // ─── Mirror refs ───────────────────────────────────────────────────
+  // YT callbacks (onStateChange / onError) are closures created once at
+  // player-init time. They can never see updated React state. These refs
+  // are always synced so the callbacks read current values via refs.
+  const songsRef    = useRef([]);
+  const idxRef      = useRef(0);
+  const repeatRef   = useRef('off');
+  const shuffleRef  = useRef(false);
+  const shuffledRef = useRef([]);
 
-  // Sync mirrors
   useEffect(() => { songsRef.current    = songs;        }, [songs]);
   useEffect(() => { idxRef.current      = currentIndex; }, [currentIndex]);
-  useEffect(() => { playingRef.current  = isPlaying;    }, [isPlaying]);
   useEffect(() => { repeatRef.current   = repeatMode;   }, [repeatMode]);
   useEffect(() => { shuffleRef.current  = shuffle;      }, [shuffle]);
   useEffect(() => { shuffledRef.current = shuffledOrder;}, [shuffledOrder]);
 
-  // Guards
-  const loadingRef  = useRef(false); // true while a song is being loaded → blocks error/ended handlers
-  const mountedRef  = useRef(true);
-  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  // ─── Loading guard ─────────────────────────────────────────────────
+  // Set TRUE the moment we start loading a song, FALSE once the song
+  // is actually playing (or has definitively failed).
+  // While TRUE, every error/ended/paused handler is silenced so they
+  // cannot advance the index during the load window — this is the
+  // root cause of the cycling-through-all-songs bug.
+  const loadingRef = useRef(false);
 
   const currentSong = songs[currentIndex];
 
-  /* ─── Helpers ────────────────────────────────────────────────────── */
-  const needsYouTube = (song) => {
-    if (!song) return false;
-    return song.source === 'youtube'
-      || !!(song.youtubeId && /^[A-Za-z0-9_-]{1,}$/.test(song.youtubeId));
-  };
+  /* ── Helpers ────────────────────────────────────────────────────── */
+  const needsYT = (song) =>
+    !!(song && (song.source === 'youtube' ||
+       (song.youtubeId && /^[A-Za-z0-9_-]+$/.test(song.youtubeId))));
 
-  const extractVideoId = (url) => {
+  const getVideoId = (song) =>
+    song.youtubeId ||
+    (song.audio  && extractId(song.audio))  ||
+    (song.streamUrl && extractId(song.streamUrl)) ||
+    null;
+
+  function extractId(url) {
     if (!url) return null;
     for (const re of [
-      /youtube\.com\/watch\?v=([^&]+)/,
-      /youtu\.be\/([^?]+)/,
-      /youtube\.com\/embed\/([^?]+)/,
+      /youtube\.com\/watch\?v=([A-Za-z0-9_-]{11})/,
+      /youtu\.be\/([A-Za-z0-9_-]{11})/,
+      /youtube\.com\/embed\/([A-Za-z0-9_-]{11})/,
     ]) { const m = url.match(re); if (m) return m[1]; }
     return null;
-  };
+  }
 
-  /* ─── Time tracking ──────────────────────────────────────────────── */
-  const startTimeTracking = useCallback(() => {
-    if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
-    timeIntervalRef.current = setInterval(() => {
-      if (!mountedRef.current) return;
+  /* ── Time tracking ──────────────────────────────────────────────── */
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
       try {
-        const p = ytPlayerRef.current;
+        const p = ytRef.current;
         if (!p?.getCurrentTime) return;
         const t = p.getCurrentTime();
-        if (typeof t === 'number' && !isNaN(t)) setCurrentTime(t);
+        if (!isNaN(t)) setCurrentTime(t);
         const d = p.getDuration?.() || 0;
         if (d > 0) setDuration(d);
       } catch (_) {}
     }, 500);
   }, []);
 
-  const stopTimeTracking = useCallback(() => {
-    if (timeIntervalRef.current) { clearInterval(timeIntervalRef.current); timeIntervalRef.current = null; }
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
-  /* ─── Advance next/prev — reads refs, safe inside stale callbacks ─── */
-  const advanceNext = useCallback(() => {
-    if (!mountedRef.current) return;
+  /* ── Advance (reads refs — always current inside YT callbacks) ──── */
+  const advance = useCallback((dir = 1) => {
     const s   = songsRef.current;
     const ci  = idxRef.current;
     const rm  = repeatRef.current;
     const sh  = shuffleRef.current;
     const sho = shuffledRef.current;
     if (!s.length) return;
+
     if (rm === 'one') {
-      if (playerTypeRef.current === 'youtube') {
-        try { ytPlayerRef.current?.seekTo(0, true); ytPlayerRef.current?.playVideo(); } catch (_) {}
+      if (playerType.current === 'youtube') {
+        try { ytRef.current?.seekTo(0, true); ytRef.current?.playVideo(); } catch (_) {}
       } else {
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(() => {});
       }
       return;
     }
+
     let next;
-    if (sh && sho.length) {
-      const i = sho.indexOf(ci);
-      if (i < sho.length - 1)   next = sho[i + 1];
-      else if (rm === 'all')     next = sho[0];
-      else { setIsPlaying(false); return; }
+    if (dir > 0) {
+      if (sh && sho.length) {
+        const i = sho.indexOf(ci);
+        next = i < sho.length - 1 ? sho[i + 1] : (rm === 'all' ? sho[0] : null);
+      } else {
+        next = ci < s.length - 1 ? ci + 1 : (rm === 'all' ? 0 : null);
+      }
     } else {
-      if (ci < s.length - 1)    next = ci + 1;
-      else if (rm === 'all')     next = 0;
-      else { setIsPlaying(false); return; }
+      if (sh && sho.length) {
+        const i = sho.indexOf(ci);
+        next = i > 0 ? sho[i - 1] : (rm === 'all' ? sho[sho.length - 1] : 0);
+      } else {
+        next = ci > 0 ? ci - 1 : (rm === 'all' ? s.length - 1 : 0);
+      }
     }
+
+    if (next === null) { setIsPlaying(false); return; }
     setCurrentIndex(next);
-    // isPlaying stays true — song-change effect will start playback
-  }, []); // deliberately empty — reads refs
+    // isPlaying stays true — the song-change effect will start the new song
+  }, []); // empty deps — reads refs, never stale
 
-  const advancePrev = useCallback(() => {
-    if (!mountedRef.current) return;
-    const s   = songsRef.current;
-    const ci  = idxRef.current;
-    const rm  = repeatRef.current;
-    const sh  = shuffleRef.current;
-    const sho = shuffledRef.current;
-    if (!s.length) return;
-    if (playerTypeRef.current === 'audio' && audioRef.current.currentTime > 3) {
-      audioRef.current.currentTime = 0; return;
-    }
-    if (playerTypeRef.current === 'youtube') {
-      try { if ((ytPlayerRef.current?.getCurrentTime?.() || 0) > 3) { ytPlayerRef.current.seekTo(0, true); return; } } catch (_) {}
-    }
-    let prev;
-    if (sh && sho.length) {
-      const i = sho.indexOf(ci);
-      if (i > 0)                prev = sho[i - 1];
-      else if (rm === 'all')    prev = sho[sho.length - 1];
-      else                      prev = 0;
-    } else {
-      if (ci > 0)               prev = ci - 1;
-      else if (rm === 'all')    prev = s.length - 1;
-      else                      prev = 0;
-    }
-    setCurrentIndex(prev);
-  }, []); // reads refs
-
-  /* ─── Create the single YT player on mount ───────────────────────
-     Never destroyed between songs. loadVideoById() switches songs.
-     This is the only reliable way to play on iOS Safari — the player
-     must be created during a real user gesture, then reused.
-  ──────────────────────────────────────────────────────────────── */
+  /* ── Single YouTube player — created once on mount ──────────────── */
   useEffect(() => {
-    // Inject API script once
-    if (!document.getElementById('yt-iframe-api')) {
-      const s  = document.createElement('script');
-      s.id     = 'yt-iframe-api';
-      s.src    = 'https://www.youtube.com/iframe_api';
+    if (!document.getElementById('yt-api-script')) {
+      const s = document.createElement('script');
+      s.id  = 'yt-api-script';
+      s.src = 'https://www.youtube.com/iframe_api';
       document.head.appendChild(s);
     }
 
-    // Off-screen container — NOT display:none, that silences iOS audio
-    if (!document.getElementById('yt-root')) {
+    // Tiny off-screen div — NOT display:none (iOS won't play from hidden elements)
+    if (!document.getElementById('yt-player-anchor')) {
       const d = document.createElement('div');
-      d.id = 'yt-root';
-      d.style.cssText = 'position:fixed;top:-4px;left:-4px;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;';
+      d.id = 'yt-player-anchor';
+      d.style.cssText =
+        'position:fixed;top:-4px;left:-4px;width:2px;height:2px;' +
+        'opacity:0.01;pointer-events:none;z-index:-1;';
       document.body.appendChild(d);
     }
 
-    const create = () => {
-      if (ytReadyRef.current) return;
-      if (!window.YT?.Player)  return;
-
-      ytPlayerRef.current = new window.YT.Player('yt-root', {
+    const build = () => {
+      if (ytReadyRef.current || !window.YT?.Player) return;
+      ytRef.current = new window.YT.Player('yt-player-anchor', {
         width: '2', height: '2',
         playerVars: {
-          autoplay: 0, controls: 0, disablekb: 1, fs: 0,
-          iv_load_policy: 3, modestbranding: 1, rel: 0,
-          playsinline: 1,              // iOS: don't hijack to fullscreen
+          autoplay: 0, controls: 0, disablekb: 1,
+          fs: 0, iv_load_policy: 3, modestbranding: 1,
+          rel: 0, playsinline: 1,
           origin: window.location.origin,
         },
         events: {
           onReady: () => {
             ytReadyRef.current = true;
-            startTimeTracking();
+            startTimer();
           },
           onStateChange: (e) => {
-            if (!mountedRef.current) return;
             const S = window.YT?.PlayerState;
             if (!S) return;
             if (e.data === S.PLAYING) {
               try { setDuration(e.target.getDuration() || 0); } catch (_) {}
+              loadingRef.current = false;   // we're actually playing — clear guard
               setIsPlaying(true);
             } else if (e.data === S.PAUSED) {
-              // PAUSED fires as a buffering artefact right after loadVideoById.
-              // Only treat it as a real pause if we're not in the middle of loading.
+              // Ignore PAUSED while loading — it fires as a buffering artifact
               if (!loadingRef.current) setIsPlaying(false);
             } else if (e.data === S.ENDED) {
-              if (!loadingRef.current) advanceNext();
+              if (!loadingRef.current) advance(1);
             }
           },
           onError: () => {
-            if (!loadingRef.current && mountedRef.current) advanceNext();
+            loadingRef.current = false;
+            advance(1);
           },
         },
       });
     };
 
     if (window.YT?.Player) {
-      create();
+      build();
     } else {
       const prev = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); create(); };
+      window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); build(); };
     }
 
-    return stopTimeTracking;
+    return stopTimer;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Song-change effect ─────────────────────────────────────────
-     ONLY runs when the actual song changes (id or index).
-     isPlaying is deliberately excluded from deps — toggling play
-     must never re-trigger this or we get the cycling bug.
-  ──────────────────────────────────────────────────────────────── */
+  /* ── Song-change effect ─────────────────────────────────────────────
+     Runs ONLY when the song actually changes.
+     isPlaying is NOT in the dep array — this is intentional and
+     critical. If isPlaying were here, every play/pause tap would
+     re-run this effect, destroy the YT player, and start cycling.
+  ──────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!currentSong) {
       loadingRef.current = false;
-      stopTimeTracking();
-      try { ytPlayerRef.current?.pauseVideo(); } catch (_) {}
-      try { audioRef.current.pause(); audioRef.current.src = ''; } catch (_) {}
+      stopTimer();
+      try { ytRef.current?.pauseVideo(); } catch (_) {}
+      audioRef.current.pause();
+      audioRef.current.src = '';
       setIsPlaying(false);
       return;
     }
 
-    loadingRef.current = true; // block error/ended/paused handlers during load
+    // Raise guard FIRST — before any async work
+    loadingRef.current = true;
 
-    if (needsYouTube(currentSong)) {
-      playerTypeRef.current = 'youtube';
+    if (needsYT(currentSong)) {
+      playerType.current = 'youtube';
 
-      const videoId = currentSong.youtubeId
-        || extractVideoId(currentSong.streamUrl)
-        || extractVideoId(currentSong.audio);
-
+      const videoId = getVideoId(currentSong);
       if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
-        console.error('[Player] bad videoId for', currentSong.name);
+        console.error('[Player] bad videoId for:', currentSong.name);
         loadingRef.current = false;
-        advanceNext();
+        advance(1);
         return;
       }
 
-      // Silence the audio player
-      try { audioRef.current.pause(); audioRef.current.src = ''; } catch (_) {}
+      // Silence audio
+      audioRef.current.pause();
+      audioRef.current.src = '';
       setCurrentTime(0);
       setDuration(0);
 
-      const doLoad = () => {
-        if (!ytReadyRef.current || !ytPlayerRef.current) {
-          setTimeout(doLoad, 80);
-          return;
-        }
+      const load = () => {
+        if (!ytReadyRef.current || !ytRef.current) { setTimeout(load, 80); return; }
         try {
-          ytPlayerRef.current.loadVideoById({ videoId, startSeconds: 0 });
-          // loadVideoById auto-plays; mark loading done after a beat
-          setTimeout(() => { loadingRef.current = false; }, 1500);
-        } catch (e) {
-          console.error('[YT] loadVideoById failed:', e);
+          // loadVideoById auto-plays AND keeps iOS gesture chain intact
+          ytRef.current.loadVideoById({ videoId, startSeconds: 0 });
+          // loadingRef stays true until onStateChange PLAYING fires above
+        } catch (err) {
+          console.error('[YT] loadVideoById:', err);
           loadingRef.current = false;
-          advanceNext();
+          advance(1);
         }
       };
-      doLoad();
+      load();
 
     } else {
-      playerTypeRef.current = 'audio';
-      stopTimeTracking();
-      try { ytPlayerRef.current?.pauseVideo(); } catch (_) {}
+      playerType.current = 'audio';
+      stopTimer();
+      try { ytRef.current?.pauseVideo(); } catch (_) {}
 
-      const src = currentSong.audio || currentSong.url || currentSong.audioUrl || currentSong.src;
+      const src =
+        currentSong.audio || currentSong.url ||
+        currentSong.audioUrl || currentSong.src;
+
       if (!src) {
-        console.error('[Player] no src for', currentSong.name);
+        console.error('[Player] no src for:', currentSong.name);
         loadingRef.current = false;
         return;
       }
 
-      // Remove listeners BEFORE changing src so the 'error' event that fires
-      // when reassigning src on a blob URL doesn't advance the song.
+      // Pause THEN change src.
+      // Changing src on an element with a blob URL fires an 'error' event.
+      // With loadingRef=true the error handler below will ignore it.
       audioRef.current.pause();
       audioRef.current.src = src;
       audioRef.current.load();
 
-      audioRef.current.play()
+      audioRef.current
+        .play()
         .then(() => {
           loadingRef.current = false;
-          if (mountedRef.current) setIsPlaying(true);
+          setIsPlaying(true);
         })
         .catch(() => {
+          // Autoplay blocked by browser — stay paused, user taps play
           loadingRef.current = false;
-          // Autoplay blocked — UI will show paused state, user taps play
-          if (mountedRef.current) setIsPlaying(false);
+          setIsPlaying(false);
         });
     }
+  // currentSong?.id  — only re-run when the song identity changes
+  // currentIndex     — also needed: same song can be at different indices
   }, [currentSong?.id, currentIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Play/pause toggle ──────────────────────────────────────────
-     Only runs when isPlaying changes. Never loads a new song.
-  ──────────────────────────────────────────────────────────────── */
+  /* ── Play / pause toggle ────────────────────────────────────────────
+     Separate effect. ONLY responds to the isPlaying flag.
+     Never touches loading logic, never changes the song.
+  ──────────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!currentSong || loadingRef.current) return;
-    if (playerTypeRef.current === 'youtube') {
+    // Skip if a song is currently being loaded — the song-change effect
+    // handles play/pause as part of the load sequence.
+    if (loadingRef.current || !currentSong) return;
+
+    if (playerType.current === 'youtube') {
       try {
-        if (isPlaying) ytPlayerRef.current?.playVideo();
-        else           ytPlayerRef.current?.pauseVideo();
+        if (isPlaying) ytRef.current?.playVideo();
+        else           ytRef.current?.pauseVideo();
       } catch (_) {}
     } else {
       if (isPlaying) {
@@ -328,56 +316,56 @@ export function PlayerProvider({ children }) {
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Volume & mute ──────────────────────────────────────────────── */
+  /* ── Volume / mute ─────────────────────────────────────────────── */
   useEffect(() => {
     const v = isMuted ? 0 : volume;
     audioRef.current.volume = v;
-    try { ytPlayerRef.current?.setVolume(v * 100); } catch (_) {}
+    try { ytRef.current?.setVolume(v * 100); } catch (_) {}
   }, [volume, isMuted]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(m => {
       const next = !m;
       audioRef.current.muted = next;
-      try { next ? ytPlayerRef.current?.mute() : ytPlayerRef.current?.unMute(); } catch (_) {}
+      try { next ? ytRef.current?.mute() : ytRef.current?.unMute(); } catch (_) {}
       return next;
     });
   }, []);
 
-  /* ─── Audio element events ───────────────────────────────────────
-     Attached once. Use refs for currentIndex/songs so we never need
-     to re-attach (which itself can fire spurious error events).
-  ──────────────────────────────────────────────────────────────── */
+  /* ── Audio element events ──────────────────────────────────────────
+     Attached ONCE with empty deps. Handlers read refs — never stale.
+     loadingRef guard prevents spurious advances during src changes.
+  ──────────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    const audio = audioRef.current;
-    const onTime  = () => setCurrentTime(audio.currentTime);
-    const onDur   = () => { if (audio.duration > 0) setDuration(audio.duration); };
-    const onEnded = () => { if (!loadingRef.current) advanceNext(); };
-    const onError = () => { if (!loadingRef.current) advanceNext(); };
-
-    audio.addEventListener('timeupdate',     onTime);
-    audio.addEventListener('durationchange', onDur);
-    audio.addEventListener('ended',          onEnded);
-    audio.addEventListener('error',          onError);
+    const a = audioRef.current;
+    const onTime  = () => setCurrentTime(a.currentTime);
+    const onDur   = () => { if (a.duration > 0) setDuration(a.duration); };
+    const onEnded = () => { if (!loadingRef.current) advance(1); };
+    const onError = () => { if (!loadingRef.current) advance(1); };
+    a.addEventListener('timeupdate',     onTime);
+    a.addEventListener('durationchange', onDur);
+    a.addEventListener('ended',          onEnded);
+    a.addEventListener('error',          onError);
     return () => {
-      audio.removeEventListener('timeupdate',     onTime);
-      audio.removeEventListener('durationchange', onDur);
-      audio.removeEventListener('ended',          onEnded);
-      audio.removeEventListener('error',          onError);
+      a.removeEventListener('timeupdate',     onTime);
+      a.removeEventListener('durationchange', onDur);
+      a.removeEventListener('ended',          onEnded);
+      a.removeEventListener('error',          onError);
     };
-  }, []); // deliberately empty — handlers read refs, not state
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Supabase history ───────────────────────────────────────────── */
+  /* ── Supabase history ──────────────────────────────────────────── */
   const { user } = useAuth();
   useEffect(() => {
     if (!currentSong?.youtubeId || !user?.id) return;
     supabase.from('listening_history').insert({
       user_id: user.id, youtube_id: currentSong.youtubeId,
-      name: currentSong.name || null, artist: currentSong.artist || null, genre: currentSong.genre || null,
+      name: currentSong.name || null, artist: currentSong.artist || null,
+      genre: currentSong.genre || null,
     }).then(({ error }) => { if (error) console.warn('[history]', error.message); });
   }, [currentSong?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Shuffle ────────────────────────────────────────────────────── */
+  /* ── Shuffle ───────────────────────────────────────────────────── */
   useEffect(() => {
     if (shuffle && songs.length > 1) {
       const idx = songs.map((_, i) => i);
@@ -393,64 +381,72 @@ export function PlayerProvider({ children }) {
     }
   }, [shuffle, songs.length, currentIndex]);
 
-  /* ─── Seek ───────────────────────────────────────────────────────── */
-  const seekTo = useCallback((time) => {
-    if (playerTypeRef.current === 'youtube') {
-      try { ytPlayerRef.current?.seekTo(time, true); } catch (_) {}
+  /* ── Seek ──────────────────────────────────────────────────────── */
+  const seekTo = useCallback((t) => {
+    if (playerType.current === 'youtube') {
+      try { ytRef.current?.seekTo(t, true); } catch (_) {}
     } else {
-      audioRef.current.currentTime = time;
+      audioRef.current.currentTime = t;
     }
-    setCurrentTime(time);
+    setCurrentTime(t);
   }, []);
 
-  /* ─── setPlayerSongs — supports array and functional updater ─────── */
-  const setPlayerSongs = useCallback((newSongsOrUpdater, startIndex = 0) => {
-    if (typeof newSongsOrUpdater === 'function') {
-      setSongs(newSongsOrUpdater);
-      // Don't reset index — used by radio to append without interrupting playback
+  /* ── setPlayerSongs — array or functional updater ──────────────── */
+  const setPlayerSongs = useCallback((updaterOrArray, startIndex = 0) => {
+    if (typeof updaterOrArray === 'function') {
+      setSongs(updaterOrArray);
+      // Functional form (used by radio) — don't reset index
     } else {
-      setSongs(newSongsOrUpdater);
+      setSongs(updaterOrArray);
       setCurrentIndex(startIndex);
     }
   }, []);
 
-  /* ─── Misc toggles ───────────────────────────────────────────────── */
+  /* ── Exported next / prev ──────────────────────────────────────── */
+  const playNext = useCallback(() => {
+    if (playerType.current === 'audio' && repeatMode === 'one') {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+      return;
+    }
+    advance(1);
+  }, [advance, repeatMode]);
+
+  const playPrev = useCallback(() => {
+    // If >3 s into the song, restart it instead of going back
+    if (playerType.current === 'audio' && audioRef.current.currentTime > 3) {
+      audioRef.current.currentTime = 0; return;
+    }
+    if (playerType.current === 'youtube') {
+      try { if ((ytRef.current?.getCurrentTime?.() || 0) > 3) { ytRef.current.seekTo(0, true); return; } } catch (_) {}
+    }
+    advance(-1);
+  }, [advance]);
+
+  /* ── Toggles ───────────────────────────────────────────────────── */
   const toggleBackgroundDetail = useCallback(() => setShowBackgroundDetail(p => !p), []);
   const toggleShuffle          = useCallback(() => setShuffle(p => !p), []);
   const toggleRepeatMode       = useCallback(() =>
     setRepeatMode(p => p === 'off' ? 'all' : p === 'all' ? 'one' : 'off'), []);
 
-  /* ─── Context value ──────────────────────────────────────────────── */
+  /* ── Context value ─────────────────────────────────────────────── */
   const value = {
-    songs,
-    setPlayerSongs,
-    currentIndex,
-    setCurrentIndex,
-    isPlaying,
-    setIsPlaying,
-    volume,
-    setVolume,
-    currentTime,
-    setCurrentTime,
-    duration,
-    setDuration,
+    songs, setPlayerSongs,
+    currentIndex, setCurrentIndex,
+    isPlaying, setIsPlaying,
+    volume, setVolume,
+    currentTime, setCurrentTime,
+    duration, setDuration,
     audioRef,
     currentSong,
-    downloadedSongs,
-    setDownloadedSongs,
+    downloadedSongs, setDownloadedSongs,
     seekTo,
-    playerType:           playerTypeRef.current,
-    playNext:             advanceNext,
-    playPrev:             advancePrev,
-    shuffle,
-    toggleShuffle,
-    repeatMode,
-    toggleRepeatMode,
-    toggleMute,
-    isMuted,
-    showBackgroundDetail,
-    setShowBackgroundDetail,
-    toggleBackgroundDetail,
+    playerType: playerType.current,
+    playNext, playPrev,
+    shuffle, toggleShuffle,
+    repeatMode, toggleRepeatMode,
+    toggleMute, isMuted,
+    showBackgroundDetail, setShowBackgroundDetail, toggleBackgroundDetail,
   };
 
   return (
