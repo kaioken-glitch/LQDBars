@@ -17,6 +17,7 @@ import { usePlayer } from '../context/PlayerContext';
 import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
+import RadioTile, { RadioDetailView } from '../components/Radiotile';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -278,11 +279,17 @@ const STYLES = `
   .ho-root ::-webkit-scrollbar-track { background: transparent; }
   .ho-root ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
 
-  /* ── Greeting hero ── */
+  /* ── Greeting hero row ── */
   .ho-hero {
     padding: 32px 28px 24px;
     position: relative;
     flex-shrink: 0;
+  }
+  .ho-hero-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
   }
   .ho-greeting {
     font-family: 'Syne', sans-serif;
@@ -1323,6 +1330,11 @@ export default function HomeOnline() {
   ───────────────────────────────────────────────────────── */
   const renderDetail = () => {
     if (!selectedItem) return null;
+
+    // Radio station detail view
+    if (selectedItem.type === 'radio') {
+      return <RadioDetailView onClose={closeDetail} />;
+    }
     const songList  = selectedItem.songs ?? [];
     const cover     = selectedItem.cover || songList[0]?.cover;
     const title     = selectedItem.name || 'Downloaded';
@@ -1422,10 +1434,19 @@ export default function HomeOnline() {
           <>
             {/* ── GREETING HERO ── */}
             <div className="ho-hero">
-              <h1 className="ho-greeting">
-                {firstName ? <>{greeting}, {firstName}</> : greeting}
-              </h1>
-              <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
+              <div className="ho-hero-row">
+                <div>
+                  <h1 className="ho-greeting">
+                    {firstName ? <>{greeting}, {firstName}</> : greeting}
+                  </h1>
+                  <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
+                </div>
+                {/* Smart Radio compact pill — top-right of greeting */}
+                <RadioTile
+                  compact
+                  onShowDetail={() => openDetail({ type: 'radio' })}
+                />
+              </div>
             </div>
 
             {/* ── SEARCH + GENRE CHIPS ── */}
@@ -1613,6 +1634,12 @@ export default function HomeOnline() {
 
                 {dlSongs.length > 0 ? (
                   <div className="ho-shelf">
+                    {/* Smart Radio tile — always first in the Downloaded shelf */}
+                    <RadioTile
+                      songs={dlSongs}
+                      onShowDetail={() => openDetail({ type: 'radio' })}
+                    />
+
                     {/* Summary mosaic tile */}
                     <div className="ho-dl-tile" onClick={() => openDetail({
                       type:'downloaded', name:'Downloaded Songs',
