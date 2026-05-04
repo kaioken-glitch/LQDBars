@@ -285,12 +285,7 @@ const STYLES = `
     position: relative;
     flex-shrink: 0;
   }
-  .ho-hero-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
+
   .ho-greeting {
     font-family: 'Syne', sans-serif;
     font-size: clamp(26px, 3.5vw, 40px);
@@ -1434,19 +1429,10 @@ export default function HomeOnline() {
           <>
             {/* ── GREETING HERO ── */}
             <div className="ho-hero">
-              <div className="ho-hero-row">
-                <div>
-                  <h1 className="ho-greeting">
-                    {firstName ? <>{greeting}, {firstName}</> : greeting}
-                  </h1>
-                  <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
-                </div>
-                {/* Smart Radio compact pill — top-right of greeting */}
-                <RadioTile
-                  compact
-                  onShowDetail={() => openDetail({ type: 'radio' })}
-                />
-              </div>
+              <h1 className="ho-greeting">
+                {firstName ? <>{greeting}, {firstName}</> : greeting}
+              </h1>
+              <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
             </div>
 
             {/* ── SEARCH + GENRE CHIPS ── */}
