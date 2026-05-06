@@ -47,8 +47,8 @@ const STYLES = `
     display: flex;
     justify-content: center;
     padding: 6px 12px max(10px, env(safe-area-inset-bottom, 10px));
-    background: rgba(7, 8, 10, 0.97);
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    border-top: none;
     position: relative;
     z-index: 60;
     flex-shrink: 0;
