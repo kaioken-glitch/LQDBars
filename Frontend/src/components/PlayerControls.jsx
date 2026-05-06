@@ -1082,7 +1082,7 @@ export default function PlayerControls() {
 
   /* ── mobile mini bar ── */
   const mobileMini = (
-    <div className={`pc-mobile-bar ${showBackgroundDetail ? 'hidden' : ''}`} style={{ ...accentStyle, bottom: '80px' }}>
+    <div className={`pc-mobile-bar ${showBackgroundDetail ? 'hidden' : ''}`} style={{ ...accentStyle, bottom: '60px' }}>
       <div className="pc-mobile-progress">
         <div className="pc-mobile-progress-fill" style={{ width: `${duration > 0 ? Math.min(100,(currentTime/duration)*100) : 0}%` }} />
       </div>
