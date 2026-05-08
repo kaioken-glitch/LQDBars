@@ -367,9 +367,36 @@ function LyricsPanel({ accentColor, bg, fontSize = 'normal' }) {
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
             <path d="M9 19V6l12-3v13"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="16" r="3"/>
           </svg>
-          <span style={{ fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>
+          <span style={{ fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
             {status === 'idle' ? 'Play a song' : status === 'error' ? "Couldn't load lyrics" : 'No lyrics found'}
           </span>
+          {status === 'not_found' && (
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('expandPlayerView'))}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '20px',
+                background: 'rgba(29,185,84,0.15)',
+                border: '1px solid rgba(29,185,84,0.3)',
+                color: 'rgba(255,255,255,0.7)',
+                fontFamily: 'Syne,sans-serif',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.target.style.background = 'rgba(29,185,84,0.25)';
+                e.target.style.color = '#fff';
+              }}
+              onMouseLeave={e => {
+                e.target.style.background = 'rgba(29,185,84,0.15)';
+                e.target.style.color = 'rgba(255,255,255,0.7)';
+              }}
+            >
+              Expand View
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -825,9 +852,9 @@ const CSS = `
 .pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
 .pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.38); }
 .pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 28px 24px 32px; flex: 1; overflow-y: auto; }
-.pc-mob-art-frame { position: relative; margin-bottom: 28px; flex-shrink: 0; }
-.pc-mob-art-glow { position: absolute; inset: -16px; border-radius: 28px; background: radial-gradient(circle,rgba(var(--pc-accent),0.42) 0%,transparent 70%); filter: blur(22px); animation: glowPulse 4s ease-in-out infinite; pointer-events: none; }
-.pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 22px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); }
+.pc-mob-art-frame { position: relative; margin-bottom: 28px; flex-shrink: 0; transition: margin-bottom 0.1s ease-out; }
+.pc-mob-art-glow { position: absolute; inset: -16px; border-radius: 28px; background: radial-gradient(circle,rgba(var(--pc-accent),0.42) 0%,transparent 70%); filter: blur(22px); animation: glowPulse 4s ease-in-out infinite; pointer-events: none; transform-origin: center; will-change: transform; }
+.pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 22px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); transform-origin: center; will-change: transform; }
 .pc-mob-art.playing { animation: artFloat 7s ease-in-out infinite; }
 .pc-mob-meta { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 20px; }
 .pc-mob-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 4px; }
@@ -890,6 +917,151 @@ const CSS = `
 @keyframes bufferSpin { to { transform: rotate(360deg); } }
 .pc-buffer-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--pc-green); animation: bufferSpin 0.7s linear infinite; pointer-events: none; }
 
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* Expanded view when no lyrics found */
+.pc-no-lyrics-expanded {
+  position: fixed; inset: 0; z-index: 56;
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: fadeIn 0.45s cubic-bezier(0.22,1,0.36,1);
+}
+.pc-no-lyrics-dark-overlay {
+  position: absolute; inset: 0; z-index: 1;
+  background: rgba(2,2,6,0.52); pointer-events: none;
+  animation: fadeIn 0.45s ease-out;
+}
+
+/* Desktop no-lyrics expanded */
+.pc-no-lyrics-expanded.desktop {
+  background: transparent;
+}
+.pc-no-lyrics-expanded.desktop .pc-no-lyrics-content {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; padding: 60px 80px;
+  max-width: 1400px; margin: 0 auto; height: 100%;
+}
+.pc-no-lyrics-art-section {
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+}
+.pc-no-lyrics-art-frame {
+  position: relative; flex-shrink: 0;
+}
+.pc-no-lyrics-art-glow {
+  position: absolute; inset: -32px; border-radius: 48px;
+  background: radial-gradient(circle, rgba(var(--pc-accent),0.45) 0%, transparent 65%);
+  filter: blur(40px); animation: glowPulse 4s ease-in-out infinite, fadeIn 0.6s 0.15s cubic-bezier(0.22,1,0.36,1) backwards;
+  pointer-events: none;
+}
+.pc-no-lyrics-art {
+  position: relative; display: block; width: min(380px, 45vw); height: min(380px, 45vw);
+  border-radius: 28px; object-fit: cover; box-shadow: 0 48px 120px rgba(0,0,0,0.8);
+  animation: slideUp 0.6s 0.1s cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.pc-no-lyrics-art.playing { animation: slideUp 0.6s 0.1s cubic-bezier(0.22,1,0.36,1) backwards, artFloat 7s 0.6s ease-in-out infinite; }
+
+.pc-no-lyrics-info-section {
+  display: flex; flex-direction: column; gap: 32px;
+  animation: slideUp 0.6s 0.2s cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.pc-no-lyrics-title {
+  font-family: 'Syne', sans-serif; font-size: 48px; font-weight: 800;
+  color: #fff; letter-spacing: -0.03em; line-height: 1.1; margin: 0;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+}
+.pc-no-lyrics-artist {
+  font-size: 18px; color: rgba(255,255,255,0.55); font-weight: 500; margin: 0;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.pc-no-lyrics-actions {
+  display: flex; gap: 16px; flex-wrap: wrap;
+}
+.pc-no-lyrics-action-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 24px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05); backdrop-filter: blur(16px);
+  color: rgba(255,255,255,0.8); font-family: 'Syne', sans-serif;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.22,1,0.36,1);
+}
+.pc-no-lyrics-action-btn:hover {
+  background: rgba(29,185,84,0.12); border-color: rgba(29,185,84,0.4); color: #fff;
+}
+
+/* Mobile no-lyrics expanded */
+.pc-no-lyrics-expanded.mobile {
+  background: transparent;
+}
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-content {
+  display: flex; flex-direction: column; align-items: center; padding: 40px 24px 32px;
+  gap: 28px; overflow-y: auto; flex: 1;
+}
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-art-section {
+  margin-top: 20px;
+}
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-art {
+  width: min(68vw, 280px); height: min(68vw, 280px);
+  animation: slideUp 0.6s 0.1s cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-info-section {
+  text-align: center; width: 100%; gap: 20px;
+  animation: slideUp 0.6s 0.2s cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-title { font-size: 28px; }
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-artist { font-size: 15px; }
+.pc-no-lyrics-expanded.mobile .pc-no-lyrics-actions {
+  justify-content: center;
+}
+
+/* Header */
+.pc-no-lyrics-header {
+  position: relative; z-index: 3; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 28px;
+  background: rgba(0,0,0,0.14); backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pc-no-lyrics-header-close {
+  background: none; border: none; color: rgba(255,255,255,0.7);
+  font-size: 18px; cursor: pointer; padding: 8px;
+  border-radius: 50%; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.pc-no-lyrics-header-close:hover {
+  color: #fff; background: rgba(255,255,255,0.08);
+}
+
+/* Footer controls */
+.pc-no-lyrics-footer {
+  position: relative; z-index: 3; flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 16px 28px 24px;
+  background: rgba(0,0,0,0.24); backdrop-filter: blur(28px);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.pc-no-lyrics-footer-controls {
+  display: flex; align-items: center; gap: 12px; justify-content: center;
+}
+.pc-no-lyrics-footer-btn {
+  background: none; border: none; color: rgba(255,255,255,0.5);
+  font-size: 18px; width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.pc-no-lyrics-footer-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.pc-no-lyrics-footer-btn.active { color: var(--pc-green-bright); }
+.pc-no-lyrics-play-btn {
+  width: 62px; height: 62px; border-radius: 50%; background: #fff;
+  border: none; color: #000; font-size: 22px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45); transition: all 0.2s;
+}
+.pc-no-lyrics-play-btn:hover {
+  transform: scale(1.07); background: var(--pc-green-bright);
+  box-shadow: 0 12px 44px rgba(29,185,84,0.45);
+}
+.pc-no-lyrics-play-btn:active { transform: scale(0.95); }
+
 @media (max-width: 767px)  { .pc-desktop-bar { display: none !important; } }
 @media (min-width: 768px)  { .pc-mobile-bar { display: none !important; } .pc-mob-expanded { display: none !important; } .pc-mob-lyrics-fs { display: none !important; } }
 `;
@@ -912,8 +1084,11 @@ export default function PlayerControls() {
   const [showQueue,     setShowQueue]     = useState(false);
   const [showLyrics,    setShowLyrics]    = useState(false);
   const [showMobLyrics, setShowMobLyrics] = useState(false);
+  const [showNoLyricsExpanded, setShowNoLyricsExpanded] = useState(false);
+  const [mobArtScale,   setMobArtScale]   = useState(1);
   const [liked,         setLiked]         = useState(false);
   const prevCoverRef = useRef(null);
+  const mobBodyRef = useRef(null);
 
   const openQueue  = () => { setShowQueue(true);  setShowLyrics(false); };
   const openLyrics = () => { setShowLyrics(true); setShowQueue(false);  };
@@ -927,6 +1102,28 @@ export default function PlayerControls() {
 
   useEffect(() => { setLiked(false); }, [currentIndex]);
   useEffect(() => { if (!showBackgroundDetail) setShowMobLyrics(false); }, [showBackgroundDetail]);
+
+  useEffect(() => {
+    const handleExpandView = () => setShowNoLyricsExpanded(true);
+    window.addEventListener('expandPlayerView', handleExpandView);
+    return () => window.removeEventListener('expandPlayerView', handleExpandView);
+  }, []);
+
+  useEffect(() => {
+    const el = mobBodyRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      const scrollTop = el.scrollTop;
+      const maxScroll = 120;
+      const scrollPercent = Math.min(scrollTop / maxScroll, 1);
+      const scale = Math.max(0.65, 1 - scrollPercent * 0.35);
+      setMobArtScale(scale);
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleSeek = useCallback((t) => seekTo(t), [seekTo]);
   const togglePlay = useCallback(() => setIsPlaying(p => !p), [setIsPlaying]);
@@ -1114,10 +1311,10 @@ export default function PlayerControls() {
         <span className="pc-mob-header-label">Now Playing</span>
         <button className="pc-icon-btn"><FaEllipsisH /></button>
       </div>
-      <div className="pc-mob-body">
+      <div className="pc-mob-body" ref={mobBodyRef}>
         <div className="pc-mob-art-frame">
-          <div className="pc-mob-art-glow" />
-          <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-mob-art ${isPlaying ? 'playing' : ''}`} onError={e => { e.target.src = FALLBACK_COVER; }} />
+          <div className="pc-mob-art-glow" style={{ transform: `scale(${mobArtScale})`, transition: 'transform 0.1s ease-out' }} />
+          <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-mob-art ${isPlaying ? 'playing' : ''}`} style={{ transform: `scale(${mobArtScale})`, transition: 'transform 0.1s ease-out' }} onError={e => { e.target.src = FALLBACK_COVER; }} />
         </div>
         <div className="pc-mob-meta">
           <div className="pc-mob-name">{currentSong.name}</div>
@@ -1197,6 +1394,117 @@ export default function PlayerControls() {
     </div>
   );
 
+  /* ── no-lyrics expanded view ── */
+  const noLyricsExpanded = showNoLyricsExpanded && (
+    <div className={`pc-no-lyrics-expanded ${window.innerWidth >= 768 ? 'desktop' : 'mobile'}`} style={accentStyle}>
+      <IridescenceBg accentRGB={accentRGB} />
+      <div className="pc-no-lyrics-dark-overlay" />
+      
+      {window.innerWidth >= 768 ? (
+        /* Desktop layout */
+        <>
+          <div className="pc-no-lyrics-header">
+            <button className="pc-no-lyrics-header-close" onClick={() => setShowNoLyricsExpanded(false)}>
+              <FaChevronDown style={{ fontSize: 18 }} />
+            </button>
+            <span style={{ fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.38)', fontWeight: 600 }}>
+              Now Playing
+            </span>
+            <button className="pc-icon-btn"><FaEllipsisH /></button>
+          </div>
+          <div className="pc-no-lyrics-content" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center', padding: '60px 80px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+            <div className="pc-no-lyrics-art-section">
+              <div className="pc-no-lyrics-art-frame">
+                <div className="pc-no-lyrics-art-glow" />
+                <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-no-lyrics-art ${isPlaying ? 'playing' : ''}`} onError={e => { e.target.src = FALLBACK_COVER; }} />
+              </div>
+            </div>
+            <div className="pc-no-lyrics-info-section">
+              <div>
+                <h1 className="pc-no-lyrics-title">{currentSong.name}</h1>
+                <p className="pc-no-lyrics-artist">{currentSong.artist}</p>
+              </div>
+              <div className="pc-no-lyrics-actions">
+                <button className="pc-no-lyrics-action-btn" title="Add to Favorites"><FaHeart style={{ fontSize: 14 }} /> <span>Like</span></button>
+                <button className="pc-no-lyrics-action-btn" title="Share"><FaList style={{ fontSize: 14 }} /> <span>Share</span></button>
+                <button className="pc-no-lyrics-action-btn" title="Add to Playlist"><FaMusic style={{ fontSize: 14 }} /> <span>Playlist</span></button>
+              </div>
+            </div>
+          </div>
+          <div className="pc-no-lyrics-footer">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%', maxWidth: '680px' }}>
+              <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} style={{ width: 40, height: 40, borderRadius: 9, objectFit: 'cover', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} onError={e => { e.target.src = FALLBACK_COVER; }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 1 }}>{currentSong.name}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentSong.artist}</div>
+              </div>
+              <button className="pc-no-lyrics-footer-btn" onClick={() => setLiked(l => !l)} style={{ color: liked ? '#FF4455' : undefined }}><FaHeart /></button>
+              <VolumeSlider volume={volume} isMuted={isMuted} onVolume={setVolume} onMute={toggleMute} />
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.42)' }}>{currentIndex + 1} / {songs.length}</span>
+            </div>
+            <div style={{ width: '100%', maxWidth: '680px' }}>
+              <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
+            </div>
+            <div className="pc-no-lyrics-footer-controls">
+              <button className={`pc-no-lyrics-footer-btn ${shuffle ? 'active' : ''}`} onClick={toggleShuffle}><FaRandom /></button>
+              <button className="pc-no-lyrics-footer-btn" onClick={playPrev}><FaStepBackward style={{ fontSize: 22 }} /></button>
+              <button className="pc-no-lyrics-play-btn" onClick={togglePlay} style={{ position: 'relative' }}>
+                {isBuffering ? <div className="pc-buffer-ring" /> : isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 3 }} />}
+              </button>
+              <button className="pc-no-lyrics-footer-btn" onClick={playNext}><FaStepForward style={{ fontSize: 22 }} /></button>
+              <button className={`pc-no-lyrics-footer-btn ${repeatMode !== 'off' ? 'active' : ''}`} onClick={toggleRepeatMode} style={{ position: 'relative' }}>
+                <FaRedoAlt />{repeatMode === 'one' && <span className="pc-repeat-badge">1</span>}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Mobile layout */
+        <>
+          <div className="pc-no-lyrics-header">
+            <button className="pc-no-lyrics-header-close" onClick={() => setShowNoLyricsExpanded(false)}>
+              <FaChevronDown style={{ fontSize: 18 }} />
+            </button>
+            <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.38)', fontWeight: 600 }}>
+              Now Playing
+            </span>
+            <button className="pc-icon-btn"><FaEllipsisH /></button>
+          </div>
+          <div className="pc-no-lyrics-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '28px', overflowY: 'auto', width: '100%' }}>
+            <div className="pc-no-lyrics-art-section" style={{ marginTop: 20 }}>
+              <div className="pc-no-lyrics-art-frame">
+                <div className="pc-no-lyrics-art-glow" />
+                <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-no-lyrics-art ${isPlaying ? 'playing' : ''}`} style={{ width: 'min(68vw, 280px)', height: 'min(68vw, 280px)' }} onError={e => { e.target.src = FALLBACK_COVER; }} />
+              </div>
+            </div>
+            <div className="pc-no-lyrics-info-section" style={{ textAlign: 'center', width: '100%', paddingLeft: '24px', paddingRight: '24px', gap: '20px' }}>
+              <div>
+                <h1 className="pc-no-lyrics-title" style={{ fontSize: 28 }}>{currentSong.name}</h1>
+                <p className="pc-no-lyrics-artist" style={{ fontSize: 15 }}>{currentSong.artist}</p>
+              </div>
+              <div className="pc-no-lyrics-actions" style={{ justifyContent: 'center' }}>
+                <button className="pc-no-lyrics-action-btn" title="Add to Favorites"><FaHeart style={{ fontSize: 14 }} /> <span>Like</span></button>
+                <button className="pc-no-lyrics-action-btn" title="Share"><FaList style={{ fontSize: 14 }} /> <span>Share</span></button>
+              </div>
+            </div>
+          </div>
+          <div className="pc-no-lyrics-footer">
+            <div style={{ width: '100%' }}>
+              <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
+            </div>
+            <div className="pc-no-lyrics-footer-controls">
+              <button className="pc-no-lyrics-footer-btn" onClick={playPrev}><FaStepBackward /></button>
+              <button className="pc-no-lyrics-play-btn" onClick={togglePlay} style={{ position: 'relative' }}>
+                {isBuffering ? <div className="pc-buffer-ring" /> : isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 3 }} />}
+              </button>
+              <button className="pc-no-lyrics-footer-btn" onClick={playNext}><FaStepForward /></button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="pc-root">
       <style>{CSS}</style>
@@ -1205,6 +1513,7 @@ export default function PlayerControls() {
       {mobileMini}
       {mobileExpanded}
       {mobileLyricsFs}
+      {noLyricsExpanded}
     </div>
   );
 }
