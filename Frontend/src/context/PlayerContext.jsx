@@ -6,6 +6,8 @@ import React, {
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
+import { useBehaviorTracker } from '../hooks/useBehaviorTracker';
+
 const PlayerContext = createContext();
 
 export function PlayerProvider({ children }) {
@@ -152,6 +154,8 @@ export function PlayerProvider({ children }) {
     }
     setCurrentIndex(prev);
   }, []); // empty — reads refs
+
+    useBehaviorTracker(currentSong, isPlaying); 
 
   /* ── Single YT player — created once on mount ───────────────────────
      Song changes use loadVideoById() — never destroys the player.
