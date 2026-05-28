@@ -139,13 +139,20 @@ export function AuthProvider({ children }) {
     });
   };
 
+  const signInWithDiscord = async () => {
+    return supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: { redirectTo: window.location.origin },
+    });
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
   };
 
-  const value = { user, profile, loading, signUp, signIn, signInWithGoogle, signOut };
+  const value = { user, profile, loading, signUp, signIn, signInWithGoogle, signInWithDiscord, signOut };
 
   return (
     <AuthContext.Provider value={value}>

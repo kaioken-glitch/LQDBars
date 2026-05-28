@@ -4,12 +4,13 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaPause, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
+  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic, FaMagic,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylists } from '../hooks/usePlaylists';
 import { fetchPlaylistWithDurations } from '../utils/youtubePlaylist';
 import { useToast } from '../components/Toast';
+import DaylistPlaylists from '../components/DaylistPlaylists';
 
 /* ── YOUTUBE PLAYLIST IMPORT ──
    Uses Piped API (open-source, no API key, CORS-safe).
@@ -777,10 +778,11 @@ export default function Playlists() {
     setMockSongStates(prev => ({ ...prev, [songId]: { ...prev[songId], ...updates } }));
   }, []);
 
-  const [query,        setQuery]        = useState('');
-  const [showCreate,   setShowCreate]   = useState(false);
+  const [query,       setQuery]       = useState('');
+  const [showCreate,  setShowCreate]  = useState(false);
   const [showYTImport, setShowYTImport] = useState(false);
-  const [selected,     setSelected]     = useState(null);
+  const [showDaylist, setShowDaylist] = useState(false);
+  const [selected,    setSelected]    = useState(null);
   const fileInputRef = useRef(null);
 
   // Keep selected in sync when hook updates playlists (e.g. song removed from elsewhere)
@@ -908,6 +910,42 @@ export default function Playlists() {
             </div>
           ) : (
             <div className="pl-grid">
+              {/* Daylist Card */}
+              <div
+                className="pl-card"
+                onClick={() => setShowDaylist(true)}
+                style={{ cursor: 'pointer' }}
+              >
+                <div className="pl-art">
+                  <div
+                    className="pl-art-empty"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(29,185,84,.25), rgba(23,225,101,.15))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '34px',
+                    }}
+                  >
+                    <FaMagic style={{ color: 'rgba(29,185,84,.6)' }} />
+                  </div>
+                  <div className="pl-art-overlay">
+                    <button
+                      className="pl-art-play"
+                      onClick={(e) => { e.stopPropagation(); setShowDaylist(true); }}
+                      aria-label="Open daylist"
+                      style={{ width: '46px', height: '46px' }}
+                    >
+                      <FaMagic style={{ fontSize: 15 }} />
+                    </button>
+                  </div>
+                </div>
+                <div className="pl-card-info">
+                  <div className="pl-card-name">Daylist</div>
+                  <div className="pl-card-count">Morning, Noon, Evening</div>
+                </div>
+              </div>
+
               {filtered.map(pl => (
                 <PlaylistCard key={pl.id} pl={pl} onOpen={setSelected} onPlay={playList} onDelete={deletePlaylist} />
               ))}
@@ -918,6 +956,7 @@ export default function Playlists() {
 
       {showCreate   && <CreateModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
       {showYTImport && <YouTubeImportModal onClose={() => setShowYTImport(false)} onImport={handleYTImport} />}
+      {showDaylist  && <DaylistPlaylists onClose={() => setShowDaylist(false)} />}
 
             {selected && (
         <DetailView
