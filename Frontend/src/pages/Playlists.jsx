@@ -336,7 +336,7 @@ const CSS = `
   background: rgba(255,50,50,0.12) !important;
   color: #ff6666 !important;
 }
-`;
+
 
 /* ── Mood trigger card ── */
 .pl-mood-card {
@@ -419,6 +419,9 @@ const CSS = `
   color: #fff; letter-spacing: -0.01em; margin-bottom: 2px;
 }
 .pl-mood-card-sub { font-size: 11px; color: rgba(255,255,255,0.4); }
+
+}
+`;
 
 /* ── PLAYLIST CARD ── */
 const PlaylistCard = memo(({ pl, onOpen, onPlay, onDelete }) => {
