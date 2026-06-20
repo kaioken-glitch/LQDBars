@@ -118,6 +118,57 @@ const CSS = `
 .lib-track-row:hover .lib-track-name, .lib-track-row.active .lib-track-name { color: var(--g); }
 .lib-track-artist { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lib-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   MOBILE
+───────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .lib-header { padding: 18px 16px 0; }
+  .lib-header-top { gap: 10px; margin-bottom: 16px; }
+  .lib-title-block { width: 100%; }
+  .lib-title { font-size: clamp(28px, 9vw, 38px); }
+  .lib-subtitle { font-size: 11px; }
+  .lib-header-controls { width: 100%; }
+  .lib-search-wrap { width: 100%; }
+  .lib-search { width: 100%; }
+  .lib-divider { margin-top: 14px; }
+
+  .lib-content { padding: 16px 16px 32px; }
+  .lib-grid { grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 12px; }
+  .lib-card-info { padding: 10px 11px 12px; }
+  .lib-card-name { font-size: 12px; }
+  .lib-card-artist, .lib-card-count { font-size: 10px; }
+
+  /* :hover never fires on touch — keep the play overlay visible so it's reachable */
+  .lib-art-overlay { opacity: 1; background: linear-gradient(to top, rgba(0,0,0,.6) 0%, transparent 60%); }
+  .lib-play-btn { transform: scale(0.84) translateY(0); width: 40px; height: 40px; font-size: 13px; }
+
+  .lib-empty { min-height: 48vh; padding: 0 24px; }
+  .lib-empty-icon { width: 64px; height: 64px; font-size: 24px; }
+  .lib-empty h3 { font-size: 20px; }
+  .lib-empty p { font-size: 13px; max-width: 260px; }
+
+  .lib-modal-bar { padding: 12px 16px; }
+  .lib-hero { padding: 20px 16px 14px; gap: 16px; }
+  .lib-hero-title { font-size: clamp(20px, 7.5vw, 30px); }
+  .lib-hero-artist { font-size: 13px; }
+  .lib-hero-count { font-size: 11px; margin-bottom: 14px; }
+  .lib-hero-play { width: 46px; height: 46px; font-size: 16px; }
+  .lib-hero-shuffle { width: 36px; height: 36px; font-size: 13px; }
+
+  .lib-tracks { padding: 0 12px 28px; }
+  .lib-tracks-label { padding: 0 8px 10px; }
+  .lib-track-row { padding: 8px 8px; gap: 10px; }
+  .lib-track-thumb { width: 36px; height: 36px; }
+  .lib-track-name { font-size: 12px; }
+  .lib-track-artist { font-size: 10px; }
+  .lib-track-dur { font-size: 10px; }
+}
+
+@media (max-width: 380px) {
+  .lib-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 10px; }
+  .lib-title { font-size: clamp(24px, 9vw, 32px); }
+}
 `;
 
 const FB = 'https://placehold.co/200x200/061408/112208?text=♪';
