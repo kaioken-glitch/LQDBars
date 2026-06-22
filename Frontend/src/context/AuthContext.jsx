@@ -1,38 +1,21 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+// src/context/AuthContext.jsx
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { notifyAll, LIBRARY_PLAYLIST_ID } from '../hooks/usePlaylists';
 
 const AuthContext = createContext();
 
+function extractYoutubeId(song) {
+  if (!song) return null;
+  if (song.youtubeId) return song.youtubeId;
+  if (typeof song.id === 'string' && song.id.startsWith('yt_')) return song.id.replace('yt_', '');
+  return null;
+}
+
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // On mount: restore existing session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfile(session.user.id);
-        loadPlaylistsFromSupabase(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          loadProfile(session.user.id);
-          loadPlaylistsFromSupabase(session.user.id);
-        } else {
-          setProfile(null);
-        }
-      }
-    );
-    return () => subscription.unsubscribe();
-  }, []);
 
   const loadProfile = async (userId) => {
     const { data } = await supabase
@@ -43,24 +26,31 @@ export function AuthProvider({ children }) {
     if (data) setProfile(data);
   };
 
-  // Load playlists from Supabase and push into the usePlaylists hook cache.
-  // This replaces whatever was in localStorage so the UI stays in sync.
+  // Pulls the canonical playlist/library state down from Supabase and
+  // replaces the local cache with it. Never wipes local data on a
+  // network/RLS error — if the fetch fails we leave whatever is already
+  // in localStorage alone instead of overwriting it with [].
   const loadPlaylistsFromSupabase = async (userId) => {
-    const { data: pls } = await supabase
+    const { data: pls, error } = await supabase
       .from('playlists')
       .select('*, playlist_songs(*)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (!pls) return;
+    if (error) {
+      console.warn('[Auth] could not load playlists from Supabase — keeping local copy:', error.message);
+      return;
+    }
 
-    const mapped = pls.map(pl => ({
-      id:        pl.is_library ? LIBRARY_PLAYLIST_ID : pl.id,
-      name:      pl.name,
-      source:    pl.source,
-      _hidden:   pl.is_library,
-      createdAt: new Date(pl.created_at).getTime(),
+    const mapped = (pls || []).map(pl => ({
+      id:         pl.is_library ? LIBRARY_PLAYLIST_ID : pl.id,
+      supabaseId: pl.id,
+      name:       pl.name,
+      source:     pl.source,
+      _hidden:    pl.is_library,
+      createdAt:  new Date(pl.created_at).getTime(),
       songs: (pl.playlist_songs || [])
+        .filter(s => s.youtube_id) // defensive — skip rows we can't reconstruct a playable song from
         .sort((a, b) => a.position - b.position)
         .map(s => ({
           id:        `yt_${s.youtube_id}`,
@@ -78,14 +68,25 @@ export function AuthProvider({ children }) {
     notifyAll(mapped); // pushes into every usePlaylists() consumer instantly
   };
 
-  // Run once on first login to move localStorage playlists to Supabase
-  const migrateLocalStorage = useCallback(async (userId) => {
-    const local = JSON.parse(localStorage.getItem('lb:playlists') || '[]');
-    if (!local.length) return;
+  // Pushes any LOCAL-ONLY playlists/songs (ones never written to Supabase,
+  // i.e. missing a `supabaseId`) up to the server. Safe to call on every
+  // login — anything already tagged with a `supabaseId` is skipped, so
+  // repeated calls never create duplicates.
+  const migrateLocalStorage = async (userId) => {
+    let local;
+    try { local = JSON.parse(localStorage.getItem('lb:playlists') || '[]'); }
+    catch { local = []; }
 
-    for (const pl of local) {
+    const toMigrate = local.filter(pl => {
+      if (pl.supabaseId) return false;
+      if (pl.id === LIBRARY_PLAYLIST_ID && (pl.songs || []).length === 0) return false;
+      return true;
+    });
+    if (!toMigrate.length) return;
+
+    for (const pl of toMigrate) {
       const isLib = pl.id === LIBRARY_PLAYLIST_ID;
-      const { data: newPl } = await supabase
+      const { data: newPl, error } = await supabase
         .from('playlists')
         .insert({
           user_id:    userId,
@@ -96,25 +97,75 @@ export function AuthProvider({ children }) {
         .select()
         .single();
 
-      if (!newPl || !pl.songs?.length) continue;
+      if (error || !newPl) {
+        console.warn('[Auth] migration failed for playlist', pl.name, error?.message);
+        continue;
+      }
 
-      const songs = pl.songs.map((s, i) => ({
-        playlist_id: newPl.id,
-        user_id:     userId,
-        youtube_id:  s.youtubeId || s.id?.replace('yt_', '') || null,
-        name:        s.name,
-        artist:      s.artist,
-        album:       s.album,
-        cover:       s.cover,
-        duration:    s.duration,
-        source:      s.source || 'youtube',
-        position:    i,
-      }));
+      const songs = (pl.songs || [])
+        .map((s, i) => {
+          const youtubeId = extractYoutubeId(s);
+          if (!youtubeId) return null; // local file import — nothing to restore later
+          return {
+            playlist_id: newPl.id,
+            user_id:     userId,
+            youtube_id:  youtubeId,
+            name:        s.name,
+            artist:      s.artist,
+            album:       s.album,
+            cover:       s.cover,
+            duration:    s.duration,
+            source:      s.source || 'youtube',
+            position:    i,
+          };
+        })
+        .filter(Boolean);
 
-      await supabase.from('playlist_songs').insert(songs);
+      if (songs.length) {
+        const { error: songsErr } = await supabase.from('playlist_songs').insert(songs);
+        if (songsErr) console.warn('[Auth] migration: failed to insert songs for', pl.name, songsErr.message);
+      }
     }
+    // We deliberately don't touch localStorage here — loadPlaylistsFromSupabase
+    // (called right after this) replaces the cache with the freshly-synced
+    // server copy, tagging every playlist with its real supabaseId so this
+    // becomes a no-op on every future login.
+  };
 
-    localStorage.removeItem('lb:playlists'); // clean up after migration
+  // Runs on every login (any provider) and on session restore: pushes up
+  // anything local-only, then pulls down the canonical server copy.
+  const syncPlaylistsForUser = async (userId) => {
+    try {
+      await migrateLocalStorage(userId);
+    } catch (e) {
+      console.warn('[Auth] migration step failed, will still try to load:', e.message);
+    }
+    await loadPlaylistsFromSupabase(userId);
+  };
+
+  // On mount: restore existing session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadProfile(session.user.id);
+        syncPlaylistsForUser(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          loadProfile(session.user.id);
+          syncPlaylistsForUser(session.user.id);
+        } else {
+          setProfile(null);
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
   }, []);
 
   const signUp = async (email, password, displayName) => {
@@ -128,7 +179,8 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (data?.user) await migrateLocalStorage(data.user.id);
+    // Migration + playlist load now happens automatically via the
+    // onAuthStateChange listener above once the session is established.
     return { data, error };
   };
 
