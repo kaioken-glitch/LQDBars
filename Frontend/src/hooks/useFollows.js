@@ -42,7 +42,7 @@ export function useFollows() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, bio')
+        .select('id, display_name, avatar_url')
         .neq('id', user.id)
         .limit(limit);
       if (error) throw error;

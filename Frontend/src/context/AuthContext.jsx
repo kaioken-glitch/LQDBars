@@ -35,7 +35,6 @@ export function AuthProvider({ children }) {
           id: userId,
           display_name: displayName,
           avatar_url: `https://placehold.co/80x80/1a1a1a/333?text=${encodeURIComponent(displayName[0])}`,
-          bio: '',
         })
         .select()
         .single();
