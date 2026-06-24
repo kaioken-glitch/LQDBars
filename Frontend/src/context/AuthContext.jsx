@@ -23,7 +23,24 @@ export function AuthProvider({ children }) {
       .select('*')
       .eq('id', userId)
       .single();
-    if (data) setProfile(data);
+    if (data) {
+      setProfile(data);
+    } else {
+      // Profile doesn't exist yet — create one with default values
+      const { data: user } = await supabase.auth.getUser();
+      const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Music Lover';
+      const { data: newProfile } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          display_name: displayName,
+          avatar_url: `https://placehold.co/80x80/1a1a1a/333?text=${encodeURIComponent(displayName[0])}`,
+          bio: '',
+        })
+        .select()
+        .single();
+      if (newProfile) setProfile(newProfile);
+    }
   };
 
   // Pulls the canonical playlist/library state down from Supabase and

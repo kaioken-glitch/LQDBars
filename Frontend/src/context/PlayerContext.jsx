@@ -54,6 +54,7 @@ export function PlayerProvider({ children }) {
   // when reassigning .src, and the YT PAUSED buffering artifact, from
   // calling advanceNext() and cycling through the list.
   const loadingRef = useRef(false);
+  const advancingRef = useRef(false);
 
   const currentSong = songs[currentIndex];
 
@@ -98,6 +99,11 @@ export function PlayerProvider({ children }) {
   ────────────────────────────────────────────────────────────────── */
   const advanceNext = useCallback(() => {
     if (!mountedRef.current) return;
+    // Guard against rapid successive calls
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setTimeout(() => { advancingRef.current = false; }, 100);
+
     const s   = songsRef.current;
     const ci  = idxRef.current;
     const rm  = repeatRef.current;
@@ -129,6 +135,11 @@ export function PlayerProvider({ children }) {
 
   const advancePrev = useCallback(() => {
     if (!mountedRef.current) return;
+    // Guard against rapid successive calls
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setTimeout(() => { advancingRef.current = false; }, 100);
+
     const s   = songsRef.current;
     const ci  = idxRef.current;
     const rm  = repeatRef.current;
