@@ -9,6 +9,7 @@ import { VERSION, BUILD_DATE } from '../version';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { usePlaylists } from '../hooks/usePlaylists';
+import { useFollows } from '../hooks/useFollows';
 
 const CHANGELOG = [
   { version: VERSION, date: BUILD_DATE, tag: 'Latest', changes: [
@@ -402,7 +403,10 @@ export default function Settings() {
 
   const { user, profile: authProfile, signOut } = useAuth();
   const { playlists } = usePlaylists();
+  const { getCounts } = useFollows();
   const [signingOut, setSigningOut] = useState(false);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followersCount, setFollowersCount] = useState(0);
 
   const [name,     setName]     = useState(() => localStorage.getItem('lb:profileName')     || 'Music Lover');
   const [email,    setEmail]    = useState(() => localStorage.getItem('lb:profileEmail')    || '');
@@ -416,7 +420,16 @@ export default function Settings() {
     if (authProfile.display_name) setName(authProfile.display_name);
     if (authProfile.avatar_url)   setAvatar(authProfile.avatar_url);
     if (authProfile.phone)        setPhone(authProfile.phone || '');
-    if (authProfile.location)     setLocation(authProfile.location || '');
+    if (authProfile.location)     setLocation(authProfile.location || 
+
+  // Fetch follower and following counts
+  useEffect(() => {
+    if (!user?.id) return;
+    getCounts(user.id).then(({ followers, following }) => {
+      setFollowersCount(followers);
+      setFollowingCount(following);
+    }).catch(err => console.warn('[Settings] failed to load counts:', err));
+  }, [user?.id, getCounts]);'');
     if (authProfile.bio)          setBio(authProfile.bio || '');
   }, [authProfile]);
   useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
@@ -575,7 +588,7 @@ export default function Settings() {
                 {saved ? <FaCheckCircle /> : <FaSave />} {saved ? 'Saved' : 'Save'}
               </button>
               {user && (
-                <button onClick={handleSignOut} disabled={signingOut} className="sr-btn-out">
+                <button onClick={handleSignOut} disfollowingCount, l: 'Following' }, { n: followersCounte="sr-btn-out">
                   <FaSignOutAlt style={{ fontSize:10 }} /> {signingOut ? 'Signing out…' : 'Sign out'}
                 </button>
               )}
@@ -636,11 +649,10 @@ export default function Settings() {
                               </div>
                             )}
                           </div>
-                          <div className="sr-pl-tile-name">{pl.name}</div>
-                          <div className="sr-pl-tile-count">{(pl.songs || []).length} songs</div>
-                        </div>
-                      );
-                    })}
+                    { n: followingCount, l: 'Following' }, { n: followersCount, l: 'Followers' }].map(({ n, l }) => (
+                    <div key={l} className="sr-social-card">
+                      <div className="sr-social-n"><Counter to={n} /></div>
+                      <div className="sr-social-l">{l}
                   </div>
                 )}
 
