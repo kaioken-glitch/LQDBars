@@ -979,13 +979,6 @@ const DotsMenu = memo(({ song, songList, onAddToQueue }) => {
   );
 });
 
-const playProfilePlaylist = useCallback((songs) => {
-    if (!songs?.length) return;
-    setPlayerSongs(songs, 0);
-    setTimeout(() => setIsPlaying(true), 50);
-    setOpenProfileId(null);
-  }, [setPlayerSongs, setIsPlaying]);
-
 const AddToPlaylistBtn = memo(({ song }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1115,6 +1108,13 @@ export default function HomeOnline() {
     downloadedSongs,
     currentSong,
   } = usePlayer();
+
+  const playProfilePlaylist = useCallback((songs) => {
+    if (!songs?.length) return;
+    setPlayerSongs(songs, 0);
+    setTimeout(() => setIsPlaying(true), 50);
+    setOpenProfileId(null);
+  }, [setPlayerSongs, setIsPlaying]);
 
   // downloadedSongs is the persisted library — never overwritten by queue changes
   // songs is the current playback queue — can include YouTube tracks
