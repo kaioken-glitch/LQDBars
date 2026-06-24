@@ -18,6 +18,9 @@ import PlayerControls from '../components/PlayerControls';
 import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
 import RadioTile, { RadioDetailView } from '../components/Radiotile';
+import PeopleRow from '../components/PeopleRow';
+import ProfileDetailView from '../components/ProfileDetailView';
+import { useFollows } from '../hooks/useFollows';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -238,6 +241,7 @@ const SECTION_DEFINITIONS = [
     ],
   },
 ];
+
 
 /* Pick sections for the active genre. For each section, pick MULTIPLE queries
    from the pool so results are diverse. */
@@ -975,6 +979,13 @@ const DotsMenu = memo(({ song, songList, onAddToQueue }) => {
   );
 });
 
+const playProfilePlaylist = useCallback((songs) => {
+    if (!songs?.length) return;
+    setPlayerSongs(songs, 0);
+    setTimeout(() => setIsPlaying(true), 50);
+    setOpenProfileId(null);
+  }, [setPlayerSongs, setIsPlaying]);
+
 const AddToPlaylistBtn = memo(({ song }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1090,7 +1101,8 @@ export default function HomeOnline() {
   const { user, profile: authProfile } = useAuth();
   const ytSongRef   = useRef(null);
   const searchCache = useRef({});
-
+  const [openProfileId, setOpenProfileId] = useState(null);
+  const { suggested, loadingSuggested, isFollowing, toggleFollow, getCounts } = useFollows();
   const {
     songs,
     setPlayerSongs,
@@ -1519,6 +1531,15 @@ export default function HomeOnline() {
             {/* ── SCROLLABLE CONTENT ── */}
             <div style={{ flex:1, overflowY:'auto', paddingBottom:100 }}>
 
+              {/* ── PEOPLE TO FOLLOW ── */}
+              <PeopleRow
+                people={suggested}
+                loading={loadingSuggested}
+                isFollowing={isFollowing}
+                onToggleFollow={toggleFollow}
+                onOpenProfile={(person) => setOpenProfileId(person.id)}
+              />
+
               {/* ── FOR YOU shelf — personalised recommendations ── */}
               {(forYou.length > 0 || forYouLoading) && (
                 <section style={{ marginBottom:32 }}>
@@ -1549,7 +1570,7 @@ export default function HomeOnline() {
                               item={item}
                               isActive={isActive}
                               isPlaying={isPlaying}
-                              onPlay={() => handlePlay(item)}
+                              onPlay={() => playStreamingSong(item)}
                               loadingId={loadingId}
                             />
                           );
@@ -1685,6 +1706,17 @@ export default function HomeOnline() {
               </section>
             </div>
           </>
+        )}
+
+        {openProfileId && (
+          <ProfileDetailView
+            profileId={openProfileId}
+            isFollowing={isFollowing}
+            onToggleFollow={toggleFollow}
+            getCounts={getCounts}
+            onClose={() => setOpenProfileId(null)}
+            onPlayPlaylist={playProfilePlaylist}
+          />
         )}
 
         <PlayerControls />
