@@ -420,7 +420,10 @@ export default function Settings() {
     if (authProfile.display_name) setName(authProfile.display_name);
     if (authProfile.avatar_url)   setAvatar(authProfile.avatar_url);
     if (authProfile.phone)        setPhone(authProfile.phone || '');
-    if (authProfile.location)     setLocation(authProfile.location || 
+    if (authProfile.location)     setLocation(authProfile.location || '');
+    if (authProfile.bio)          setBio(authProfile.bio || '');
+  }, [authProfile]);
+  useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
 
   // Fetch follower and following counts
   useEffect(() => {
@@ -429,10 +432,7 @@ export default function Settings() {
       setFollowersCount(followers);
       setFollowingCount(following);
     }).catch(err => console.warn('[Settings] failed to load counts:', err));
-  }, [user?.id, getCounts]);'');
-    if (authProfile.bio)          setBio(authProfile.bio || '');
-  }, [authProfile]);
-  useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
+  }, [user?.id, getCounts]);
 
   const [crossfade,       setCrossfade]       = useState(() => Number(localStorage.getItem('lb:crossfade') || 0));
   const [gapless,         setGapless]         = useState(() => localStorage.getItem('lb:gapless')   === 'true');
