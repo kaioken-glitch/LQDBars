@@ -588,7 +588,7 @@ export default function Settings() {
                 {saved ? <FaCheckCircle /> : <FaSave />} {saved ? 'Saved' : 'Save'}
               </button>
               {user && (
-                <button onClick={handleSignOut} disfollowingCount, l: 'Following' }, { n: followersCounte="sr-btn-out">
+                <button onClick={handleSignOut} disabled={signingOut} className="sr-btn-out">
                   <FaSignOutAlt style={{ fontSize:10 }} /> {signingOut ? 'Signing out…' : 'Sign out'}
                 </button>
               )}
@@ -597,7 +597,7 @@ export default function Settings() {
 
           {/* Stats */}
           <div className="sr-stats">
-            {[{ n: plCount, l: 'Playlists' }, { n: 0, l: 'Following' }, { n: 0, l: 'Followers' }].map(({ n, l }) => (
+            {[{ n: plCount, l: 'Playlists' }, { n: followingCount, l: 'Following' }, { n: followersCount, l: 'Followers' }].map(({ n, l }) => (
               <div key={l} className="sr-stat">
                 <span className="sr-stat-n"><Counter to={n} /></span>
                 <span className="sr-stat-l">{l}</span>
