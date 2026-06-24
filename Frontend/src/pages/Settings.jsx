@@ -649,19 +649,19 @@ export default function Settings() {
                               </div>
                             )}
                           </div>
-                    { n: followingCount, l: 'Following' }, { n: followersCount, l: 'Followers' }].map(({ n, l }) => (
-                    <div key={l} className="sr-social-card">
-                      <div className="sr-social-n"><Counter to={n} /></div>
-                      <div className="sr-social-l">{l}
+                          <div className="sr-pl-tile-name">{pl.name}</div>
+                          <div className="sr-pl-tile-count">{(pl.songs || []).length} songs</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
                 <div className="sr-social">
-                  {[['0','Following'],['0','Followers']].map(([n, l]) => (
+                  {[{ n: followingCount, l: 'Following' }, { n: followersCount, l: 'Followers' }].map(({ n, l }) => (
                     <div key={l} className="sr-social-card">
-                      <div className="sr-social-n">{n}</div>
+                      <div className="sr-social-n"><Counter to={n} /></div>
                       <div className="sr-social-l">{l}</div>
-                      <div className="sr-social-note">Coming soon</div>
                     </div>
                   ))}
                 </div>
