@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { FaCheck } from 'react-icons/fa';
+import React, { memo, useMemo } from 'react';
+import { FaCheck, FaTimes } from 'react-icons/fa';
 
 const FB_AVATAR = 'https://placehold.co/80x80/1a1a1a/333?text=%E2%99%AA';
 
@@ -60,7 +60,13 @@ const PersonPill = memo(({ person, following, onOpen, onToggleFollow }) => {
   );
 });
 
-export default function PeopleRow({ people, loading, isFollowing, onToggleFollow, onOpenProfile }) {
+export default function PeopleRow({ people, loading, isFollowing, onToggleFollow, onOpenProfile, onDismiss, onToggleVisibility, visible, disabledUntil }) {
+  const cooldownLabel = useMemo(() => {
+    if (!disabledUntil) return '';
+    const diff = Math.max(0, Math.ceil((disabledUntil - Date.now()) / (1000 * 60 * 60 * 24)));
+    return diff > 0 ? `Hidden for ${diff} day${diff === 1 ? '' : 's'}` : 'Reappearing soon';
+  }, [disabledUntil]);
+
   if (!loading && (!people || people.length === 0)) return null;
 
   return (
@@ -69,9 +75,29 @@ export default function PeopleRow({ people, loading, isFollowing, onToggleFollow
       <div className="ho-section-head">
         <div className="ho-section-title">
           <span className="ho-section-dot" />
-          <h2>People to Follow</h2>
+          <h2>Suggested Profiles</h2>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            onClick={onToggleVisibility}
+            style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 999, padding: '6px 10px' }}
+          >
+            {visible ? 'Hide for 4 days' : 'Show suggestions'}
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss suggestions"
+            style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <FaTimes size={12} />
+          </button>
         </div>
       </div>
+      {cooldownLabel && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', margin: '-8px 0 10px 28px' }}>{cooldownLabel}</div>
+      )}
 
       {loading ? (
         <div className="pr-shelf">

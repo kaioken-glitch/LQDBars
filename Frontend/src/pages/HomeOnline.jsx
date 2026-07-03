@@ -21,6 +21,7 @@ import RadioTile, { RadioDetailView } from '../components/Radiotile';
 import PeopleRow from '../components/PeopleRow';
 import ProfileDetailView from '../components/ProfileDetailView';
 import { useFollows } from '../hooks/useFollows';
+import { getSuggestionsVisibility, setSuggestionsVisibility } from '../utils/suggestionsVisibility';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -1089,6 +1090,14 @@ export default function HomeOnline() {
   const [errorMsg,        setErrorMsg]        = useState(null);
   const [detailBg,        setDetailBg]        = useState('#1a1a1a');
   const [searchFocused,   setSearchFocused]   = useState(false);
+  const [suggestionsVisible, setSuggestionsVisible] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return getSuggestionsVisibility(window.localStorage).isVisible;
+  });
+  const [suggestionsDisabledUntil, setSuggestionsDisabledUntil] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    return Number(window.localStorage.getItem('lb:suggestionsDisabledUntil') || 0);
+  });
 
   const { show: showToast } = useToast();
   const { user, profile: authProfile } = useAuth();
@@ -1126,6 +1135,14 @@ export default function HomeOnline() {
 
   /* ── Initial load ── */
   useEffect(() => { if (volume === 1) setVolume(0.2); }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const visibility = getSuggestionsVisibility(window.localStorage);
+      setSuggestionsVisible(visibility.isVisible);
+      setSuggestionsDisabledUntil(visibility.disabledUntil || 0);
+    }
+  }, []);
 
   useEffect(() => {
     if (songs.length > 0) { setLoading(false); return; }
@@ -1532,13 +1549,47 @@ export default function HomeOnline() {
             <div style={{ flex:1, overflowY:'auto', paddingBottom:100 }}>
 
               {/* ── PEOPLE TO FOLLOW ── */}
-              <PeopleRow
-                people={suggested}
-                loading={loadingSuggested}
-                isFollowing={isFollowing}
-                onToggleFollow={toggleFollow}
-                onOpenProfile={(person) => setOpenProfileId(person.id)}
-              />
+              {suggestionsVisible ? (
+                <PeopleRow
+                  people={suggested}
+                  loading={loadingSuggested}
+                  isFollowing={isFollowing}
+                  onToggleFollow={toggleFollow}
+                  onOpenProfile={(person) => setOpenProfileId(person.id)}
+                  onDismiss={() => {
+                    setSuggestionsVisible(false);
+                    const nextState = setSuggestionsVisibility(false, window.localStorage);
+                    setSuggestionsDisabledUntil(nextState.disabledUntil);
+                  }}
+                  onToggleVisibility={() => {
+                    const nextState = setSuggestionsVisibility(!suggestionsVisible, window.localStorage);
+                    setSuggestionsVisible(nextState.isVisible);
+                    setSuggestionsDisabledUntil(nextState.disabledUntil);
+                  }}
+                  visible={suggestionsVisible}
+                  disabledUntil={suggestionsDisabledUntil}
+                />
+              ) : (
+                <section style={{ marginBottom: 24, padding: '14px 18px', borderRadius: 16, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: 'rgba(255,255,255,0.55)' }}>Suggestions</div>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', marginTop: 4 }}>Hidden for a short cooldown. You can bring them back anytime.</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextState = setSuggestionsVisibility(true, window.localStorage);
+                        setSuggestionsVisible(nextState.isVisible);
+                        setSuggestionsDisabledUntil(nextState.disabledUntil);
+                      }}
+                      style={{ padding: '8px 12px', borderRadius: 999, background: 'var(--lb-green, #1DB954)', color: '#000', fontWeight: 700, border: 'none' }}
+                    >
+                      Show suggestions
+                    </button>
+                  </div>
+                </section>
+              )}
 
               {/* ── FOR YOU shelf — personalised recommendations ── */}
               {(forYou.length > 0 || forYouLoading) && (
