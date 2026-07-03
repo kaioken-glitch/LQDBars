@@ -1098,6 +1098,8 @@ export default function HomeOnline() {
     if (typeof window === 'undefined') return 0;
     return Number(window.localStorage.getItem('lb:suggestionsDisabledUntil') || 0);
   });
+  const [showCompactSuggestions, setShowCompactSuggestions] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth <= 640));
 
   const { show: showToast } = useToast();
   const { user, profile: authProfile } = useAuth();
@@ -1142,6 +1144,25 @@ export default function HomeOnline() {
       setSuggestionsVisible(visibility.isVisible);
       setSuggestionsDisabledUntil(visibility.disabledUntil || 0);
     }
+  }, []);
+
+  // Auto-hide the small compact suggestions banner after 5 seconds when hidden
+  useEffect(() => {
+    if (suggestionsVisible) {
+      setShowCompactSuggestions(true);
+      return undefined;
+    }
+    setShowCompactSuggestions(true);
+    const id = setTimeout(() => setShowCompactSuggestions(false), 5000);
+    return () => clearTimeout(id);
+  }, [suggestionsVisible]);
+
+  // Track small/mobile viewports for responsive tweaks
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    function onResize() { setIsMobileViewport(window.innerWidth <= 640); }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   useEffect(() => {
@@ -1570,25 +1591,49 @@ export default function HomeOnline() {
                   disabledUntil={suggestionsDisabledUntil}
                 />
               ) : (
-                <section style={{ marginBottom: 24, padding: '14px 18px', borderRadius: 16, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: 'rgba(255,255,255,0.55)' }}>Suggestions</div>
-                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', marginTop: 4 }}>Hidden for a short cooldown. You can bring them back anytime.</div>
+                showCompactSuggestions && (
+                  <section
+                    style={{
+                      marginBottom: 12,
+                      padding: isMobileViewport ? '8px 12px' : '10px 14px',
+                      borderRadius: 12,
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 8, background: 'var(--lb-green, #1DB954)', flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '.12em' }}>Suggestions</div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>Hidden for a short cooldown. Bring them back anytime.</div>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextState = setSuggestionsVisibility(true, window.localStorage);
-                        setSuggestionsVisible(nextState.isVisible);
-                        setSuggestionsDisabledUntil(nextState.disabledUntil);
-                      }}
-                      style={{ padding: '8px 12px', borderRadius: 999, background: 'var(--lb-green, #1DB954)', color: '#000', fontWeight: 700, border: 'none' }}
-                    >
-                      Show suggestions
-                    </button>
-                  </div>
-                </section>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextState = setSuggestionsVisibility(true, window.localStorage);
+                          setSuggestionsVisible(nextState.isVisible);
+                          setSuggestionsDisabledUntil(nextState.disabledUntil);
+                        }}
+                        style={{ padding: '6px 10px', borderRadius: 999, background: 'var(--lb-green, #1DB954)', color: '#000', fontWeight: 700, border: 'none', fontSize: 13 }}
+                      >
+                        Show
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.location.href = '/settings'}
+                        style={{ padding: '6px 10px', borderRadius: 999, background: 'transparent', color: 'rgba(255,255,255,0.68)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 12 }}
+                      >
+                        Manage
+                      </button>
+                    </div>
+                  </section>
+                )
               )}
 
               {/* ── FOR YOU shelf — personalised recommendations ── */}

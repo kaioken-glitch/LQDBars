@@ -401,7 +401,7 @@ const CSS = `
 `;
 
 const MoodPlaylist = memo(({ onClose }) => {
-  const { setPlayerSongs } = usePlayer();
+  const { setPlayerSongs, setIsPlaying } = usePlayer();
   const { addPlaylist } = usePlaylists();
   const { generatePlaylist, songs, loading, error } = useMoodPlaylist();
   const { toast } = useToast();
@@ -454,6 +454,20 @@ const MoodPlaylist = memo(({ onClose }) => {
       setStage('input');
     } catch (err) {
       toast({ type: 'error', message: 'Failed to save playlist' });
+    }
+  };
+
+  const handlePlayAll = () => {
+    if (!songs || songs.length === 0) return;
+    try {
+      const validSongs = songs.filter(s => s.audio || s.url || s.youtubeId);
+      if (!validSongs.length) { toast({ type: 'error', message: 'No playable tracks found.' }); return; }
+      setPlayerSongs(validSongs, 0);
+      setTimeout(() => setIsPlaying(true), 80);
+      toast({ type: 'success', message: `Playing "${moodRef.current} Mix"` });
+    } catch (err) {
+      console.error('MoodPlaylist play all error:', err);
+      toast({ type: 'error', message: 'Could not play playlist' });
     }
   };
 
@@ -532,6 +546,9 @@ const MoodPlaylist = memo(({ onClose }) => {
               <div className="mp-playlist-actions">
                 <button className="mp-playlist-save-btn" onClick={handleSavePlaylist}>
                   <FaSave style={{ fontSize: 12 }} /> Save Playlist
+                </button>
+                <button className="mp-playlist-save-btn" onClick={handlePlayAll} style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>
+                  <FaPlay style={{ fontSize: 12 }} /> Play All
                 </button>
               </div>
 
