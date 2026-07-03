@@ -19,6 +19,8 @@ import youtubeConverter from '../utils/youtubeConverter';
 import Loader from '../utils/Splashscreen';
 import RadioTile, { RadioDetailView } from '../components/Radiotile';
 import PeopleRow from '../components/PeopleRow';
+import MoodPlaylist from '../components/MoodPlaylist';
+import { useMoodPlaylist } from '../hooks/useMoodPlaylist';
 import ProfileDetailView from '../components/ProfileDetailView';
 import { useFollows } from '../hooks/useFollows';
 import { getSuggestionsVisibility, setSuggestionsVisibility } from '../utils/suggestionsVisibility';
@@ -1098,7 +1100,7 @@ export default function HomeOnline() {
     if (typeof window === 'undefined') return 0;
     return Number(window.localStorage.getItem('lb:suggestionsDisabledUntil') || 0);
   });
-  const [showCompactSuggestions, setShowCompactSuggestions] = useState(true);
+  const [showCompactTransient, setShowCompactTransient] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth <= 640));
 
   const { show: showToast } = useToast();
@@ -1146,16 +1148,103 @@ export default function HomeOnline() {
     }
   }, []);
 
-  // Auto-hide the small compact suggestions banner after 5 seconds when hidden
+  // Time-of-day mood slot (morning/noon/evening) — used to show a Mood Mix card on Home
+  const [showMoodModal, setShowMoodModal] = useState(false);
+  const hour = (typeof window === 'undefined') ? new Date().getHours() : new Date().getHours();
+  let moodSlot = null;
+  if (hour >= 5 && hour < 12) moodSlot = 'Morning';
+  else if (hour >= 12 && hour < 17) moodSlot = 'Noon';
+  else if (hour >= 17 && hour < 23) moodSlot = 'Evening';
+  const { generatePlaylist: generateMood } = useMoodPlaylist();
+  const { addPlaylist } = usePlaylists();
+  const [moodSongs, setMoodSongs] = useState([]);
+  const [moodLoading, setMoodLoading] = useState(false);
+  const [moodError, setMoodError] = useState(null);
+
+  // Cache TTL for mood generation (ms)
+  const MOOD_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
+
+  // Descriptive prompts per slot
+  const MOOD_PROMPTS = {
+    Morning: 'Early rise vibe: gentle upbeat tracks, warm acoustic, mellow hip-hop, bright and optimistic',
+    Noon:   'Lazy hour feel: chilled, laid-back, downtempo, soft grooves perfect for midday rest',
+    Evening:'Winding up energy: warm electronic and R&B with increasing tempo, great for evening wind-up',
+  };
+
   useEffect(() => {
-    if (suggestionsVisible) {
-      setShowCompactSuggestions(true);
-      return undefined;
+    let mounted = true;
+    async function ensureMood() {
+      if (!moodSlot) return;
+      // check if user dismissed this slot
+      const dismissedKey = `lb:mood_dismissed_until_${moodSlot}`;
+      const dismissedUntil = Number(localStorage.getItem(dismissedKey) || 0);
+      if (dismissedUntil > Date.now()) {
+        setMoodSongs([]);
+        setMoodLoading(false);
+        return;
+      }
+      const key = `lb:mood_slot_${moodSlot}`;
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Date.now() - (parsed.ts || 0) < MOOD_CACHE_TTL && Array.isArray(parsed.songs) && parsed.songs.length) {
+            setMoodSongs(parsed.songs);
+            return;
+          }
+        }
+
+        setMoodLoading(true);
+        setMoodError(null);
+        const prompt = MOOD_PROMPTS[moodSlot] || moodSlot;
+        const result = await generateMood(prompt, 20);
+        if (!mounted) return;
+        if (result && result.length) {
+          setMoodSongs(result);
+          try { localStorage.setItem(key, JSON.stringify({ songs: result, ts: Date.now() })); } catch (_) {}
+        } else {
+          setMoodSongs([]);
+          setMoodError('No songs generated');
+        }
+      } catch (err) {
+        console.error('Mood slot generation failed:', err);
+        setMoodError(err.message || 'Failed to generate');
+      } finally {
+        if (mounted) setMoodLoading(false);
+      }
     }
-    setShowCompactSuggestions(true);
-    const id = setTimeout(() => setShowCompactSuggestions(false), 5000);
+    ensureMood();
+    return () => { mounted = false; };
+  }, [moodSlot, generateMood]);
+
+  function dismissMoodSlot(slot) {
+    try {
+      const key = `lb:mood_dismissed_until_${slot}`;
+      const until = Date.now() + 4 * 24 * 60 * 60 * 1000; // 4 days
+      localStorage.setItem(key, String(until));
+      if (slot === moodSlot) setMoodSongs([]);
+    } catch (_) {}
+  }
+
+  function isMoodDismissed(slot) {
+    try { return Number(localStorage.getItem(`lb:mood_dismissed_until_${slot}`) || 0) > Date.now(); }
+    catch { return false; }
+  }
+
+  // Auto-hide the small compact suggestions banner after 5 seconds, but only
+  // show it when the cooldown window has elapsed (i.e. disabledUntil <= now).
+  useEffect(() => {
+    let id;
+    const now = Date.now();
+    const compactAllowed = !suggestionsVisible && (suggestionsDisabledUntil || 0) <= now;
+    if (compactAllowed) {
+      setShowCompactTransient(true);
+      id = setTimeout(() => setShowCompactTransient(false), 5000);
+    } else {
+      setShowCompactTransient(false);
+    }
     return () => clearTimeout(id);
-  }, [suggestionsVisible]);
+  }, [suggestionsVisible, suggestionsDisabledUntil]);
 
   // Track small/mobile viewports for responsive tweaks
   useEffect(() => {
@@ -1591,7 +1680,7 @@ export default function HomeOnline() {
                   disabledUntil={suggestionsDisabledUntil}
                 />
               ) : (
-                showCompactSuggestions && (
+                showCompactTransient && (
                   <section
                     style={{
                       marginBottom: 12,
@@ -1623,13 +1712,6 @@ export default function HomeOnline() {
                         style={{ padding: '6px 10px', borderRadius: 999, background: 'var(--lb-green, #1DB954)', color: '#000', fontWeight: 700, border: 'none', fontSize: 13 }}
                       >
                         Show
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => window.location.href = '/settings'}
-                        style={{ padding: '6px 10px', borderRadius: 999, background: 'transparent', color: 'rgba(255,255,255,0.68)', border: '1px solid rgba(255,255,255,0.06)', fontSize: 12 }}
-                      >
-                        Manage
                       </button>
                     </div>
                   </section>
@@ -1798,6 +1880,74 @@ export default function HomeOnline() {
                     <p style={{ fontSize:15, color:'var(--lb-text-2)', marginBottom:4 }}>No downloads yet</p>
                     <p style={{ fontSize:13, color:'var(--lb-text-3)' }}>Download songs for offline listening</p>
                   </div>
+                )}
+
+                {/* ── Mood Mix for time of day (morning/noon/evening) ── */}
+                {moodSlot && (
+                  <section style={{ marginBottom: 28 }}>
+                    <div className="ho-section-head">
+                      <div className="ho-section-title">
+                        <span className="ho-section-dot" />
+                        <h2>{moodSlot} Mix</h2>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{moodLoading ? 'Generating…' : 'Auto-generated for current time'}</div>
+                        {!moodLoading && moodSongs && moodSongs.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => {
+                                try {
+                                  const valid = moodSongs.filter(s => s.audio || s.youtubeId || s.url);
+                                  if (!valid.length) { showToast({ type: 'error', message: 'No playable tracks' }); return; }
+                                  setPlayerSongs(valid, 0);
+                                  setTimeout(() => setIsPlaying(true), 80);
+                                } catch (e) { console.error(e); }
+                              }}
+                              style={{ padding: '8px 10px', borderRadius: 999, background: 'var(--lb-green,#1DB954)', color: '#000', fontWeight: 700, border: 'none' }}
+                            >Play All</button>
+
+                            <button
+                              onClick={() => {
+                                try {
+                                  const pl = { id: `pl_${Date.now()}`, name: `${moodSlot} Mix`, songs: moodSongs, source: 'mood', createdAt: Date.now() };
+                                  addPlaylist(pl);
+                                  showToast({ type: 'success', message: 'Saved mood mix' });
+                                  // hide after saving
+                                  dismissMoodSlot(moodSlot);
+                                } catch (e) { console.error(e); showToast({ type: 'error', message: 'Could not save' }); }
+                              }}
+                              style={{ padding: '8px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.06)' }}
+                            >Keep</button>
+
+                            <button
+                              onClick={() => { dismissMoodSlot(moodSlot); showToast({ type: 'info', message: 'Hidden for 4 days' }); }}
+                              style={{ padding: '8px 10px', borderRadius: 999, background: 'transparent', color: 'rgba(255,255,255,0.68)', border: '1px solid rgba(255,255,255,0.06)' }}
+                            >Dismiss</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {moodLoading ? (
+                      <div className="ho-shelf">
+                        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="ho-shimmer-card"><div className="ho-shimmer" style={{ height:160, borderRadius:15 }} /></div>)}
+                      </div>
+                    ) : moodSongs && moodSongs.length > 0 ? (
+                      <div className="ho-shelf">
+                        {moodSongs.map(item => (
+                          <SongCard
+                            key={item.id}
+                            item={item}
+                            isActive={currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId}
+                            isPlaying={isPlaying}
+                            onPlay={() => playStreamingSong(item)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ padding: '12px 18px', color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{moodError || 'No mood mix available'}</div>
+                    )}
+                  </section>
                 )}
               </section>
             </div>
