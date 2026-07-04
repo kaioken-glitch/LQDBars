@@ -4,13 +4,12 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaPause, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
+  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylists } from '../hooks/usePlaylists';
 import { fetchPlaylistWithDurations } from '../utils/youtubePlaylist';
 import { useToast } from '../components/Toast';
-import MoodPlaylist from '../components/MoodPlaylist';
 
 /* ── YOUTUBE PLAYLIST IMPORT ──
    Uses Piped API (open-source, no API key, CORS-safe).
@@ -864,7 +863,6 @@ export default function Playlists() {
   const [query,        setQuery]        = useState('');
   const [showCreate,   setShowCreate]   = useState(false);
   const [showYTImport, setShowYTImport] = useState(false);
-  const [showMoodModal, setShowMoodModal] = useState(false);
   const [selected,     setSelected]     = useState(null);
   const fileInputRef = useRef(null);
 
@@ -977,9 +975,6 @@ export default function Playlists() {
               </div>
 
               <ImportDropdown onLocalImport={handleLocalImport} onYouTubeImport={() => setShowYTImport(true)} />
-              <button className="pl-new-btn" onClick={() => setShowMoodModal(true)} title="Create a mood mix">
-                <FaMusic style={{ fontSize: 11 }} /> Mood Mix
-              </button>
               <button className="pl-new-btn" onClick={() => setShowCreate(true)}>
                 <FaPlus style={{ fontSize: 11 }} /> New Playlist
               </button>
@@ -1006,7 +1001,6 @@ export default function Playlists() {
 
       {showCreate   && <CreateModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
       {showYTImport && <YouTubeImportModal onClose={() => setShowYTImport(false)} onImport={handleYTImport} />}
-      {showMoodModal && <MoodPlaylist onClose={() => setShowMoodModal(false)} />}
 
             {selected && (
         <DetailView
