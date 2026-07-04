@@ -62,6 +62,16 @@ function makeSongFromSeed(item, seed = false) {
   };
 }
 
+/**
+ * Pulls the user's recent listening history to seed mood mix generation.
+ *
+ * NOTE: the listening_history table has no `thumbnail` column — schema is
+ * (id, user_id, youtube_id, name, artist, genre, played_at, play_count).
+ * Selecting a nonexistent column throws a Postgres error that gets caught
+ * below, silently returning [] every time — which was causing every mix
+ * to fall back to FALLBACK_TRACKS. Cover art is derived from youtube_id
+ * via YouTube's predictable thumbnail URL instead.
+ */
 async function getHistorySeeds(userId) {
   if (!userId) {
     try {
@@ -84,7 +94,7 @@ async function getHistorySeeds(userId) {
   try {
     const { data, error } = await supabase
       .from('listening_history')
-      .select('name, artist, genre, youtube_id, thumbnail, played_at')
+      .select('name, artist, genre, youtube_id, played_at')
       .eq('user_id', userId)
       .order('played_at', { ascending: false })
       .limit(6);
@@ -96,7 +106,7 @@ async function getHistorySeeds(userId) {
       artist: row.artist || '',
       genre: row.genre || '',
       youtubeId: row.youtube_id || '',
-      cover: row.thumbnail || '',
+      cover: row.youtube_id ? `https://img.youtube.com/vi/${row.youtube_id}/mqdefault.jpg` : '',
     })).filter(item => item.name || item.artist);
   } catch (err) {
     console.warn('[useMoodPlaylist] history lookup failed', err);
