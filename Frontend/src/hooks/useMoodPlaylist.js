@@ -2,13 +2,16 @@
  * useMoodPlaylist.js
  *
  * Builds a mood mix from the user's recent listening history and adds
- * related tracks from similar artists/genres.
+ * related tracks from similar artists/genres. Search-derived candidates
+ * are reranked via moodScoring.js (content affinity + freshness +
+ * diversity) before being trimmed to the requested limit.
  */
 
 import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import youtubeConverter from '../utils/youtubeConverter';
+import { rerankCandidates } from './moodScoring';
 
 const CACHE_KEY = 'lb:history_mood_mix';
 const CACHE_TTL = 4 * 60 * 60 * 1000;
@@ -119,7 +122,15 @@ function pickFallbackTracks(seeds = [], limit = 20) {
   }, false));
 }
 
-async function buildHistoryMoodPlaylist(seeds, limit = 20) {
+/**
+ * Builds the mix: seed tracks (kept as-is, they're the user's actual
+ * recent listens) + a reranked pool of YouTube search candidates.
+ *
+ * userId is passed through explicitly so moodScoring.js can pull the
+ * signed-in user's real listening_history for the freshness term —
+ * seeds themselves don't carry a userId field.
+ */
+async function buildHistoryMoodPlaylist(seeds, limit = 20, userId = null) {
   const seedTracks = (seeds || []).slice(0, 3).filter(item => item.name || item.artist).map(item => makeSongFromSeed({
     id: item.youtubeId || '',
     title: item.name,
@@ -129,20 +140,17 @@ async function buildHistoryMoodPlaylist(seeds, limit = 20) {
   }, true));
 
   const seenKeys = new Set();
-  const result = [];
+  const keyOf = (song) => song.youtubeId ? `yt:${song.youtubeId}` : `id:${song.id}`;
 
-  const addSong = (song) => {
-    if (!song) return;
-    const key = song.youtubeId ? `yt:${song.youtubeId}` : `id:${song.id}`;
-    if (seenKeys.has(key)) return;
-    seenKeys.add(key);
-    result.push(song);
-  };
+  seedTracks.forEach(s => seenKeys.add(keyOf(s)));
 
-  seedTracks.forEach(addSong);
+  // Collect a wider pool than `limit` so reranking has room to work —
+  // capped to avoid excessive YouTube quota use.
+  const poolCap = Math.max(limit * 2, limit + 10);
+  const searchPool = [];
 
   for (const seed of (seeds || []).slice(0, 3)) {
-    if (result.length >= limit) break;
+    if (searchPool.length >= poolCap) break;
 
     const artist = seed.artist?.trim();
     const genre = seed.genre?.trim();
@@ -155,23 +163,28 @@ async function buildHistoryMoodPlaylist(seeds, limit = 20) {
     if (title) queries.push(`${title} official audio`);
 
     for (const query of queries) {
-      if (!query || result.length >= limit) break;
+      if (!query || searchPool.length >= poolCap) break;
       try {
         const videos = await youtubeConverter.searchVideos(query, 4);
         for (const video of videos) {
-          if (result.length >= limit) break;
+          if (searchPool.length >= poolCap) break;
           const headline = normalizeText(video.title);
           const seedTitle = normalizeText(title);
           if (!headline) continue;
           if (seedTitle && headline.includes(seedTitle)) continue;
-          addSong(makeSongFromSeed({
+
+          const song = makeSongFromSeed({
             id: video.id,
             title: video.title,
             artist: video.channel,
             thumbnail: video.thumbnail,
             duration: video.duration,
             youtubeId: video.id,
-          }));
+          });
+          const key = keyOf(song);
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
+          searchPool.push(song);
         }
       } catch (err) {
         console.warn('[useMoodPlaylist] search failed', err);
@@ -179,8 +192,25 @@ async function buildHistoryMoodPlaylist(seeds, limit = 20) {
     }
   }
 
+  // Rerank the search-derived pool using Score(u,s,t).
+  const remainingSlots = Math.max(0, limit - seedTracks.length);
+  let rerankedPool = searchPool;
+  if (remainingSlots > 0 && searchPool.length) {
+    try {
+      rerankedPool = await rerankCandidates(searchPool, seeds, userId, remainingSlots);
+    } catch (err) {
+      console.warn('[useMoodPlaylist] rerank failed, using raw order', err);
+      rerankedPool = searchPool.slice(0, remainingSlots);
+    }
+  }
+
+  const result = [...seedTracks, ...rerankedPool.slice(0, remainingSlots)];
+
   if (result.length < Math.min(4, limit)) {
-    pickFallbackTracks(seeds, limit - result.length).forEach(addSong);
+    pickFallbackTracks(seeds, limit - result.length).forEach(song => {
+      const key = keyOf(song);
+      if (!seenKeys.has(key)) { seenKeys.add(key); result.push(song); }
+    });
   }
 
   return result.slice(0, limit);
@@ -198,7 +228,7 @@ const _fetchMoodPlaylistRaw = async (mood, limit = 20) => {
   }
 
   const seeds = await getHistorySeeds(mood?.userId || null);
-  const songs = await buildHistoryMoodPlaylist(seeds, limit);
+  const songs = await buildHistoryMoodPlaylist(seeds, limit, mood?.userId || null);
 
   if (songs.length) {
     try {
