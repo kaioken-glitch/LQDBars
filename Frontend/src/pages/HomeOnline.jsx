@@ -1149,61 +1149,68 @@ export default function HomeOnline() {
 
   const { generatePlaylist: generateMood } = useMoodPlaylist();
   const { addPlaylist } = usePlaylists();
-  const [moodSongs, setMoodSongs] = useState([]);
-  const [moodLoading, setMoodLoading] = useState(false);
-  const [moodError, setMoodError] = useState(null);
-  const moodTitle = 'For You Mix';
+  const [moodSections, setMoodSections] = useState({
+    morning: { songs: [], loading: false, error: null },
+    noon: { songs: [], loading: false, error: null },
+    evening: { songs: [], loading: false, error: null },
+  });
+  const hour = (typeof window === 'undefined') ? new Date().getHours() : new Date().getHours();
+  const moodSlot = hour >= 5 && hour < 12 ? 'morning' : (hour >= 12 && hour < 17 ? 'noon' : 'evening');
+
+  const daypartConfig = {
+    morning: { title: 'Morning', subtitle: 'Bright and upbeat to start the day', prompt: 'bright upbeat tracks warm acoustic mellow hip-hop optimistic', cacheKey: 'lb:history_mood_morning' },
+    noon: { title: 'Noon', subtitle: 'Chilled and easygoing for the middle of the day', prompt: 'chilled laid back downtempo soft grooves relaxed', cacheKey: 'lb:history_mood_noon' },
+    evening: { title: 'Evening', subtitle: 'Warm and immersive as the day winds down', prompt: 'warm electronic rnb smooth grooves evening energy', cacheKey: 'lb:history_mood_evening' },
+  };
 
   useEffect(() => {
     let mounted = true;
-    async function ensureMood() {
-      const dismissedKey = 'lb:history_mood_dismissed_until';
+    async function ensureMood(daypart) {
+      const config = daypartConfig[daypart];
+      if (!config) return;
+      const dismissedKey = `lb:history_mood_dismissed_until_${daypart}`;
       const dismissedUntil = Number(localStorage.getItem(dismissedKey) || 0);
       if (dismissedUntil > Date.now()) {
-        setMoodSongs([]);
-        setMoodLoading(false);
+        setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], songs: [], loading: false, error: null } }));
         return;
       }
 
-      const cacheKey = 'lb:history_mood_mix';
+      const cacheKey = config.cacheKey;
       try {
         const raw = localStorage.getItem(cacheKey);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Date.now() - (parsed.ts || 0) < 4 * 60 * 60 * 1000 && Array.isArray(parsed.songs) && parsed.songs.length) {
-            setMoodSongs(parsed.songs);
+            setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], songs: parsed.songs, loading: false, error: null } }));
             return;
           }
         }
 
-        setMoodLoading(true);
-        setMoodError(null);
-        const result = await generateMood('recent-history', 20);
+        setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], loading: true, error: null } }));
+        const result = await generateMood(config.prompt, 20);
         if (!mounted) return;
         if (result && result.length) {
-          setMoodSongs(result);
+          setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], songs: result, loading: false, error: null } }));
           try { localStorage.setItem(cacheKey, JSON.stringify({ songs: result, ts: Date.now() })); } catch (_) {}
         } else {
-          setMoodSongs([]);
-          setMoodError('No songs generated');
+          setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], songs: [], loading: false, error: 'No songs generated' } }));
         }
       } catch (err) {
-        console.error('Mood mix generation failed:', err);
-        setMoodError(err.message || 'Failed to generate');
-      } finally {
-        if (mounted) setMoodLoading(false);
+        console.error(`Mood mix generation failed for ${daypart}:`, err);
+        setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], songs: [], loading: false, error: err.message || 'Failed to generate' } }));
       }
     }
-    ensureMood();
+
+    ['morning', 'noon', 'evening'].forEach(daypart => { ensureMood(daypart); });
     return () => { mounted = false; };
   }, [generateMood]);
 
-  function dismissMoodMix() {
+  function dismissMoodMix(daypart) {
     try {
-      const key = 'lb:history_mood_dismissed_until';
+      const key = `lb:history_mood_dismissed_until_${daypart}`;
       const until = Date.now() + 4 * 24 * 60 * 60 * 1000;
       localStorage.setItem(key, String(until));
-      setMoodSongs([]);
+      setMoodSections(prev => ({ ...prev, [daypart]: { ...prev[daypart], songs: [] } }));
     } catch (_) {}
   }
 
@@ -1858,69 +1865,81 @@ export default function HomeOnline() {
                   </div>
                 )}
 
-                {/* ── History-based mood mix ── */}
+                {/* ── Daypart mood mixes ── */}
                 <section style={{ marginBottom: 28 }}>
                   <div className="ho-section-head">
                     <div className="ho-section-title">
                       <span className="ho-section-dot" />
-                      <h2>{moodTitle}</h2>
+                      <h2>Daypart Mixes</h2>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{moodLoading ? 'Generating…' : 'Based on your recent listening'}</div>
-                      {!moodLoading && moodSongs && moodSongs.length > 0 && (
-                        <>
-                          <button
-                            onClick={() => {
-                              try {
-                                const valid = moodSongs.filter(s => s.audio || s.youtubeId || s.url);
-                                if (!valid.length) { showToast({ type: 'error', message: 'No playable tracks' }); return; }
-                                setPlayerSongs(valid, 0);
-                                setTimeout(() => setIsPlaying(true), 80);
-                              } catch (e) { console.error(e); }
-                            }}
-                            style={{ padding: '8px 10px', borderRadius: 999, background: 'var(--lb-green,#1DB954)', color: '#000', fontWeight: 700, border: 'none' }}
-                          >Play All</button>
-
-                          <button
-                            onClick={() => {
-                              try {
-                                const pl = { id: `pl_${Date.now()}`, name: 'For You Mix', songs: moodSongs, source: 'mood', createdAt: Date.now() };
-                                addPlaylist(pl);
-                                showToast({ type: 'success', message: 'Saved mood mix' });
-                                dismissMoodMix();
-                              } catch (e) { console.error(e); showToast({ type: 'error', message: 'Could not save' }); }
-                            }}
-                            style={{ padding: '8px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.06)' }}
-                          >Keep</button>
-
-                          <button
-                            onClick={() => { dismissMoodMix(); showToast({ type: 'info', message: 'Hidden for 4 days' }); }}
-                            style={{ padding: '8px 10px', borderRadius: 999, background: 'transparent', color: 'rgba(255,255,255,0.68)', border: '1px solid rgba(255,255,255,0.06)' }}
-                          >Dismiss</button>
-                        </>
-                      )}
-                    </div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Morning • Noon • Evening</div>
                   </div>
 
-                  {moodLoading ? (
-                    <div className="ho-shelf">
-                      {Array.from({ length: 6 }).map((_, i) => <div key={i} className="ho-shimmer-card"><div className="ho-shimmer" style={{ height:160, borderRadius:15 }} /></div>)}
-                    </div>
-                  ) : moodSongs && moodSongs.length > 0 ? (
-                    <div className="ho-shelf">
-                      {moodSongs.map(item => (
-                        <SongCard
-                          key={item.id}
-                          item={item}
-                          isActive={currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId}
-                          isPlaying={isPlaying}
-                          onPlay={() => playStreamingSong(item)}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ padding: '12px 18px', color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{moodError || 'No mood mix available yet'}</div>
-                  )}
+                  <div style={{ display: 'grid', gap: 16 }}>
+                    {['morning', 'noon', 'evening'].map(daypart => {
+                      const config = daypartConfig[daypart];
+                      const section = moodSections[daypart];
+                      const isActiveDaypart = moodSlot === daypart;
+                      return (
+                        <div key={daypart} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, background: 'rgba(255,255,255,0.03)', padding: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                            <div>
+                              <div style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: isActiveDaypart ? 'var(--lb-green,#1DB954)' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>{config.title}</div>
+                              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{config.subtitle}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              {!section.loading && section.songs && section.songs.length > 0 && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      try {
+                                        const valid = section.songs.filter(s => s.audio || s.youtubeId || s.url);
+                                        if (!valid.length) { showToast({ type: 'error', message: 'No playable tracks' }); return; }
+                                        setPlayerSongs(valid, 0);
+                                        setTimeout(() => setIsPlaying(true), 80);
+                                      } catch (e) { console.error(e); }
+                                    }}
+                                    style={{ padding: '8px 10px', borderRadius: 999, background: 'var(--lb-green,#1DB954)', color: '#000', fontWeight: 700, border: 'none' }}
+                                  >Play</button>
+                                  <button
+                                    onClick={() => {
+                                      try {
+                                        const pl = { id: `pl_${Date.now()}`, name: `${config.title} Mix`, songs: section.songs, source: 'mood', createdAt: Date.now() };
+                                        addPlaylist(pl);
+                                        showToast({ type: 'success', message: `${config.title} mix saved` });
+                                        dismissMoodMix(daypart);
+                                      } catch (e) { console.error(e); showToast({ type: 'error', message: 'Could not save' }); }
+                                    }}
+                                    style={{ padding: '8px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.06)' }}
+                                  >Keep</button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {section.loading ? (
+                            <div className="ho-shelf">
+                              {Array.from({ length: 4 }).map((_, i) => <div key={i} className="ho-shimmer-card"><div className="ho-shimmer" style={{ height:160, borderRadius:15 }} /></div>)}
+                            </div>
+                          ) : section.songs && section.songs.length > 0 ? (
+                            <div className="ho-shelf">
+                              {section.songs.map(item => (
+                                <SongCard
+                                  key={item.id}
+                                  item={item}
+                                  isActive={currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId}
+                                  isPlaying={isPlaying}
+                                  onPlay={() => playStreamingSong(item)}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ padding: '8px 2px', color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{section.error || 'No mood mix available yet'}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </section>
               </section>
             </div>

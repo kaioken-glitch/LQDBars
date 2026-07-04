@@ -14,6 +14,17 @@ const CACHE_KEY = 'lb:history_mood_mix';
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 const memCache = new Map();
 
+const FALLBACK_TRACKS = [
+  { id: 'yt_dQw4w9WgXcQ', title: 'Never Gonna Give You Up', artist: 'Rick Astley', youtubeId: 'dQw4w9WgXcQ', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg' },
+  { id: 'yt_jNQXAC9IVRw', title: 'Me at the zoo', artist: 'Jawed', youtubeId: 'jNQXAC9IVRw', thumbnail: 'https://i.ytimg.com/vi/jNQXAC9IVRw/mqdefault.jpg' },
+  { id: 'yt_2Vv-BfVoq4g', title: 'Perfect', artist: 'Ed Sheeran', youtubeId: '2Vv-BfVoq4g', thumbnail: 'https://i.ytimg.com/vi/2Vv-BfVoq4g/mqdefault.jpg' },
+  { id: 'yt_fJ9rUzIMcZQ', title: 'Leave The Door Open', artist: 'Bruno Mars, Anderson .Paak', youtubeId: 'fJ9rUzIMcZQ', thumbnail: 'https://i.ytimg.com/vi/fJ9rUzIMcZQ/mqdefault.jpg' },
+  { id: 'yt_7wtfhZwyrcc', title: 'Blinding Lights', artist: 'The Weeknd', youtubeId: '7wtfhZwyrcc', thumbnail: 'https://i.ytimg.com/vi/7wtfhZwyrcc/mqdefault.jpg' },
+  { id: 'yt_xpVfcZ0ZcFM', title: 'Snooze', artist: 'SZA', youtubeId: 'xpVfcZ0ZcFM', thumbnail: 'https://i.ytimg.com/vi/xpVfcZ0ZcFM/mqdefault.jpg' },
+  { id: 'yt_rYEDA3JcQqw', title: 'Flowers', artist: 'Miley Cyrus', youtubeId: 'rYEDA3JcQqw', thumbnail: 'https://i.ytimg.com/vi/rYEDA3JcQqw/mqdefault.jpg' },
+  { id: 'yt_3JZ_D3ELwOQ', title: 'As It Was', artist: 'Harry Styles', youtubeId: '3JZ_D3ELwOQ', thumbnail: 'https://i.ytimg.com/vi/3JZ_D3ELwOQ/mqdefault.jpg' },
+];
+
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
@@ -90,6 +101,24 @@ async function getHistorySeeds(userId) {
   }
 }
 
+function pickFallbackTracks(seeds = [], limit = 20) {
+  const seedText = (seeds || []).map(s => `${s.artist || ''} ${s.genre || ''} ${s.name || ''}`).join(' ').toLowerCase();
+  const genreBoosted = FALLBACK_TRACKS.filter(track => {
+    if (!seedText) return true;
+    const haystack = `${track.artist || ''} ${track.title || ''}`.toLowerCase();
+    return seedText.split(/\s+/).some(word => word && haystack.includes(word));
+  });
+
+  const pool = genreBoosted.length ? genreBoosted : FALLBACK_TRACKS;
+  return pool.slice(0, limit).map(track => makeSongFromSeed({
+    id: track.youtubeId,
+    title: track.title,
+    artist: track.artist,
+    thumbnail: track.thumbnail,
+    youtubeId: track.youtubeId,
+  }, false));
+}
+
 async function buildHistoryMoodPlaylist(seeds, limit = 20) {
   const seedTracks = (seeds || []).slice(0, 3).filter(item => item.name || item.artist).map(item => makeSongFromSeed({
     id: item.youtubeId || '',
@@ -150,6 +179,10 @@ async function buildHistoryMoodPlaylist(seeds, limit = 20) {
     }
   }
 
+  if (result.length < Math.min(4, limit)) {
+    pickFallbackTracks(seeds, limit - result.length).forEach(addSong);
+  }
+
   return result.slice(0, limit);
 }
 
@@ -167,9 +200,11 @@ const _fetchMoodPlaylistRaw = async (mood, limit = 20) => {
   const seeds = await getHistorySeeds(mood?.userId || null);
   const songs = await buildHistoryMoodPlaylist(seeds, limit);
 
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ songs, ts: Date.now() }));
-  } catch {}
+  if (songs.length) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ songs, ts: Date.now() }));
+    } catch {}
+  }
 
   return songs;
 };
