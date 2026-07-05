@@ -842,8 +842,24 @@ const CSS = `
 .pc-mob-extras { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
 .pc-mob-vol { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pc-text-2); cursor: pointer; background: none; border: none; }
 .pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
-.pc-mob-queue { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; max-height: 240px; overflow-y: auto; }
+.pc-mob-queue { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; }
 .pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+.pc-mob-queue .pc-queue-item { align-items: flex-start; }
+.pc-mob-queue .pc-queue-thumb { margin-top: 2px; }
+.pc-mob-queue .pc-queue-name {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+.pc-mob-queue .pc-queue-artist {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
+}
+.pc-mob-queue .pc-queue-active-dot { margin-top: 6px; }
 
 /* ════ MOBILE FULLSCREEN LYRICS ════ */
 .pc-mob-lyrics-fs {
