@@ -5,6 +5,7 @@ import React, {
 } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { useRemoteControl } from '../hooks/useRemoteControl';
 
 const PlayerContext = createContext();
 
@@ -433,6 +434,18 @@ export function PlayerProvider({ children }) {
   const toggleRepeatMode       = useCallback(() =>
     setRepeatMode(p => p === 'off' ? 'all' : p === 'all' ? 'one' : 'off'), []);
 
+  // ── Remote control — cross-device transport commands ───────────────────────
+  // Only needs currentSong/isPlaying/volume to broadcast, and the setters/
+  // advanceNext/advancePrev/seekTo already defined above to apply incoming
+  // commands. advanceNext/advancePrev are the same functions exported below
+  // as playNext/playPrev — just referenced directly here by their local names.
+  const remote = useRemoteControl(
+    user?.id,
+    { currentSong, isPlaying, volume },
+    { setIsPlaying, setVolume, seekTo, playNext: advanceNext, playPrev: advancePrev },
+  );
+  // ─────────────────────────────────────────────────────────────────────────
+
   /* ── Context value ──────────────────────────────────────────────── */
   const value = {
     songs, setPlayerSongs,
@@ -452,6 +465,11 @@ export function PlayerProvider({ children }) {
     repeatMode, toggleRepeatMode,
     toggleMute, isMuted,
     showBackgroundDetail, setShowBackgroundDetail, toggleBackgroundDetail,
+    // Remote control
+    remoteControlEnabled: remote.enabled,
+    devices: remote.devices,
+    controlDevice: remote.controlDevice,
+    thisDeviceId: remote.deviceId,
   };
 
   return (

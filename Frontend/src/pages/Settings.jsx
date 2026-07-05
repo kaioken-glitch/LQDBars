@@ -9,7 +9,7 @@ import { VERSION, BUILD_DATE } from '../version';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { usePlaylists } from '../hooks/usePlaylists';
-import { useFollows } from '../hooks/useFollows';
+import { setRemoteControlSetting } from '../hooks/useRemoteControl';
 
 const CHANGELOG = [
   { version: VERSION, date: BUILD_DATE, tag: 'Latest', changes: [
@@ -403,10 +403,7 @@ export default function Settings() {
 
   const { user, profile: authProfile, signOut } = useAuth();
   const { playlists } = usePlaylists();
-  const { getCounts } = useFollows();
   const [signingOut, setSigningOut] = useState(false);
-  const [followingCount, setFollowingCount] = useState(0);
-  const [followersCount, setFollowersCount] = useState(0);
 
   const [name,     setName]     = useState(() => localStorage.getItem('lb:profileName')     || 'Music Lover');
   const [email,    setEmail]    = useState(() => localStorage.getItem('lb:profileEmail')    || '');
@@ -424,15 +421,6 @@ export default function Settings() {
     if (authProfile.bio)          setBio(authProfile.bio || '');
   }, [authProfile]);
   useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
-
-  // Fetch follower and following counts
-  useEffect(() => {
-    if (!user?.id) return;
-    getCounts(user.id).then(({ followers, following }) => {
-      setFollowersCount(followers);
-      setFollowingCount(following);
-    }).catch(err => console.warn('[Settings] failed to load counts:', err));
-  }, [user?.id, getCounts]);
 
   const [crossfade,       setCrossfade]       = useState(() => Number(localStorage.getItem('lb:crossfade') || 0));
   const [gapless,         setGapless]         = useState(() => localStorage.getItem('lb:gapless')   === 'true');
@@ -462,7 +450,7 @@ export default function Settings() {
   useEffect(() => { localStorage.setItem('lb:maxConcurrentDownloads', String(maxDownloads)); }, [maxDownloads]);
   useEffect(() => { localStorage.setItem('lb:notificationVolume',     String(notifVolume)); }, [notifVolume]);
   useEffect(() => { localStorage.setItem('lb:privacyAnalytics',       analytics);        }, [analytics]);
-  useEffect(() => { localStorage.setItem('lb:allowRemoteControl',     remoteControl);    }, [remoteControl]);
+  useEffect(() => { setRemoteControlSetting(remoteControl); }, [remoteControl]);
   useEffect(() => { localStorage.setItem('lb:maxCacheMB',             String(maxCache)); }, [maxCache]);
   useEffect(() => { localStorage.setItem('lb:downloadQuality',        downloadQuality);  }, [downloadQuality]);
   useEffect(() => {
@@ -597,7 +585,7 @@ export default function Settings() {
 
           {/* Stats */}
           <div className="sr-stats">
-            {[{ n: plCount, l: 'Playlists' }, { n: followingCount, l: 'Following' }, { n: followersCount, l: 'Followers' }].map(({ n, l }) => (
+            {[{ n: plCount, l: 'Playlists' }, { n: 0, l: 'Following' }, { n: 0, l: 'Followers' }].map(({ n, l }) => (
               <div key={l} className="sr-stat">
                 <span className="sr-stat-n"><Counter to={n} /></span>
                 <span className="sr-stat-l">{l}</span>
@@ -658,10 +646,11 @@ export default function Settings() {
                 )}
 
                 <div className="sr-social">
-                  {[{ n: followingCount, l: 'Following' }, { n: followersCount, l: 'Followers' }].map(({ n, l }) => (
+                  {[['0','Following'],['0','Followers']].map(([n, l]) => (
                     <div key={l} className="sr-social-card">
-                      <div className="sr-social-n"><Counter to={n} /></div>
+                      <div className="sr-social-n">{n}</div>
                       <div className="sr-social-l">{l}</div>
+                      <div className="sr-social-note">Coming soon</div>
                     </div>
                   ))}
                 </div>

@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   FaPlay, FaPause, FaStepBackward, FaStepForward,
   FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute,
-  FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic,
+  FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic, FaMobileAlt,
 } from 'react-icons/fa';
 import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
 import { usePlayer } from '../context/PlayerContext';
+import DevicesPanel from './DevicesPanel';
 
 /* ═══════════════════════════════════════════════════════════════════
    INLINED: useLyrics hook + LyricsPanel component
@@ -795,6 +796,13 @@ const CSS = `
 
 @keyframes slideInRight { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
 
+/* Devices panel — desktop floats top-right of expanded body; mobile sits inline */
+.pc-devices-desktop {
+  position: absolute; right: 24px; top: 20px; z-index: 6;
+  animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1);
+}
+.pc-devices-mobile { margin-top: 16px; width: 100%; }
+
 /* Desktop compact lyrics drawer */
 .pc-lyrics-drawer { position: fixed; left: 0; right: 0; bottom: 73px; z-index: 39; height: 0; overflow: hidden; display: flex; flex-direction: column; background: rgba(6,6,10,0.96); backdrop-filter: blur(40px) saturate(180%); border-top: 1px solid rgba(255,255,255,0.08); box-shadow: 0 -8px 40px rgba(0,0,0,0.6); transition: height 0.42s cubic-bezier(0.22,1,0.36,1); }
 .pc-lyrics-drawer.open { height: 420px; }
@@ -928,11 +936,13 @@ export default function PlayerControls() {
   const [showQueue,     setShowQueue]     = useState(false);
   const [showLyrics,    setShowLyrics]    = useState(false);
   const [showMobLyrics, setShowMobLyrics] = useState(false);
+  const [showDevices,   setShowDevices]   = useState(false);
   const [liked,         setLiked]         = useState(false);
   const prevCoverRef = useRef(null);
 
-  const openQueue  = () => { setShowQueue(true);  setShowLyrics(false); };
-  const openLyrics = () => { setShowLyrics(true); setShowQueue(false);  };
+  const openQueue   = () => { setShowQueue(true);  setShowLyrics(false); setShowDevices(false); };
+  const openLyrics  = () => { setShowLyrics(true); setShowQueue(false);  setShowDevices(false); };
+  const openDevices = () => { setShowDevices(true); setShowQueue(false); setShowLyrics(false); };
 
   useEffect(() => {
     const cover = currentSong?.cover;
@@ -974,6 +984,12 @@ export default function PlayerControls() {
         <div className="pc-exp-header-btns">
           <button
             className="pc-icon-btn"
+            style={{ color: showDevices ? 'var(--pc-green-bright)' : undefined }}
+            onClick={() => showDevices ? setShowDevices(false) : openDevices()}
+            title="Devices"
+          ><FaMobileAlt /></button>
+          <button
+            className="pc-icon-btn"
             style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }}
             onClick={() => setShowQueue(q => !q)}
             title="Queue"
@@ -998,6 +1014,13 @@ export default function PlayerControls() {
             onSelect={setCurrentIndex}
             onClose={() => setShowQueue(false)}
           />
+        )}
+
+        {/* Devices overlay */}
+        {showDevices && (
+          <div className="pc-devices-desktop">
+            <DevicesPanel onClose={() => setShowDevices(false)} />
+          </div>
         )}
       </div>
 
@@ -1161,9 +1184,15 @@ export default function PlayerControls() {
           <span className="pc-mob-count">{currentIndex + 1} / {songs.length}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button className="pc-icon-btn" style={{ color: showMobLyrics ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowMobLyrics(true)} aria-label="Show lyrics"><FaMusic /></button>
+            <button className="pc-icon-btn" style={{ color: showDevices ? 'var(--pc-green-bright)' : undefined }} onClick={() => showDevices ? setShowDevices(false) : openDevices()} aria-label="Devices"><FaMobileAlt /></button>
             <button className="pc-icon-btn" style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowQueue(q => !q)} aria-label="Queue"><FaList /></button>
           </div>
         </div>
+        {showDevices && (
+          <div className="pc-devices-mobile">
+            <DevicesPanel onClose={() => setShowDevices(false)} />
+          </div>
+        )}
         {showQueue && (
           <div className="pc-mob-queue">
             <div className="pc-mob-queue-title">Queue</div>
