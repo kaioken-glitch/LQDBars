@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { usePlaylists } from '../hooks/usePlaylists';
 import { setRemoteControlSetting } from '../hooks/useRemoteControl';
+import { getDeviceLabel, setDeviceLabel } from '../utils/deviceId';
 
 const CHANGELOG = [
   { version: VERSION, date: BUILD_DATE, tag: 'Latest', changes: [
@@ -435,6 +436,7 @@ export default function Settings() {
   const [notifVolume,     setNotifVolume]     = useState(() => Number(localStorage.getItem('lb:notificationVolume') || 80));
   const [analytics,       setAnalytics]       = useState(() => localStorage.getItem('lb:privacyAnalytics')   === 'true');
   const [remoteControl,   setRemoteControl]   = useState(() => localStorage.getItem('lb:allowRemoteControl') === 'true');
+  const [deviceName,      setDeviceName]      = useState(() => getDeviceLabel());
   const [maxCache,        setMaxCache]        = useState(() => Number(localStorage.getItem('lb:maxCacheMB') || 200));
   const [cacheSize]                           = useState('12.4 MB');
   const [isOnline,        setIsOnline]        = useState(() => navigator.onLine);
@@ -494,6 +496,12 @@ export default function Settings() {
     } else {
       const r = new FileReader(); r.onload = ev => setAvatar(ev.target.result); r.readAsDataURL(f);
     }
+  };
+
+  const saveDeviceName = () => {
+    const finalLabel = setDeviceLabel(deviceName);
+    setDeviceName(finalLabel);
+    showToast('Device name updated ✓');
   };
 
   const handleSignOut = async () => {
@@ -726,6 +734,20 @@ export default function Settings() {
                   <div className="sr-rows">
                     <ToggleRow label="Usage analytics" desc="Help improve the app anonymously" checked={analytics} onChange={setAnalytics} />
                     <ToggleRow label="Remote control" desc="Allow controlling from other devices" checked={remoteControl} onChange={setRemoteControl} />
+                    {remoteControl && (
+                      <div className="sr-field">
+                        <div className="sr-field-label">Device name</div>
+                        <input
+                          value={deviceName}
+                          onChange={e => setDeviceName(e.target.value)}
+                          onBlur={saveDeviceName}
+                          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                          placeholder="e.g. Waka's Desktop"
+                          maxLength={40}
+                          className="sr-row-input"
+                        />
+                      </div>
+                    )}
                   </div>
                 </>)}
 

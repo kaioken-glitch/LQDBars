@@ -8,6 +8,7 @@
 
 const ID_KEY    = 'lb:deviceId';
 const LABEL_KEY = 'lb:deviceLabel';
+export const LABEL_EVENT = 'lb:deviceLabelChanged';
 
 function detectLabel() {
   const ua = navigator.userAgent || '';
@@ -41,6 +42,11 @@ export function getDeviceId() {
   }
 }
 
+export function getDeviceType() {
+  const ua = navigator.userAgent || '';
+  return /iPhone|iPad|iPod|Android|Mobile/i.test(ua) ? 'mobile' : 'desktop';
+}
+
 export function getDeviceLabel() {
   try {
     let label = localStorage.getItem(LABEL_KEY);
@@ -52,4 +58,14 @@ export function getDeviceLabel() {
   } catch {
     return detectLabel();
   }
+}
+
+/** User-set rename (e.g. "Waka's Desktop"). Persists + notifies useRemoteControl
+ *  immediately so the new name shows up on other devices without a reload. */
+export function setDeviceLabel(label) {
+  const trimmed = (label || '').trim();
+  const finalLabel = trimmed || detectLabel();
+  try { localStorage.setItem(LABEL_KEY, finalLabel); } catch (_) {}
+  window.dispatchEvent(new CustomEvent(LABEL_EVENT, { detail: finalLabel }));
+  return finalLabel;
 }

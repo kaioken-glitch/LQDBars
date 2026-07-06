@@ -45,7 +45,7 @@ const CSS = `
 `;
 
 function DeviceRow({ device, onTransport }) {
-  const isMobile = /iOS|Android/i.test(device.label || '');
+  const isMobile = device.type === 'mobile';
   return (
     <div className={`dv-item${device.isSelf ? ' self' : ''}`}>
       <div className="dv-icon">{isMobile ? <FaMobileAlt /> : <FaLaptop />}</div>

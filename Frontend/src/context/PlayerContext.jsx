@@ -470,6 +470,7 @@ export function PlayerProvider({ children }) {
     devices: remote.devices,
     controlDevice: remote.controlDevice,
     thisDeviceId: remote.deviceId,
+    thisDeviceLabel: remote.deviceLabel,
   };
 
   return (

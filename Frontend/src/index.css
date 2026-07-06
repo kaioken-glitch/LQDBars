@@ -85,7 +85,6 @@
 html {
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
-  background-color: #000;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -205,6 +204,24 @@ body::after {
 
 @media (max-width: 640px) {
   :root { font-size: 15px; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   MOBILE INPUT ZOOM FIX
+   iOS Safari force-zooms the viewport when focusing any input/textarea/
+   select with a computed font-size under 16px. Several search bars and
+   form fields across the app sit at 13-14px (by design, to match their
+   surrounding UI), so this overrides just the focused-input font-size
+   on mobile widths — !important is required here since it must beat
+   many component-scoped classes (.hm-search, .pl-search, .sr-search,
+   .ho-search-input, etc.) without editing each one individually.
+   Pinch-to-zoom itself is left untouched — only the forced auto-zoom
+   on focus is suppressed, so accessibility isn't affected.
+───────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -629,4 +646,3 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 @supports not (backdrop-filter: blur(1px)) {
   .lb-glass { background: rgba(8, 10, 12, 0.90); }
 }
-

@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { getDeviceId, getDeviceLabel } from '../utils/deviceId';
+import { getDeviceId, getDeviceLabel, getDeviceType, LABEL_EVENT } from '../utils/deviceId';
 
 const SETTING_KEY   = 'lb:allowRemoteControl';
 const SETTING_EVENT = 'lb:remoteControlChanged';
@@ -40,7 +40,8 @@ export function useRemoteControl(userId, state, actions) {
 
   const channelRef  = useRef(null);
   const deviceId     = useRef(getDeviceId()).current;
-  const deviceLabel  = useRef(getDeviceLabel()).current;
+  const deviceType   = useRef(getDeviceType()).current;
+  const [deviceLabel, setDeviceLabelState] = useState(() => getDeviceLabel());
 
   // Keep latest state/actions in refs so the channel callbacks (set up once)
   // always see current values without needing to resubscribe.
@@ -56,6 +57,14 @@ export function useRemoteControl(userId, state, actions) {
     return () => window.removeEventListener(SETTING_EVENT, onChange);
   }, []);
 
+  /* React live to a device rename — no need to leave/rejoin the channel,
+     just re-track with the new label so other devices see it instantly. */
+  useEffect(() => {
+    const onRename = (e) => setDeviceLabelState(e.detail);
+    window.addEventListener(LABEL_EVENT, onRename);
+    return () => window.removeEventListener(LABEL_EVENT, onRename);
+  }, []);
+
   const rebuildDeviceList = useCallback((ch) => {
     const presenceState = ch.presenceState();
     const list = Object.values(presenceState)
@@ -63,6 +72,7 @@ export function useRemoteControl(userId, state, actions) {
       .map(p => ({
         id:        p.id,
         label:     p.label,
+        type:      p.type || 'desktop',
         song:      p.song || null,
         isPlaying: !!p.isPlaying,
         isSelf:    p.id === deviceId,
@@ -114,6 +124,7 @@ export function useRemoteControl(userId, state, actions) {
         await ch.track({
           id:        deviceId,
           label:     deviceLabel,
+          type:      deviceType,
           song:      s.currentSong ? { name: s.currentSong.name, artist: s.currentSong.artist } : null,
           isPlaying: !!s.isPlaying,
         });
@@ -127,7 +138,7 @@ export function useRemoteControl(userId, state, actions) {
       if (channelRef.current === ch) channelRef.current = null;
       setDevices([]);
     };
-  }, [enabled, userId, deviceId, deviceLabel, rebuildDeviceList, applyCommand]);
+  }, [enabled, userId, deviceId, rebuildDeviceList, applyCommand]);
 
   /* Keep this device's presence metadata (now-playing info) fresh */
   useEffect(() => {
@@ -136,11 +147,12 @@ export function useRemoteControl(userId, state, actions) {
     ch.track({
       id:        deviceId,
       label:     deviceLabel,
+      type:      deviceType,
       song:      state.currentSong ? { name: state.currentSong.name, artist: state.currentSong.artist } : null,
       isPlaying: !!state.isPlaying,
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.currentSong?.id, state.isPlaying, enabled]);
+  }, [state.currentSong?.id, state.isPlaying, enabled, deviceLabel]);
 
   const controlDevice = useCallback((targetId, action, value) => {
     const ch = channelRef.current;
@@ -152,5 +164,5 @@ export function useRemoteControl(userId, state, actions) {
     });
   }, [deviceId]);
 
-  return { enabled, devices, controlDevice, deviceId };
+  return { enabled, devices, controlDevice, deviceId, deviceLabel };
 }
