@@ -9,8 +9,6 @@ import { VERSION, BUILD_DATE } from '../version';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { usePlaylists } from '../hooks/usePlaylists';
-import { setRemoteControlSetting } from '../hooks/useRemoteControl';
-import { getDeviceLabel, setDeviceLabel } from '../utils/deviceId';
 
 const CHANGELOG = [
   { version: VERSION, date: BUILD_DATE, tag: 'Latest', changes: [
@@ -407,7 +405,12 @@ export default function Settings() {
   const [signingOut, setSigningOut] = useState(false);
 
   const [name,     setName]     = useState(() => localStorage.getItem('lb:profileName')     || 'Music Lover');
+  const [username, setUsername] = useState(() => localStorage.getItem('lb:profileUsername') || '');
   const [email,    setEmail]    = useState(() => localStorage.getItem('lb:profileEmail')    || '');
+  // NOTE: phone/location/bio have no matching columns in the `profiles` table
+  // (schema is: id, username, display_name, avatar_url, created_at, updated_at).
+  // Kept as device-local preferences only — saved to localStorage, never sent
+  // to Supabase, so they no longer break saveProfile() for signed-in users.
   const [phone,    setPhone]    = useState(() => localStorage.getItem('lb:profilePhone')    || '');
   const [location, setLocation] = useState(() => localStorage.getItem('lb:profileLocation') || '');
   const [bio,      setBio]      = useState(() => localStorage.getItem('lb:profileBio')      || '');
@@ -416,10 +419,8 @@ export default function Settings() {
   useEffect(() => {
     if (!authProfile) return;
     if (authProfile.display_name) setName(authProfile.display_name);
+    if (authProfile.username)     setUsername(authProfile.username);
     if (authProfile.avatar_url)   setAvatar(authProfile.avatar_url);
-    if (authProfile.phone)        setPhone(authProfile.phone || '');
-    if (authProfile.location)     setLocation(authProfile.location || '');
-    if (authProfile.bio)          setBio(authProfile.bio || '');
   }, [authProfile]);
   useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
 
@@ -436,7 +437,6 @@ export default function Settings() {
   const [notifVolume,     setNotifVolume]     = useState(() => Number(localStorage.getItem('lb:notificationVolume') || 80));
   const [analytics,       setAnalytics]       = useState(() => localStorage.getItem('lb:privacyAnalytics')   === 'true');
   const [remoteControl,   setRemoteControl]   = useState(() => localStorage.getItem('lb:allowRemoteControl') === 'true');
-  const [deviceName,      setDeviceName]      = useState(() => getDeviceLabel());
   const [maxCache,        setMaxCache]        = useState(() => Number(localStorage.getItem('lb:maxCacheMB') || 200));
   const [cacheSize]                           = useState('12.4 MB');
   const [isOnline,        setIsOnline]        = useState(() => navigator.onLine);
@@ -452,7 +452,7 @@ export default function Settings() {
   useEffect(() => { localStorage.setItem('lb:maxConcurrentDownloads', String(maxDownloads)); }, [maxDownloads]);
   useEffect(() => { localStorage.setItem('lb:notificationVolume',     String(notifVolume)); }, [notifVolume]);
   useEffect(() => { localStorage.setItem('lb:privacyAnalytics',       analytics);        }, [analytics]);
-  useEffect(() => { setRemoteControlSetting(remoteControl); }, [remoteControl]);
+  useEffect(() => { localStorage.setItem('lb:allowRemoteControl',     remoteControl);    }, [remoteControl]);
   useEffect(() => { localStorage.setItem('lb:maxCacheMB',             String(maxCache)); }, [maxCache]);
   useEffect(() => { localStorage.setItem('lb:downloadQuality',        downloadQuality);  }, [downloadQuality]);
   useEffect(() => {
@@ -461,24 +461,54 @@ export default function Settings() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
+  const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+
   const saveProfile = async () => {
-    const trimmed = name.trim();
-    if (!trimmed)           { showToast('Display name cannot be empty', 'error'); return; }
-    if (trimmed.length < 2) { showToast('Name must be at least 2 characters', 'error'); return; }
-    if (trimmed.length > 40){ showToast('Name must be 40 characters or less', 'error'); return; }
-    localStorage.setItem('lb:profileName', trimmed);
+    const trimmedName = name.trim();
+    const trimmedUsername = username.trim().toLowerCase();
+
+    if (!trimmedName)           { showToast('Display name cannot be empty', 'error'); return; }
+    if (trimmedName.length < 2) { showToast('Name must be at least 2 characters', 'error'); return; }
+    if (trimmedName.length > 40){ showToast('Name must be 40 characters or less', 'error'); return; }
+    if (trimmedUsername && !USERNAME_RE.test(trimmedUsername)) {
+      showToast('Username must be 3–20 characters: lowercase letters, numbers, underscores', 'error');
+      return;
+    }
+
+    localStorage.setItem('lb:profileName', trimmedName);
+    localStorage.setItem('lb:profileUsername', trimmedUsername);
     localStorage.setItem('lb:profileEmail', email);
     localStorage.setItem('lb:profilePhone', phone);
     localStorage.setItem('lb:profileLocation', location);
     localStorage.setItem('lb:profileBio', bio);
     localStorage.setItem('lb:profileAvatar', avatar);
+
     if (user) {
-      const { data: existing } = await supabase.from('profiles').select('id').eq('display_name', trimmed).neq('id', user.id).maybeSingle();
-      if (existing) { showToast('That username is already taken', 'error'); return; }
-      const { error } = await supabase.from('profiles').upsert({ id: user.id, display_name: trimmed, avatar_url: avatar, phone, location, bio, updated_at: new Date().toISOString() });
-      if (error) { showToast('Save failed: ' + error.message, 'error'); return; }
-      setName(trimmed);
+      // Only send columns that actually exist on `profiles`. phone/location/bio
+      // previously caused every signed-in save to fail outright.
+      const payload = {
+        id: user.id,
+        display_name: trimmedName,
+        avatar_url: avatar,
+        updated_at: new Date().toISOString(),
+      };
+      if (trimmedUsername) payload.username = trimmedUsername;
+
+      const { error } = await supabase.from('profiles').upsert(payload);
+      if (error) {
+        // 23505 = Postgres unique_violation — hits the real UNIQUE constraint
+        // on `username`, so no separate pre-check / race condition needed.
+        if (error.code === '23505') {
+          showToast('That username is already taken', 'error');
+        } else {
+          showToast('Save failed: ' + error.message, 'error');
+        }
+        return;
+      }
+      setName(trimmedName);
+      setUsername(trimmedUsername);
     }
+
     setSaved(true); setTimeout(() => setSaved(false), 2200); showToast('Profile saved!');
   };
 
@@ -496,12 +526,6 @@ export default function Settings() {
     } else {
       const r = new FileReader(); r.onload = ev => setAvatar(ev.target.result); r.readAsDataURL(f);
     }
-  };
-
-  const saveDeviceName = () => {
-    const finalLabel = setDeviceLabel(deviceName);
-    setDeviceName(finalLabel);
-    showToast('Device name updated ✓');
   };
 
   const handleSignOut = async () => {
@@ -567,6 +591,7 @@ export default function Settings() {
             <div className="sr-itext">
               <div className="sr-role">{user ? 'Listener' : 'Local Mode'}</div>
               <h1 className="sr-name">{name || 'Music Lover'}</h1>
+              {username && <p className="sr-email" style={{ color: 'var(--g)', marginBottom: 2 }}>@{username}</p>}
               <p className="sr-email">{user?.email || email || 'No email set'}</p>
               <div className="sr-badges">
                 {user ? (
@@ -674,12 +699,24 @@ export default function Settings() {
                     onChange={e => setSettingsQuery(e.target.value)} placeholder="Search settings…" />
                 </div>
 
-                {show('account','name','email','bio','location') && (<>
+                {show('account','name','username','email','bio','location') && (<>
                   <div className="sr-section">Account</div>
                   <div className="sr-rows">
                     <div className="sr-field">
                       <div className="sr-field-label">Display Name</div>
                       <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" className="sr-row-input" />
+                    </div>
+                    <div className="sr-field">
+                      <div className="sr-field-label">Username</div>
+                      <input
+                        value={username}
+                        onChange={e => setUsername(e.target.value.toLowerCase())}
+                        placeholder="unique_handle"
+                        maxLength={20}
+                        className="sr-row-input"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                      />
                     </div>
                     <div className="sr-field">
                       <div className="sr-field-label">Email {user && <span style={{ color:'var(--t3)',fontWeight:400,fontSize:10,textTransform:'none',letterSpacing:0,marginLeft:5 }}>managed by provider</span>}</div>
@@ -734,20 +771,6 @@ export default function Settings() {
                   <div className="sr-rows">
                     <ToggleRow label="Usage analytics" desc="Help improve the app anonymously" checked={analytics} onChange={setAnalytics} />
                     <ToggleRow label="Remote control" desc="Allow controlling from other devices" checked={remoteControl} onChange={setRemoteControl} />
-                    {remoteControl && (
-                      <div className="sr-field">
-                        <div className="sr-field-label">Device name</div>
-                        <input
-                          value={deviceName}
-                          onChange={e => setDeviceName(e.target.value)}
-                          onBlur={saveDeviceName}
-                          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-                          placeholder="e.g. Waka's Desktop"
-                          maxLength={40}
-                          className="sr-row-input"
-                        />
-                      </div>
-                    )}
                   </div>
                 </>)}
 

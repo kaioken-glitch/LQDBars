@@ -7,8 +7,15 @@
  *
  * Pure content/behavior scoring — no graph required, so it works from
  * a user's very first mood mix (cold-start safe). This is a rerank pass
- * over the candidate pool useMoodPlaylist.js already builds from
- * YouTube search; it doesn't touch resolution or playback.
+ * over the candidate pool useMoodPlaylist.js builds (primarily from
+ * YouTube Mix playlists now, plus a mood-prompt search); it doesn't
+ * touch resolution or playback.
+ *
+ * moodPrompt (the daypart's flavor text, e.g. "bright upbeat tracks warm
+ * acoustic mellow hip-hop optimistic") now feeds into User_Vector at a
+ * lighter weight than real listening history, and genre is now an
+ * explicit term in Diversity_Score rather than only entering indirectly
+ * through text-cosine similarity.
  */
 
 import { supabase } from '../lib/supabase';
@@ -16,6 +23,16 @@ import { supabase } from '../lib/supabase';
 const WEIGHTS = { alpha: 0.5, beta: 0.3, gamma: 0.2 };
 const SIGMA_HOURS = 6;                          // recency kernel width
 const RECENT_PLAY_LIMIT = 200;
+
+// How much the daypart mood prompt counts toward User_Vector, relative
+// to real listening history (weight 1). Kept deliberately light — the
+// prompt is a *flavor* nudge, not a replacement for actual taste signal.
+const MOOD_PROMPT_WEIGHT = 0.35;
+
+// Blend between the existing text-cosine diversity term and the new
+// explicit genre-repetition term inside Diversity_Score.
+const TEXT_DIVERSITY_WEIGHT  = 0.6;
+const GENRE_DIVERSITY_WEIGHT = 0.4;
 
 /* ── text → sparse word-frequency vector ─────────────────────────── */
 function textToVector(text = '') {
@@ -27,6 +44,12 @@ function textToVector(text = '') {
     .filter(Boolean)
     .forEach(word => { vec[word] = (vec[word] || 0) + 1; });
   return vec;
+}
+
+function scaleVector(vec, factor) {
+  const out = {};
+  Object.entries(vec).forEach(([k, v]) => { out[k] = v * factor; });
+  return out;
 }
 
 function mergeVectors(vectors) {
@@ -48,18 +71,48 @@ function cosineSim(a, b) {
   return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }
 
-/* ── User_Vector — from mood seeds (recent history rows) ─────────── */
-export function buildUserVector(seeds = []) {
-  const vectors = seeds
+/**
+ * User_Vector — from mood seeds (recent history rows), optionally
+ * blended with the daypart's mood prompt text at MOOD_PROMPT_WEIGHT.
+ * Called with just `seeds` behaves exactly as before (moodPrompt
+ * defaults to '', contributing nothing) — existing callers unaffected.
+ */
+export function buildUserVector(seeds = [], moodPrompt = '') {
+  const historyVectors = seeds
     .filter(s => s.name || s.artist || s.genre)
     .map(s => textToVector(`${s.artist || ''} ${s.genre || ''} ${s.name || ''}`));
-  if (!vectors.length) return {};
-  return mergeVectors(vectors);
+
+  const historyVec = historyVectors.length ? mergeVectors(historyVectors) : {};
+
+  if (!moodPrompt || !moodPrompt.trim()) return historyVec;
+
+  const promptVec = scaleVector(textToVector(moodPrompt), MOOD_PROMPT_WEIGHT);
+  return mergeVectors([historyVec, promptVec]);
 }
 
 /* ── Song_Vector — from a candidate track's title/artist ─────────── */
 export function buildSongVector(candidate) {
   return textToVector(`${candidate.artist || candidate.channel || ''} ${candidate.title || candidate.name || ''}`);
+}
+
+/**
+ * Best-effort genre match for a candidate against the distinct genres
+ * present in the user's seeds. Candidates (YouTube search/Mix results)
+ * don't carry a genre field, so this is necessarily a weak heuristic —
+ * cosine similarity between the candidate's text vector and each single
+ * genre term. Returns null when nothing matches (which will be most of
+ * the time), which is an honest reflection of missing metadata rather
+ * than a bug: genre only becomes a usable diversity signal for
+ * candidates whose title/artist text actually names or implies it.
+ */
+function matchSeedGenre(candidate, seedGenres, songVec) {
+  if (!seedGenres.length) return null;
+  let best = null, bestSim = 0;
+  seedGenres.forEach(genre => {
+    const sim = cosineSim(songVec, textToVector(genre));
+    if (sim > bestSim) { bestSim = sim; best = genre; }
+  });
+  return bestSim > 0 ? best : null;
 }
 
 /* ── Recent plays — recency + repetition inputs ───────────────────
@@ -130,50 +183,83 @@ function freshnessScore(youtubeId, recentPlayMap) {
   return recencyFreshness * (1 - repetitionPenalty);
 }
 
-/* ── Term 3: diversity vs. what's already been picked ─────────────── */
-function diversityScore(songVec, chosenVectors) {
-  if (!chosenVectors.length) return 1;
-  const maxSim = Math.max(...chosenVectors.map(v => cosineSim(songVec, v)));
-  return 1 - maxSim;
+/* ── Term 3: diversity vs. what's already been picked ───────────────
+   Now two sub-terms blended together:
+     - textDiv:  1 - max cosine sim vs. already-chosen song vectors
+                 (unchanged from before)
+     - genreDiv: explicit penalty for repeating the same matched seed
+                 genre, independent of whether that shows up in the
+                 text vectors (e.g. two candidates in the same genre
+                 with completely different-sounding titles/artists
+                 would previously score as "diverse" — this catches
+                 that case when a genre match is available)
+─────────────────────────────────────────────────────────────── */
+function diversityScore(songVec, chosenVectors, candidateGenre, chosenGenres) {
+  const textDiv = chosenVectors.length
+    ? 1 - Math.max(...chosenVectors.map(v => cosineSim(songVec, v)))
+    : 1;
+
+  let genreDiv = 1;
+  if (candidateGenre) {
+    const sameGenreCount = chosenGenres.filter(g => g === candidateGenre).length;
+    // Diminishing penalty: 1st repeat -> 0.5, 2nd -> 0.33, etc.
+    genreDiv = 1 / (1 + sameGenreCount);
+  }
+
+  return TEXT_DIVERSITY_WEIGHT * textDiv + GENRE_DIVERSITY_WEIGHT * genreDiv;
 }
 
-function scoreCandidate(candidate, userVec, recentPlayMap, chosenVectors, weights) {
+function scoreCandidate(candidate, userVec, recentPlayMap, chosenVectors, chosenGenres, seedGenres, weights) {
   const songVec = buildSongVector(candidate);
+  const candidateGenre = matchSeedGenre(candidate, seedGenres, songVec);
   const a = contentScore(userVec, songVec);
   const b = freshnessScore(candidate.youtubeId, recentPlayMap);
-  const g = diversityScore(songVec, chosenVectors);
-  return { score: weights.alpha * a + weights.beta * b + weights.gamma * g, songVec };
+  const g = diversityScore(songVec, chosenVectors, candidateGenre, chosenGenres);
+  return {
+    score: weights.alpha * a + weights.beta * b + weights.gamma * g,
+    songVec,
+    candidateGenre,
+  };
 }
 
 /* ── Rerank — greedy MMR-style selection ──────────────────────────
    Picks the best-scoring candidate one at a time, recomputing
-   diversity against everything already chosen. `seeds` = the user's
-   mood-seed tracks (from getHistorySeeds); `candidates` = the raw
-   pool gathered from YouTube search, BEFORE trimming to `limit`.
+   diversity (text + genre) against everything already chosen.
+   `seeds` = the user's mood-seed tracks (from getHistorySeeds);
+   `candidates` = the raw pool gathered in useMoodPlaylist.js, BEFORE
+   trimming to `limit`. `moodPrompt` = the daypart's flavor text,
+   blended lightly into User_Vector.
 ─────────────────────────────────────────────────────────────── */
-export async function rerankCandidates(candidates, seeds, userId, limit, weights = WEIGHTS) {
+export async function rerankCandidates(candidates, seeds, userId, limit, moodPrompt = '', weights = WEIGHTS) {
   if (!candidates.length) return candidates;
 
-  const userVec = buildUserVector(seeds);
+  const userVec = buildUserVector(seeds, moodPrompt);
   const recentPlayMap = await getRecentPlayMap(userId);
+  const seedGenres = [...new Set(
+    (seeds || []).map(s => s.genre).filter(Boolean).map(g => g.toLowerCase().trim())
+  )];
 
   const pool = candidates.map(c => ({ candidate: c }));
   const chosen = [];
   const chosenVectors = [];
+  const chosenGenres = [];
 
   while (chosen.length < Math.min(limit, pool.length)) {
-    let bestIdx = -1, bestScore = -Infinity, bestVec = null;
+    let bestIdx = -1, bestScore = -Infinity, bestVec = null, bestGenre = null;
 
     pool.forEach((entry, idx) => {
       if (entry.picked) return;
-      const { score, songVec } = scoreCandidate(entry.candidate, userVec, recentPlayMap, chosenVectors, weights);
-      if (score > bestScore) { bestScore = score; bestIdx = idx; bestVec = songVec; }
+      const { score, songVec, candidateGenre } = scoreCandidate(
+        entry.candidate, userVec, recentPlayMap, chosenVectors, chosenGenres, seedGenres, weights
+      );
+      if (score > bestScore) { bestScore = score; bestIdx = idx; bestVec = songVec; bestGenre = candidateGenre; }
     });
 
     if (bestIdx === -1) break;
     pool[bestIdx].picked = true;
     chosen.push(pool[bestIdx].candidate);
     chosenVectors.push(bestVec);
+    chosenGenres.push(bestGenre);
   }
 
   return chosen;
