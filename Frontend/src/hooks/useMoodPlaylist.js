@@ -2,18 +2,27 @@
  * useMoodPlaylist.js
  *
  * Builds a mood mix from the user's recent listening history and adds
- * related tracks from similar artists/genres. Search-derived candidates
- * are reranked via moodScoring.js (content affinity + freshness +
- * diversity) before being trimmed to the requested limit.
+ * related tracks. Candidates now come primarily from YouTube's own Mix
+ * playlist (RD{videoId} via /playlistItems — 1 quota unit per 50 songs),
+ * seeded from the user's deduped top history tracks, with a supplementary
+ * text search using the daypart's mood prompt so genre actually gets
+ * injected. The old parallel-/search sweep is kept only as a thin
+ * fallback when the pool comes up short (e.g. no YouTube key, or Mix
+ * playlists unavailable for the seed).
+ *
+ * Search-derived candidates are reranked via moodScoring.js (content
+ * affinity + freshness + diversity, now mood-prompt-aware) before being
+ * trimmed to the requested limit.
  */
 
 import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import youtubeConverter from '../utils/youtubeConverter';
+import { buildMixBatch } from '../utils/ytMixPlaylist';
 import { rerankCandidates } from './moodScoring';
 
-const CACHE_KEY = 'lb:history_mood_mix';
+const CACHE_PREFIX = 'lb:history_mood_mix';
 const CACHE_TTL = 4 * 60 * 60 * 1000;
 const memCache = new Map();
 
@@ -47,6 +56,19 @@ function normalizeText(value = '') {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+/**
+ * Scope the localStorage cache key by the actual mood/daypart prompt
+ * instead of one hardcoded constant. Previously every daypart (morning/
+ * noon/evening) shared a single CACHE_KEY, so whichever daypart mix
+ * generated first within the 4h TTL got cached, and other dayparts could
+ * silently be served its songs if HomeOnline's own per-daypart cache
+ * happened to miss at the same time.
+ */
+function cacheKeyFor(mood) {
+  const slug = normalizeText(mood || 'history').replace(/\s+/g, '_').slice(0, 48) || 'history';
+  return `${CACHE_PREFIX}:${slug}`;
+}
+
 function makeSongFromSeed(item, seed = false) {
   const youtubeId = item.youtubeId || item.id || '';
   return {
@@ -63,14 +85,34 @@ function makeSongFromSeed(item, seed = false) {
 }
 
 /**
+ * Dedupe a list of raw history rows by youtubeId, keeping the entry with
+ * the most recent playedAt. Rows are assumed to already be roughly
+ * recent-first (both the Supabase query and the localStorage list are
+ * ordered that way), so the first occurrence of a given youtubeId is kept.
+ */
+function dedupeSeedRows(rows) {
+  const seen = new Map(); // youtubeId -> row
+  for (const row of rows) {
+    const key = row.youtubeId || `noyt:${normalizeText(row.name)}|${normalizeText(row.artist)}`;
+    if (!key) continue;
+    if (!seen.has(key)) seen.set(key, row);
+  }
+  return Array.from(seen.values());
+}
+
+/**
  * Pulls the user's recent listening history to seed mood mix generation.
+ *
+ * Fetches a wider pool (30 rows) before deduping — listening_history logs
+ * one row PER PLAY EVENT (no upsert), so the raw top-6 previously handed
+ * straight to the mix builder could easily contain the same song twice
+ * if it had been replayed recently. We now dedupe by youtube_id across a
+ * larger window, then take the top 6 unique tracks.
  *
  * NOTE: the listening_history table has no `thumbnail` column — schema is
  * (id, user_id, youtube_id, name, artist, genre, played_at, play_count).
- * Selecting a nonexistent column throws a Postgres error that gets caught
- * below, silently returning [] every time — which was causing every mix
- * to fall back to FALLBACK_TRACKS. Cover art is derived from youtube_id
- * via YouTube's predictable thumbnail URL instead.
+ * Cover art is derived from youtube_id via YouTube's predictable
+ * thumbnail URL instead.
  */
 async function getHistorySeeds(userId) {
   if (!userId) {
@@ -78,14 +120,18 @@ async function getHistorySeeds(userId) {
       const raw = localStorage.getItem('player:history');
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed)
-        ? parsed.slice(0, 5).map(item => ({
-            name: item.name || item.title || '',
-            artist: item.artist || '',
-            genre: item.genre || '',
-            youtubeId: item.youtubeId || item.id?.replace(/^yt_/, '') || '',
-          }))
-        : [];
+      if (!Array.isArray(parsed)) return [];
+
+      const rows = parsed.slice(0, 30).map(item => ({
+        name: item.name || item.title || '',
+        artist: item.artist || '',
+        genre: item.genre || '',
+        youtubeId: item.youtubeId || item.id?.replace(/^yt_/, '') || '',
+        playedAt: item.playedAt || 0,
+        cover: item.cover || '',
+      }));
+
+      return dedupeSeedRows(rows).slice(0, 6);
     } catch {
       return [];
     }
@@ -97,17 +143,22 @@ async function getHistorySeeds(userId) {
       .select('name, artist, genre, youtube_id, played_at')
       .eq('user_id', userId)
       .order('played_at', { ascending: false })
-      .limit(6);
+      .limit(30);
 
     if (error) throw error;
 
-    return (data || []).map(row => ({
-      name: row.name || '',
-      artist: row.artist || '',
-      genre: row.genre || '',
-      youtubeId: row.youtube_id || '',
-      cover: row.youtube_id ? `https://img.youtube.com/vi/${row.youtube_id}/mqdefault.jpg` : '',
-    })).filter(item => item.name || item.artist);
+    const rows = (data || [])
+      .map(row => ({
+        name: row.name || '',
+        artist: row.artist || '',
+        genre: row.genre || '',
+        youtubeId: row.youtube_id || '',
+        playedAt: row.played_at || 0,
+        cover: row.youtube_id ? `https://img.youtube.com/vi/${row.youtube_id}/mqdefault.jpg` : '',
+      }))
+      .filter(item => item.name || item.artist);
+
+    return dedupeSeedRows(rows).slice(0, 6);
   } catch (err) {
     console.warn('[useMoodPlaylist] history lookup failed', err);
     return [];
@@ -133,14 +184,107 @@ function pickFallbackTracks(seeds = [], limit = 20) {
 }
 
 /**
+ * Primary candidate source: YouTube Mix playlists (1 quota unit per
+ * fetch) seeded from the user's deduped top history tracks, via the
+ * same buildMixBatch() util useSmartRadio.js uses — plus one
+ * supplementary text search using the daypart's mood prompt so genre
+ * flavor actually makes it into the mix (previously dead weight).
+ */
+async function gatherMixCandidates(seeds, moodPrompt, poolCap) {
+  const ytKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+  const excludeIds = new Set(seeds.map(s => s.youtubeId).filter(Boolean));
+  const pool = [];
+
+  if (ytKey) {
+    const seededHistory = seeds.filter(s => s.youtubeId);
+    for (const seed of seededHistory) {
+      if (pool.length >= poolCap) break;
+      const perSeedCap = Math.max(3, Math.ceil((poolCap - pool.length) / Math.max(1, seededHistory.length)));
+      try {
+        const { songs: batch } = await buildMixBatch(seed.youtubeId, ytKey, excludeIds, null, perSeedCap, 'mood-mix');
+        pool.push(...batch.map(song => makeSongFromSeed({
+          id: song.youtubeId, title: song.name, artist: song.artist,
+          thumbnail: song.cover, youtubeId: song.youtubeId,
+        })));
+      } catch (err) {
+        console.warn('[useMoodPlaylist] mix batch failed for seed', seed.name, err);
+      }
+    }
+
+    // Supplementary: inject the daypart's mood/genre flavor directly —
+    // this is what daypartConfig.prompt was for and previously never used.
+    if (moodPrompt && pool.length < poolCap) {
+      try {
+        const videos = await youtubeConverter.searchVideos(moodPrompt, Math.min(8, poolCap - pool.length));
+        for (const video of videos) {
+          if (pool.length >= poolCap) break;
+          if (!video.id || excludeIds.has(video.id)) continue;
+          excludeIds.add(video.id);
+          pool.push(makeSongFromSeed({
+            id: video.id, title: video.title, artist: video.channel,
+            thumbnail: video.thumbnail, duration: video.duration, youtubeId: video.id,
+          }));
+        }
+      } catch (err) {
+        console.warn('[useMoodPlaylist] mood-prompt search failed', err);
+      }
+    }
+  }
+
+  return { pool, excludeIds };
+}
+
+/**
+ * Thin fallback — only runs if the Mix-playlist + mood-prompt pool above
+ * came up short (no YouTube key, Mix unavailable for every seed, etc).
+ * Capped much tighter than the old version (1 query per seed instead of
+ * up to 4) since it's now a safety net, not the primary source.
+ */
+async function gatherFallbackSearchCandidates(seeds, excludeIds, poolCap, currentPoolSize) {
+  const extra = [];
+  const budget = poolCap - currentPoolSize;
+  if (budget <= 0) return extra;
+
+  for (const seed of seeds.slice(0, 3)) {
+    if (extra.length >= budget) break;
+    const artist = seed.artist?.trim();
+    const title = seed.name?.trim();
+    const query = artist && title ? `${artist} ${title} similar songs` : (artist ? `${artist} top tracks` : null);
+    if (!query) continue;
+
+    try {
+      const videos = await youtubeConverter.searchVideos(query, 4);
+      for (const video of videos) {
+        if (extra.length >= budget) break;
+        const headline = normalizeText(video.title);
+        const seedTitle = normalizeText(title);
+        if (!headline || (seedTitle && headline.includes(seedTitle))) continue;
+        if (excludeIds.has(video.id)) continue;
+        excludeIds.add(video.id);
+        extra.push(makeSongFromSeed({
+          id: video.id, title: video.title, artist: video.channel,
+          thumbnail: video.thumbnail, duration: video.duration, youtubeId: video.id,
+        }));
+      }
+    } catch (err) {
+      console.warn('[useMoodPlaylist] fallback search failed', err);
+    }
+  }
+
+  return extra;
+}
+
+/**
  * Builds the mix: seed tracks (kept as-is, they're the user's actual
- * recent listens) + a reranked pool of YouTube search candidates.
+ * recent listens, already deduped by getHistorySeeds) + a reranked pool
+ * of candidates sourced primarily from YouTube Mix playlists.
  *
  * userId is passed through explicitly so moodScoring.js can pull the
- * signed-in user's real listening_history for the freshness term —
- * seeds themselves don't carry a userId field.
+ * signed-in user's real listening_history for the freshness term.
+ * moodPrompt (the daypart's flavor text) is passed through so scoring
+ * can nudge toward it too, not just candidate generation.
  */
-async function buildHistoryMoodPlaylist(seeds, limit = 20, userId = null) {
+async function buildHistoryMoodPlaylist(seeds, limit = 20, userId = null, moodPrompt = '') {
   const seedTracks = (seeds || []).slice(0, 3).filter(item => item.name || item.artist).map(item => makeSongFromSeed({
     id: item.youtubeId || '',
     title: item.name,
@@ -151,63 +295,37 @@ async function buildHistoryMoodPlaylist(seeds, limit = 20, userId = null) {
 
   const seenKeys = new Set();
   const keyOf = (song) => song.youtubeId ? `yt:${song.youtubeId}` : `id:${song.id}`;
-
   seedTracks.forEach(s => seenKeys.add(keyOf(s)));
 
-  // Collect a wider pool than `limit` so reranking has room to work —
-  // capped to avoid excessive YouTube quota use.
+  // Collect a wider pool than `limit` so reranking has room to work.
   const poolCap = Math.max(limit * 2, limit + 10);
-  const searchPool = [];
 
-  for (const seed of (seeds || []).slice(0, 3)) {
-    if (searchPool.length >= poolCap) break;
+  const { pool: mixPool, excludeIds } = await gatherMixCandidates(seeds || [], moodPrompt, poolCap);
 
-    const artist = seed.artist?.trim();
-    const genre = seed.genre?.trim();
-    const title = seed.name?.trim();
-    const queries = [];
+  let searchPool = mixPool.filter(song => {
+    const key = keyOf(song);
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
+    return true;
+  });
 
-    if (artist && title) queries.push(`${artist} ${title} similar songs`);
-    if (genre && artist) queries.push(`${genre} songs similar to ${artist}`);
-    if (artist) queries.push(`${artist} top tracks`);
-    if (title) queries.push(`${title} official audio`);
-
-    for (const query of queries) {
-      if (!query || searchPool.length >= poolCap) break;
-      try {
-        const videos = await youtubeConverter.searchVideos(query, 4);
-        for (const video of videos) {
-          if (searchPool.length >= poolCap) break;
-          const headline = normalizeText(video.title);
-          const seedTitle = normalizeText(title);
-          if (!headline) continue;
-          if (seedTitle && headline.includes(seedTitle)) continue;
-
-          const song = makeSongFromSeed({
-            id: video.id,
-            title: video.title,
-            artist: video.channel,
-            thumbnail: video.thumbnail,
-            duration: video.duration,
-            youtubeId: video.id,
-          });
-          const key = keyOf(song);
-          if (seenKeys.has(key)) continue;
-          seenKeys.add(key);
-          searchPool.push(song);
-        }
-      } catch (err) {
-        console.warn('[useMoodPlaylist] search failed', err);
-      }
+  // Thin fallback only if the cheap sources didn't fill the pool.
+  if (searchPool.length < Math.min(limit, poolCap)) {
+    const extra = await gatherFallbackSearchCandidates(seeds || [], excludeIds, poolCap, searchPool.length);
+    for (const song of extra) {
+      const key = keyOf(song);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      searchPool.push(song);
     }
   }
 
-  // Rerank the search-derived pool using Score(u,s,t).
+  // Rerank the candidate pool using Score(u,s,t), now mood-prompt-aware.
   const remainingSlots = Math.max(0, limit - seedTracks.length);
   let rerankedPool = searchPool;
   if (remainingSlots > 0 && searchPool.length) {
     try {
-      rerankedPool = await rerankCandidates(searchPool, seeds, userId, remainingSlots);
+      rerankedPool = await rerankCandidates(searchPool, seeds, userId, remainingSlots, moodPrompt);
     } catch (err) {
       console.warn('[useMoodPlaylist] rerank failed, using raw order', err);
       rerankedPool = searchPool.slice(0, remainingSlots);
@@ -227,7 +345,10 @@ async function buildHistoryMoodPlaylist(seeds, limit = 20, userId = null) {
 }
 
 const _fetchMoodPlaylistRaw = async (mood, limit = 20) => {
-  const cached = localStorage.getItem(CACHE_KEY);
+  const moodText = mood?.mood || '';
+  const cacheKey = cacheKeyFor(moodText);
+
+  const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
       const parsed = JSON.parse(cached);
@@ -238,11 +359,11 @@ const _fetchMoodPlaylistRaw = async (mood, limit = 20) => {
   }
 
   const seeds = await getHistorySeeds(mood?.userId || null);
-  const songs = await buildHistoryMoodPlaylist(seeds, limit, mood?.userId || null);
+  const songs = await buildHistoryMoodPlaylist(seeds, limit, mood?.userId || null, moodText);
 
   if (songs.length) {
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ songs, ts: Date.now() }));
+      localStorage.setItem(cacheKey, JSON.stringify({ songs, ts: Date.now() }));
     } catch {}
   }
 

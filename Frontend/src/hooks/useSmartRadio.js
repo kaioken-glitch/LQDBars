@@ -3,7 +3,8 @@
  *
  * PATTERNS APPLIED:
  *   Memoization  — Mix playlist responses cached by videoId+pageToken so
- *                  refills never re-fetch pages already seen
+ *                  refills never re-fetch pages already seen (now lives in
+ *                  ytMixPlaylist.js, shared with useMoodPlaylist.js)
  *   Throttle     — refill is throttled so rapid currentIndex changes
  *                  (e.g. during skip sprees) don't stack up multiple fetches
  *   Deep Clone   — playlist items deep-cloned before injecting into queue
@@ -14,20 +15,22 @@
  * Quota strategy:
  *   /playlistItems = 1 unit per 50 songs  (vs /search = 100 units per song)
  *   /search used ONLY if seed song has no youtubeId (at most 1 time)
+ *
+ * NOTE: the Mix-playlist fetch/map/batch logic that used to live here
+ * (fetchMixPage, mapItem, buildBatch) has been extracted to
+ * src/utils/ytMixPlaylist.js so useMoodPlaylist.js can use the identical
+ * cheap "similar songs" source instead of duplicating it or falling back
+ * to expensive parallel /search calls.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlayer } from '../context/PlayerContext';
+import { buildMixBatch, deepClone, memoizeAsync } from '../utils/ytMixPlaylist';
 
 const YT_BASE    = 'https://www.googleapis.com/youtube/v3';
 const BATCH_SIZE = 10;
 const REFILL_AT  = 3;
 const REFILL_THROTTLE_MS = 8000; // min 8s between refill fetches
-
-/* ── Deep Clone ─────────────────────────────────────────────────────── */
-function deepClone(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
 
 /* ── Debounce ───────────────────────────────────────────────────────── */
 function debounce(func, delay) {
@@ -38,36 +41,8 @@ function debounce(func, delay) {
   };
 }
 
-/* ── Memoize (async) ────────────────────────────────────────────────── */
-function memoizeAsync(func, ttl = Infinity) {
-  const cache = new Map();
-  return async function (...args) {
-    const key = JSON.stringify(args);
-    const hit = cache.get(key);
-    if (hit && Date.now() - hit.ts < ttl) return deepClone(hit.value);
-    const value = await func.apply(this, args);
-    cache.set(key, { value, ts: Date.now() });
-    return deepClone(value);
-  };
-}
-
-/* ── YT Mix playlist fetch (1 quota unit) — memoized ────────────────── */
-const fetchMixPage = memoizeAsync(async function(videoId, ytKey, pageToken) {
-  const url = new URL(`${YT_BASE}/playlistItems`);
-  url.searchParams.set('part',       'snippet');
-  url.searchParams.set('playlistId', `RD${videoId}`);
-  url.searchParams.set('maxResults', '50');
-  url.searchParams.set('key',        ytKey);
-  if (pageToken) url.searchParams.set('pageToken', pageToken);
-
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`YT playlistItems ${res.status}`);
-  const data = await res.json();
-  return { items: data.items || [], nextPageToken: data.nextPageToken || null };
-}, 30 * 60 * 1000); // 30min TTL — mix playlist content is stable
-
 /* ── Single search (100 quota units) — memoized, called at most once ── */
-const searchOneVideo = memoizeAsync(async function(query, ytKey) {
+const searchOneVideo = memoizeAsync(async function (query, ytKey) {
   const url = new URL(`${YT_BASE}/search`);
   url.searchParams.set('part', 'snippet');
   url.searchParams.set('type', 'video');
@@ -79,36 +54,6 @@ const searchOneVideo = memoizeAsync(async function(query, ytKey) {
   const data = await res.json();
   return data.items?.[0]?.id?.videoId || null;
 }, 60 * 60 * 1000); // 1h TTL
-
-/* ── Map playlist item → song object ─────────────────────────────────── */
-function mapItem(item) {
-  const s   = item.snippet;
-  const vid = s?.resourceId?.videoId;
-  if (!vid) return null;
-  const url = `https://www.youtube.com/watch?v=${vid}`;
-  return {
-    id: `yt_${vid}`, name: s.title || 'Unknown',
-    artist: s.videoOwnerChannelTitle || 'YouTube',
-    youtubeId: vid,
-    cover: s.thumbnails?.medium?.url || `https://img.youtube.com/vi/${vid}/mqdefault.jpg`,
-    audio: url, url, src: url,
-    album: '', source: 'radio', youtube: true,
-  };
-}
-
-/* ── Build a batch (1 quota unit via memoized fetch) ─────────────────── */
-async function buildBatch(seedVideoId, ytKey, excludeIds, pageToken) {
-  const { items, nextPageToken } = await fetchMixPage(seedVideoId, ytKey, pageToken || null);
-  const results = [];
-  for (const item of items) {
-    const song = mapItem(item);
-    if (!song || song.youtubeId === seedVideoId || excludeIds.has(song.id)) continue;
-    excludeIds.add(song.id);
-    results.push(song);
-    if (results.length >= BATCH_SIZE) break;
-  }
-  return { songs: results, nextPageToken };
-}
 
 /* ── Hook ─────────────────────────────────────────────────────────────── */
 export function useSmartRadio() {
@@ -144,7 +89,11 @@ export function useSmartRadio() {
 
     setRadioLoading(true);
     setRadioError(null);
-    seenIds.current = new Set(songs.map(s => s.id));
+    // seenIds tracks youtubeIds (not `yt_`-prefixed song ids) — matches
+    // buildMixBatch's excludeIds contract in ytMixPlaylist.js
+    seenIds.current = new Set(
+      songs.map(s => s.youtubeId || (s.id || '').replace(/^yt_/, '')).filter(Boolean)
+    );
 
     try {
       // Resolve videoId — free if already on the song object
@@ -159,7 +108,7 @@ export function useSmartRadio() {
 
       // Fetch Mix playlist — 1 quota unit, result memoized
       const { songs: batch, nextPageToken: npt } =
-        await buildBatch(videoId, ytKey, seenIds.current, null);
+        await buildMixBatch(videoId, ytKey, seenIds.current, null, BATCH_SIZE, 'radio');
 
       if (!alive.current) return;
       if (!batch.length) { setRadioError('No radio tracks found.'); setRadioLoading(false); return; }
@@ -225,7 +174,7 @@ export function useSmartRadio() {
     if (!ytKey) return;
 
     setRadioLoading(true);
-    buildBatch(seedVideoId.current, ytKey, seenIds.current, nextPageToken.current)
+    buildMixBatch(seedVideoId.current, ytKey, seenIds.current, nextPageToken.current, BATCH_SIZE, 'radio')
       .then(({ songs: batch, nextPageToken: npt }) => {
         if (!alive.current) return;
         nextPageToken.current = npt;
