@@ -400,7 +400,7 @@ export default function Settings() {
     return () => window.removeEventListener('open-update-popup', h);
   }, []);
 
-  const { user, profile: authProfile, signOut } = useAuth();
+  const { user, profile: authProfile, signOut, updateProfile } = useAuth();
   const { playlists } = usePlaylists();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -487,14 +487,16 @@ export default function Settings() {
       // Only send columns that actually exist on `profiles`. phone/location/bio
       // previously caused every signed-in save to fail outright.
       const payload = {
-        id: user.id,
         display_name: trimmedName,
         avatar_url: avatar,
-        updated_at: new Date().toISOString(),
       };
       if (trimmedUsername) payload.username = trimmedUsername;
 
-      const { error } = await supabase.from('profiles').upsert(payload);
+      // Goes through AuthContext so its shared `profile` state updates too —
+      // writing straight to Supabase here left every other consumer of
+      // useAuth().profile (HomeOnline's greeting, this page's own header)
+      // showing stale data until the next sign-in.
+      const { error } = await updateProfile(payload);
       if (error) {
         // 23505 = Postgres unique_violation — hits the real UNIQUE constraint
         // on `username`, so no separate pre-check / race condition needed.
@@ -518,10 +520,27 @@ export default function Settings() {
       const ext = f.name.split('.').pop();
       const path = `${user.id}/avatar.${ext}`;
       const { error: upErr } = await supabase.storage.from('avatars').upload(path, f, { upsert: true });
-      if (upErr) { const r = new FileReader(); r.onload = ev => setAvatar(ev.target.result); r.readAsDataURL(f); showToast('Upload failed — using local preview', 'error'); return; }
+      if (upErr) {
+        console.error('[Settings] avatar upload failed:', upErr);
+        const r = new FileReader();
+        r.onload = ev => setAvatar(ev.target.result);
+        r.readAsDataURL(f);
+        // Surface the real reason instead of a generic message — common
+        // causes: the 'avatars' storage bucket doesn't exist yet, or exists
+        // but has no RLS policy allowing this user to write to it.
+        showToast(`Upload failed (using local preview): ${upErr.message}`, 'error');
+        return;
+      }
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+
+      const { error: dbErr } = await updateProfile({ avatar_url: data.publicUrl });
+      if (dbErr) {
+        console.error('[Settings] avatar profile save failed:', dbErr);
+        showToast(`Avatar uploaded but profile save failed: ${dbErr.message}`, 'error');
+        return;
+      }
+
       setAvatar(data.publicUrl);
-      await supabase.from('profiles').upsert({ id: user.id, avatar_url: data.publicUrl, updated_at: new Date().toISOString() });
       showToast('Avatar updated!');
     } else {
       const r = new FileReader(); r.onload = ev => setAvatar(ev.target.result); r.readAsDataURL(f);

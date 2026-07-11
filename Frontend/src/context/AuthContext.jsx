@@ -1,5 +1,5 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { notifyAll, LIBRARY_PLAYLIST_ID } from '../hooks/usePlaylists';
 
@@ -41,6 +41,27 @@ export function AuthProvider({ children }) {
       if (newProfile) setProfile(newProfile);
     }
   };
+
+  /**
+   * Single source of truth for writing to `profiles` after initial load.
+   * Components (e.g. Settings.jsx) should call this instead of writing to
+   * Supabase directly — a direct write leaves this context's `profile`
+   * state stale until the next full sign-in, so anything reading
+   * useAuth().profile elsewhere in the app (greeting text, avatar, etc.)
+   * keeps showing the old value even though the DB row is correct.
+   */
+  const updateProfile = useCallback(async (updates) => {
+    if (!user) return { data: null, error: new Error('Not signed in') };
+    const payload = { id: user.id, updated_at: new Date().toISOString(), ...updates };
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert(payload)
+      .select()
+      .single();
+    if (error) return { data: null, error };
+    setProfile(prev => ({ ...(prev || {}), ...data }));
+    return { data, error: null };
+  }, [user]);
 
   // Pulls the canonical playlist/library state down from Supabase and
   // replaces the local cache with it. Never wipes local data on a
@@ -220,7 +241,7 @@ export function AuthProvider({ children }) {
     setProfile(null);
   };
 
-  const value = { user, profile, loading, signUp, signIn, signInWithGoogle, signInWithDiscord, signOut };
+  const value = { user, profile, loading, signUp, signIn, signInWithGoogle, signInWithDiscord, signOut, updateProfile };
 
   return (
     <AuthContext.Provider value={value}>
