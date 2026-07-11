@@ -19,7 +19,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import youtubeConverter from '../utils/youtubeConverter';
-import { buildMixBatch } from '../utils/ytMixPlaylist';
+import { buildMixBatch } from '../utils/ytMixPlaylists';
 import { rerankCandidates } from './moodScoring';
 
 const CACHE_PREFIX = 'lb:history_mood_mix';

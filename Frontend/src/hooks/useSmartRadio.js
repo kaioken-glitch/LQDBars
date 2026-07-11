@@ -25,7 +25,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { buildMixBatch, deepClone, memoizeAsync } from '../utils/ytMixPlaylist';
+import { buildMixBatch, deepClone, memoizeAsync } from '../utils/ytMixPlaylists';
 
 const YT_BASE    = 'https://www.googleapis.com/youtube/v3';
 const BATCH_SIZE = 10;
