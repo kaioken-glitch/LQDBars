@@ -9,7 +9,7 @@
  */
 
 import React, { useState } from 'react';
-import { FaHome, FaCompactDisc, FaListUl, FaHistory, FaCog } from 'react-icons/fa';
+import { FaHome, FaCompactDisc, FaListUl, FaHistory, FaCog, FaPaperPlane } from 'react-icons/fa';
 
 /* ─── Labels MUST match App.jsx switch cases exactly ─────────────── */
 const NAV_ITEMS = [
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { label: 'Library',         icon: FaCompactDisc, shortLabel: 'Library' },
   { label: 'Playlists',       icon: FaListUl,      shortLabel: 'Lists'   },
   { label: 'Recently Played', icon: FaHistory,     shortLabel: 'Recent'  },
+  { label: 'Messages',        icon: FaPaperPlane,  shortLabel: 'Chat'    },
   { label: 'Settings',        icon: FaCog,         shortLabel: 'More'    },
 ];
 

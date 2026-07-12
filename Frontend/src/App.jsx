@@ -12,6 +12,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import BottomNav from './components/BottomNav';
 import PlayerControls from './components/PlayerControls';
+import PresenceSync from './components/PresenceSync';
+import DMPanel from './components/chat/DMPanel';
+import { useDMTarget } from './hooks/dmNavigationStore';
 import SplashScreen from './utils/Splashscreen';
 import './index.css';
 
@@ -22,6 +25,15 @@ function AppInner() {
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
+
+  /* Open the DM panel whenever something elsewhere in the app calls
+     openDirectMessage() — e.g. the "Message" button on ProfileDetailView.
+     DMPanel itself reads useDMTarget() to know which conversation to
+     open; this just makes sure the tab is actually visible. */
+  const dmTarget = useDMTarget();
+  useEffect(() => {
+    if (dmTarget) setActive('Messages');
+  }, [dmTarget]);
 
   /* Connectivity check */
   useEffect(() => {
@@ -68,6 +80,7 @@ function AppInner() {
       case 'Library':         return <Library />;
       case 'Playlists':       return <Playlists />;
       case 'Recently Played': return <Recent />;
+      case 'Messages':        return <DMPanel />;
       case 'Settings':        return <Settings />;
       default:                return isOnline ? <HomeOnline /> : <Home />;
     }
@@ -112,6 +125,12 @@ function AppInner() {
 
       {/* Global player — handles both desktop bar and mobile mini bar */}
       {user && <PlayerControls />}
+
+      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying
+          from PlayerContext into presence so "now listening" updates
+          automatically everywhere (DMPanel, ProfileDetailView, PeopleRow)
+          without those components needing any player wiring themselves. */}
+      {user && <PresenceSync />}
 
       {/* Radio station pill — fixed above BottomNav */}
       <style>{`

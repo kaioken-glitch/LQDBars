@@ -4,7 +4,7 @@ import { usePlayer } from '../context/PlayerContext';
 import logo from '../assets/logo.svg';
 import {
   FaHome, FaCompactDisc, FaListUl, FaHeart,
-  FaHistory, FaCog,
+  FaHistory, FaCog, FaPaperPlane,
 } from 'react-icons/fa';
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ const ROUTE_MAP = {
   'Library':         '/library',
   'Playlists':       '/playlists',   // adjust if you have a /favorites route
   'Recently Played': '/recent',
+  'Messages':        '/messages',
   'Settings':        '/settings',
 };
 
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { label: 'Library',         icon: FaCompactDisc },
   { label: 'Playlists',       icon: FaListUl },
   { label: 'Recently Played', icon: FaHistory },
+  { label: 'Messages',        icon: FaPaperPlane },
 ];
 
 const USER = { firstName: 'Ava' };
