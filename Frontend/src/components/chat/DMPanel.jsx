@@ -98,7 +98,10 @@ const CSS = `
   font-family: 'DM Sans', sans-serif;
 }
 .dm-panel-list-slot { display: flex; flex-shrink: 0; }
-.dm-panel-thread-slot { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.dm-panel-thread-slot {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; position: relative;
+  padding-bottom: var(--lb-player-h, 88px);
+}
 
 .dm-panel-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
