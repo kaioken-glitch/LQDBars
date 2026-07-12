@@ -4,7 +4,7 @@ import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
 import {
   FaSearch, FaPlay, FaPause, FaRandom, FaPlus, FaListUl, FaTrash, FaTimes,
   FaYoutube, FaFolder, FaChevronDown, FaSpinner, FaExclamationTriangle,
-  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt,
+  FaLink, FaStar, FaHeart, FaMinus, FaDownload, FaShareAlt, FaMusic,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylists } from '../hooks/usePlaylists';
@@ -92,7 +92,49 @@ function formatDuration(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-/* ── CSS (unchanged) ── */
+/* ── DOMINANT COLOR EXTRACTION ──────────────────────────────────────
+   Same technique PlayerControls.jsx already uses for its accent glow
+   (canvas sample, saturation/luminance-weighted pick) — reimplemented
+   here scoped to this file since that one isn't exported. Powers the
+   "background mutates to match the art" hero treatment below.
+───────────────────────────────────────────────────────────────────── */
+const ACCENT_FALLBACK = '29, 185, 84'; // brand green — used until real color resolves
+const ACCENT_CACHE = new Map();
+
+function extractPlaylistAccentRGB(src) {
+  return new Promise((resolve) => {
+    if (!src) { resolve(null); return; }
+    if (ACCENT_CACHE.has(src)) { resolve(ACCENT_CACHE.get(src)); return; }
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      try {
+        const size = 48;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        let bestR = 0, bestG = 0, bestB = 0, bestScore = -1;
+        for (let i = 0; i < data.length; i += 16) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+          const score = sat * 1.5 + (1 - Math.abs(lum - 0.45));
+          if (score > bestScore) { bestScore = score; bestR = r; bestG = g; bestB = b; }
+        }
+        const result = `${bestR}, ${bestG}, ${bestB}`;
+        ACCENT_CACHE.set(src, result);
+        resolve(result);
+      } catch (_) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/* ── CSS ── */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
 
@@ -229,69 +271,75 @@ const CSS = `
 .pl-yt-import-btn:hover:not(:disabled) { background: #cc0000; transform: translateY(-1px); }
 .pl-yt-import-btn:active { transform: scale(.97); }
 .pl-yt-import-btn:disabled { opacity: .45; cursor: not-allowed; }
-/* ══ DETAIL VIEW ══ */
+
+/* ══ DETAIL VIEW — Apple-Music-style, art-color-mutated hero ══ */
 .pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: plFadeIn .3s var(--ease) both; }
 
-/* Blurred album art as full background */
-.pl-detail-bg { position: absolute; inset: -60px; z-index: 1; pointer-events: none; filter: blur(70px) saturate(1.5) brightness(0.3); background-size: cover; background-position: center; transform: scale(1.15); transition: background-image .6s ease; }
-.pl-detail-bg-scrim { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, rgba(5,7,9,.35) 0%, rgba(5,7,9,.6) 45%, rgba(5,7,9,.85) 100%); pointer-events: none; }
+/* Background: gradient tint derived from the playlist's dominant art
+   color instead of a blurred photo — deepens into the app's normal
+   dark base so text stays legible and it still reads as "Liquid Bars",
+   not a light-mode screenshot. */
+.pl-detail-tint {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  transition: background 0.7s ease;
+}
+.pl-detail-tint-scrim {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(7,8,10,.35) 55%, #07080A 100%);
+}
 
-/* Frosted nav */
-.pl-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: rgba(0,0,0,.2); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,.06); }
-.pl-detail-nav-title { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.38); }
-.pl-detail-nav-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
-.pl-detail-nav-btn:hover { background: rgba(255,255,255,.14); }
+/* Floating transparent nav — no bar, just pill buttons over the tint */
+.pl-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 4px; }
+.pl-detail-nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.10); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.14); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.pl-detail-nav-btn:hover { background: rgba(255,255,255,.18); }
 .pl-detail-nav-btn:active { transform: scale(.9); }
 
-/* Two-column hero on wide viewports */
-.pl-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 28px 18px; }
-@media (min-width: 560px) { .pl-detail-hero { flex-direction: row; align-items: flex-end; padding: 32px 36px 22px; } }
+/* Centered Apple-Music-style hero */
+.pl-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 4px; gap: 5px; }
 
-/* Art */
-.pl-detail-art-wrap { position: relative; flex-shrink: 0; width: 160px; height: 160px; }
-@media (min-width: 560px) { .pl-detail-art-wrap { width: 200px; height: 200px; } }
-.pl-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(18px); animation: plGlow 3.5s ease-in-out infinite; }
-@keyframes plGlow { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.07)} }
-.pl-detail-art { position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 20px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.08); }
+.pl-detail-art-wrap { position: relative; width: min(260px, 58vw); height: min(260px, 58vw); flex-shrink: 0; margin-bottom: 6px; }
+.pl-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(20px); animation: plGlow 3.5s ease-in-out infinite; }
+@keyframes plGlow { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:.9;transform:scale(1.05)} }
+.pl-detail-art { position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 22px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.08); }
 .pl-detail-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pl-detail-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg,rgba(29,185,84,.18),rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
 
-/* Meta */
-.pl-detail-meta { flex: 1; min-width: 0; }
-.pl-detail-tag { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--g); margin-bottom: 10px; }
-.pl-detail-tag-bar { width: 3px; height: 16px; border-radius: 2px; background: var(--g); }
-.pl-detail-name { font-family: 'Syne', sans-serif; font-size: clamp(26px,4.5vw,52px); font-weight: 800; letter-spacing: -.04em; color: #fff; line-height: 1.04; margin-bottom: 5px; }
-.pl-detail-count { font-size: 12px; color: var(--t3); margin-bottom: 22px; }
-.pl-detail-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.pl-detail-play { display: flex; align-items: center; gap: 9px; padding: 13px 28px; border-radius: 9999px; background: var(--g); color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 6px 28px rgba(29,185,84,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; }
-.pl-detail-play:hover { background: var(--g2); transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 36px rgba(29,185,84,.52); }
-.pl-detail-play:active { transform: scale(.96); }
-.pl-detail-icon-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.14); color: var(--t2); font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, transform .15s; }
-.pl-detail-icon-btn:hover { background: rgba(255,255,255,.16); color: #fff; transform: scale(1.06); }
+.pl-detail-name { font-family: 'Syne', sans-serif; font-size: clamp(22px,4.5vw,32px); font-weight: 800; letter-spacing: -.03em; color: #fff; line-height: 1.1; max-width: 480px; }
+.pl-detail-subtitle { font-size: 14px; color: rgba(255,255,255,.6); }
+.pl-detail-metaline { font-size: 12px; color: rgba(255,255,255,.38); margin-bottom: 4px; }
+
+.pl-detail-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; width: 100%; max-width: 340px; }
+.pl-detail-circle-btn { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.pl-detail-circle-btn:hover { background: rgba(255,255,255,.17); transform: scale(1.06); }
+.pl-detail-circle-btn:active { transform: scale(.92); }
+.pl-detail-play-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 14px 0; border-radius: 9999px; background: #fff; color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; box-shadow: 0 10px 32px rgba(0,0,0,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; }
+.pl-detail-play-pill:hover { transform: translateY(-1px) scale(1.015); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
+.pl-detail-play-pill:active { transform: scale(.97); }
+.pl-detail-play-pill.playing { background: var(--g); color: #000; }
 
 /* Divider */
-.pl-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 0 28px 2px; flex-shrink: 0; }
+.pl-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 24px 24px 2px; flex-shrink: 0; }
 
 /* Track list */
 .pl-tracks { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-tracks::-webkit-scrollbar { width: 4px; }
 .pl-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
 .pl-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 14px 12px 12px; }
-.pl-track-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .14s, border-color .14s; }
-.pl-track-row:hover { background: var(--s2); border-color: var(--b1); }
-.pl-track-row.active { background: rgba(29,185,84,.09); border-color: rgba(29,185,84,.2); }
-.pl-track-num { width: 24px; text-align: center; font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pl-track-row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.05); transition: background .14s; }
+.pl-track-row:last-child { border-bottom: none; }
+.pl-track-row:hover { background: var(--s2); }
+.pl-track-row.active { background: rgba(29,185,84,.09); }
+.pl-track-num { width: 22px; text-align: center; font-size: 13px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .pl-track-row.active .pl-track-num { color: var(--g); }
 .pl-track-thumb { width: 40px; height: 40px; border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
 .pl-track-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pl-track-meta { flex: 1; min-width: 0; }
-.pl-track-name { font-size: 13px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; transition: color .14s; }
+.pl-track-name { font-size: 13.5px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; transition: color .14s; }
 .pl-track-row:hover .pl-track-name, .pl-track-row.active .pl-track-name { color: var(--g); }
 .pl-track-artist { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .pl-tracks-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 10px; color: var(--t3); font-size: 14px; text-align: center; }
-.pl-track-row:hover .pl-track-actions { opacity: 1 !important; }
-.pl-track-row.active .pl-track-actions { opacity: 1 !important; }
+.pl-track-row .pl-track-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 /* ── Playlist detail DotsMenu dropdown ── */
 .pl-dots-wrap { position: relative; }
@@ -324,103 +372,17 @@ const CSS = `
   background: transparent;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  color: rgba(255,80,80,0.0);
+  color: rgba(255,80,80,0.6);
   transition: color 0.15s, background 0.15s;
   flex-shrink: 0;
-}
-.pl-track-row:hover .pl-track-remove {
-  color: rgba(255,80,80,0.6);
 }
 .pl-track-remove:hover {
   background: rgba(255,50,50,0.12) !important;
   color: #ff6666 !important;
 }
-
-
-/* ── Mood trigger card ── */
-.pl-mood-card {
-  position: relative; overflow: hidden;
-  border-radius: 18px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.10);
-  transition: transform .24s cubic-bezier(0.22,1,0.36,1), box-shadow .22s ease, border-color .22s ease;
-  animation: plUp .38s cubic-bezier(0.22,1,0.36,1) both;
-  background: linear-gradient(135deg, #0d0d1a 0%, #0a0f0a 100%);
-}
-.pl-mood-card:hover {
-  transform: translateY(-6px) scale(1.025);
-  border-color: rgba(255,255,255,0.22);
-  box-shadow: 0 24px 56px rgba(0,0,0,.6);
-}
-.pl-mood-card:active { transform: scale(0.97); }
-
-.pl-mood-card-bg {
-  position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background: linear-gradient(135deg,
-    rgba(29,185,84,0.12) 0%,
-    rgba(100,180,255,0.06) 50%,
-    rgba(200,100,255,0.08) 100%);
-  transition: opacity 0.3s;
-}
-.pl-mood-card:hover .pl-mood-card-bg { opacity: 1.4; }
-
-.pl-mood-card-art {
-  position: relative; width: 100%; padding-top: 100%; z-index: 1;
-  display: flex; align-items: center; justify-content: center;
-}
-.pl-mood-card-emojis {
-  position: absolute; inset: 0; z-index: 1;
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 0; padding: 16px;
-  align-items: center; justify-items: center;
-  font-size: 28px; line-height: 1;
-}
-.pl-mood-card-emojis span { display: block; }
-.pl-mood-card-emojis span:nth-child(1) { animation: mpEmojiFloat 3.0s ease-in-out infinite 0.0s; }
-.pl-mood-card-emojis span:nth-child(2) { animation: mpEmojiFloat 3.0s ease-in-out infinite 0.4s; }
-.pl-mood-card-emojis span:nth-child(3) { animation: mpEmojiFloat 3.0s ease-in-out infinite 0.8s; }
-.pl-mood-card-emojis span:nth-child(4) { animation: mpEmojiFloat 3.0s ease-in-out infinite 1.2s; }
-@keyframes mpEmojiFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-
-.pl-mood-card-overlay {
-  position: absolute; inset: 0; z-index: 2;
-  background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%);
-  display: flex; align-items: flex-end;
-}
-.pl-mood-card-play {
-  position: absolute; bottom: 10px; right: 10px; z-index: 3;
-  width: 40px; height: 40px; border-radius: 50%;
-  background: #fff; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: #000; font-size: 13px;
-  opacity: 0; transform: translateY(6px) scale(0.88);
-  transition: opacity 0.2s, transform 0.2s;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-}
-.pl-mood-card:hover .pl-mood-card-play {
-  opacity: 1; transform: translateY(0) scale(1);
-}
-.pl-mood-card-info { padding: 12px 14px 14px; position: relative; z-index: 1; }
-.pl-mood-card-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px; border-radius: 9999px;
-  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
-  text-transform: uppercase; color: rgba(255,255,255,0.6);
-  margin-bottom: 5px;
-}
-.pl-mood-card-badge-dot {
-  width: 5px; height: 5px; border-radius: 50%; background: #fff; opacity: 0.7;
-  animation: mpBadgePulse 2s ease-in-out infinite;
-}
-@keyframes mpBadgePulse { 0%,100%{opacity:0.7} 50%{opacity:1} }
-.pl-mood-card-name {
-  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
-  color: #fff; letter-spacing: -0.01em; margin-bottom: 2px;
-}
-.pl-mood-card-sub { font-size: 11px; color: rgba(255,255,255,0.4); }
-
-}
 `;
+
+const FB = 'https://placehold.co/200x200/061408/112208?text=\u266a';
 
 /* ── PLAYLIST CARD ── */
 const PlaylistCard = memo(({ pl, onOpen, onPlay, onDelete }) => {
@@ -703,25 +665,77 @@ const PlaylistDotsMenu = memo(({ playlist }) => {
   );
 });
 
-/* ── DETAIL VIEW COMPONENT ── */
+/* ── DETAIL VIEW COMPONENT — Apple-Music-style hero ── */
 function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuffle, onRemove, mockStates, onMockUpdate }) {
-  const bgSrc = selected.songs?.find(s => s.cover)?.cover || '';
   const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
+  const isYT = selected.source === 'youtube';
+
+  // The hooks used elsewhere in this file (usePlaylists, useToast) are
+  // available here too — no new props needed to wire the quick
+  // "add all to Library" hero button.
+  const { addToLibrary } = usePlaylists();
+  const { show: showToast } = useToast();
+
+  const [accentRGB, setAccentRGB] = useState(ACCENT_FALLBACK);
+  const coverSrc = selected.songs?.find(s => s.cover)?.cover || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!coverSrc) { setAccentRGB(ACCENT_FALLBACK); return; }
+    extractPlaylistAccentRGB(coverSrc).then(rgb => {
+      if (!cancelled && rgb) setAccentRGB(rgb);
+    });
+    return () => { cancelled = true; };
+  }, [coverSrc]);
+
+  const totalSeconds = useMemo(() => {
+    return (selected.songs || []).reduce((sum, s) => {
+      const raw = s.durationSeconds ?? null;
+      if (raw != null) return sum + raw;
+      const parts = String(s.formattedDuration || s.duration || '').split(':').map(Number);
+      if (parts.length === 2 && !parts.some(Number.isNaN)) return sum + parts[0] * 60 + parts[1];
+      return sum;
+    }, 0);
+  }, [selected.songs]);
+
+  const durationLabel = useMemo(() => {
+    if (!totalSeconds) return null;
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.round((totalSeconds % 3600) / 60);
+    return h > 0 ? `${h} hr ${m} min` : `${m} min`;
+  }, [totalSeconds]);
+
+  const handleQuickAddAll = useCallback(() => {
+    const songs = selected.songs || [];
+    if (!songs.length) { showToast('Playlist is empty', 'info'); return; }
+    let added = 0;
+    songs.forEach(s => { if (addToLibrary(s) !== false) added++; });
+    showToast(
+      added === 0 ? 'Already in Library' : `${added} song${added !== 1 ? 's' : ''} added to Library ✓`,
+      added === 0 ? 'info' : 'success'
+    );
+  }, [selected.songs, addToLibrary, showToast]);
 
   return (
     <div className="pl-detail" style={{ zIndex: 50 }}>
 
-        {/* Blurred art background */}
-        <div className="pl-detail-bg"
-          style={{ backgroundImage: bgSrc ? `url(${bgSrc})` : 'none', backgroundColor: '#0d1a12' }} />
-        <div className="pl-detail-bg-scrim" />
+        {/* Art-derived color tint — replaces the old blurred-photo background */}
+        <div
+          className="pl-detail-tint"
+          style={{
+            background: `
+              radial-gradient(ellipse 70% 42% at 50% 0%, rgba(${accentRGB},0.38) 0%, transparent 62%),
+              linear-gradient(180deg, rgba(${accentRGB},0.30) 0%, rgba(${accentRGB},0.10) 32%, #07080A 76%)
+            `,
+          }}
+        />
+        <div className="pl-detail-tint-scrim" />
 
-        {/* Nav */}
+        {/* Floating nav */}
         <div className="pl-detail-nav">
           <button className="pl-detail-nav-btn" onClick={onClose}>
             <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
           </button>
-          <span className="pl-detail-nav-title">Playlist</span>
           <PlaylistDotsMenu playlist={selected} />
         </div>
 
@@ -738,29 +752,28 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
             </div>
           </div>
 
-          <div className="pl-detail-meta">
-            <div className="pl-detail-tag">
-              <span className="pl-detail-tag-bar" />
-              {selected.source === 'youtube' ? 'YouTube Playlist' : 'Playlist'}
-            </div>
-            <h1 className="pl-detail-name">{selected.name}</h1>
-            <p className="pl-detail-count">{(selected.songs || []).length} songs</p>
+          <h1 className="pl-detail-name">{selected.name}</h1>
+          <p className="pl-detail-subtitle">{isYT ? 'YouTube Playlist' : 'Playlist'}</p>
+          <p className="pl-detail-metaline">
+            {(selected.songs || []).length} songs{durationLabel ? ` · ${durationLabel}` : ''}
+          </p>
+
+          {(selected.songs || []).length > 0 && (
             <div className="pl-detail-actions">
-              {(selected.songs || []).length > 0 && (
-                <>
-                  <button className="pl-detail-play" onClick={() => onPlay(selected.songs)}>
-                    {isActivePlaylist && isPlaying
-                      ? <><FaPause style={{ fontSize: 12 }} /> Pause</>
-                      : <><FaPlay  style={{ fontSize: 12, marginLeft: 1 }} /> Play all</>
-                    }
-                  </button>
-                  <button className="pl-detail-icon-btn" onClick={() => onShuffle(selected.songs)} title="Shuffle">
-                    <FaRandom />
-                  </button>
-                </>
-              )}
+              <button className="pl-detail-circle-btn" onClick={() => onShuffle(selected.songs)} title="Shuffle" aria-label="Shuffle play">
+                <FaRandom />
+              </button>
+              <button className={`pl-detail-play-pill${isActivePlaylist && isPlaying ? ' playing' : ''}`} onClick={() => onPlay(selected.songs)}>
+                {isActivePlaylist && isPlaying
+                  ? <><FaPause style={{ fontSize: 13 }} /> Pause</>
+                  : <><FaPlay  style={{ fontSize: 13, marginLeft: 1 }} /> Play</>
+                }
+              </button>
+              <button className="pl-detail-circle-btn" onClick={handleQuickAddAll} title="Add all to Library" aria-label="Add all to Library">
+                <FaDownload style={{ fontSize: 14 }} />
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="pl-detail-divider" />
@@ -791,7 +804,7 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
                     <span className="pl-track-num">
                       {isActive && isPlaying
                         ? <span style={{ color: 'var(--g)' }}>♫</span>
-                        : <span>{String(i + 1).padStart(2, '0')}</span>
+                        : <span>{i + 1}</span>
                       }
                     </span>
                     <div className="pl-track-thumb">
@@ -803,19 +816,19 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
                       <div className="pl-track-artist">{song.artist || 'Unknown'}</div>
                     </div>
                     <span className="pl-track-dur">{song.formattedDuration || song.duration || ''}</span>
-                    <div className="pl-track-actions" style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0 }}>
+                    <div className="pl-track-actions" onClick={e => e.stopPropagation()}>
                       <button
                         style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
-                        onClick={e => { e.stopPropagation(); onMockUpdate(songId, { favorite: !isFav }); }}>
+                        onClick={() => onMockUpdate(songId, { favorite: !isFav })}>
                         <FaStar style={{ fontSize: 11, color: isFav ? '#facc15' : 'rgba(255,255,255,.28)' }} />
                       </button>
                       <button
                         style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', background:'transparent' }}
-                        onClick={e => { e.stopPropagation(); onMockUpdate(songId, { liked: !isLiked }); }}>
+                        onClick={() => onMockUpdate(songId, { liked: !isLiked })}>
                         <FaHeart style={{ fontSize: 11, color: isLiked ? '#ef4444' : 'rgba(255,255,255,.28)' }} />
                       </button>
                       <button className="pl-track-remove"
-                        onClick={e => { e.stopPropagation(); onRemove(selected.id, songId); }}
+                        onClick={() => onRemove(selected.id, songId)}
                         title="Remove">
                         <FaMinus style={{ fontSize: 9 }} />
                       </button>
