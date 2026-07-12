@@ -12,7 +12,7 @@ import { useConversations } from '../../hooks/useConversations';
 import { useMessages } from '../../hooks/useMessages';
 import { useDMTarget, clearDMTarget } from '../../hooks/dmNavigationStore';
 import ConversationList from './ConversationList';
-import ProfileBanner from './ProfileBanner';
+import ProfileBanner from './Profilebanner';
 import MessageThread from './MessageThread';
 import Composer from './Composer';
 
