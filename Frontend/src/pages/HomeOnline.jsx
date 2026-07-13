@@ -4,7 +4,7 @@ import { usePlaylists, LIBRARY_PLAYLIST_ID } from '../hooks/usePlaylists';
 import { useToast } from '../components/Toast';
 import {
   FaSearch, FaStar, FaHeart, FaPlay, FaRandom, FaPause,
-  FaPlus, FaDownload, FaShareAlt, FaListUl, FaChevronRight,
+  FaPlus, FaDownload, FaShareAlt, FaListUl, FaChevronRight, FaTimes,
 } from 'react-icons/fa';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -285,7 +285,16 @@ const STYLES = `
   .ho-root ::-webkit-scrollbar-track { background: transparent; }
   .ho-root ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
 
-  /* ── Header row: big bold greeting + own-avatar button, Apple-Music-Home style ── */
+  /* ── Single scroll region for the entire page (hero → shelves) ── */
+  .ho-scroll-all {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 100px;
+    -ms-overflow-style: none;
+  }
+
+  /* ── Header row: big bold greeting + search icon + own-avatar, Apple-Music-Home style ── */
   .ho-hero {
     padding: 30px 28px 8px;
     display: flex;
@@ -309,6 +318,25 @@ const STYLES = `
     color: rgba(255,255,255,0.38);
     font-weight: 400;
   }
+  .ho-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  .ho-search-icon-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.55);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
+    flex-shrink: 0;
+  }
+  .ho-search-icon-btn:hover { background: rgba(255,255,255,0.12); color: #fff; transform: scale(1.05); }
   .ho-avatar-btn {
     flex-shrink: 0;
     width: 44px; height: 44px;
@@ -317,7 +345,6 @@ const STYLES = `
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.14);
     display: flex; align-items: center; justify-content: center;
-    margin-top: 4px;
     color: rgba(255,255,255,0.4);
     font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px;
   }
@@ -368,43 +395,43 @@ const STYLES = `
   }
   .ho-hero-card.loading { background: rgba(255,255,255,0.04); cursor: default; }
 
-  /* ── Search bar ── */
-  .ho-search-wrap {
-    padding: 0 28px 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  /* ── Search overlay — full-screen, opened from the icon button ── */
+  .ho-search-overlay {
+    position: fixed; inset: 0; z-index: 300;
+    background: rgba(5,6,8,0.94);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    display: flex; flex-direction: column;
+    animation: ho-fadeup 0.16s ease both;
+  }
+  .ho-search-overlay-top {
     flex-shrink: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
   }
-  .ho-search-box {
-    position: relative;
+  .ho-search-overlay-input {
     flex: 1;
-    max-width: 400px;
-  }
-  .ho-search-input {
-    width: 100%;
-    padding: 10px 16px 10px 40px;
-    border-radius: 12px;
-    font-size: 14px;
-    color: var(--lb-text-1);
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.09);
-    transition: border-color 0.2s, background 0.2s;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-size: 17px;
     font-family: 'DM Sans', sans-serif;
   }
-  .ho-search-input:focus {
-    outline: none;
-    border-color: rgba(29,185,84,0.5);
-    background: rgba(255,255,255,0.09);
-    box-shadow: 0 0 0 3px rgba(29,185,84,0.10);
+  .ho-search-overlay-input::placeholder { color: rgba(255,255,255,0.32); }
+  .ho-search-overlay-close {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(255,255,255,0.08); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.6); flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
   }
-  .ho-search-icon {
-    position: absolute;
-    left: 13px; top: 50%;
-    transform: translateY(-50%);
-    color: rgba(255,255,255,0.3);
-    font-size: 13px;
-    pointer-events: none;
+  .ho-search-overlay-close:hover { background: rgba(255,255,255,0.14); color: #fff; }
+  .ho-search-overlay-body { flex: 1; overflow-y: auto; padding: 8px; }
+  .ho-search-overlay-empty {
+    text-align: center; padding: 60px 20px;
+    color: rgba(255,255,255,0.3); font-size: 13px;
   }
 
   /* ── Genre chips ── */
@@ -694,7 +721,7 @@ const STYLES = `
     100% { background-position:  400px 0; }
   }
 
-  /* ── Search dropdown ── */
+  /* ── Search dropdown (reused for overlay result rows) ── */
   .ho-dropdown {
     background: #141416;
     border: 1px solid rgba(255,255,255,0.10);
@@ -706,6 +733,7 @@ const STYLES = `
     padding: 10px 16px;
     display: flex; align-items: center; gap: 12px;
     cursor: pointer; transition: background 0.15s;
+    border-radius: 12px;
   }
   .ho-search-row:hover { background: rgba(255,255,255,0.06); }
 
@@ -1171,7 +1199,8 @@ export default function HomeOnline() {
   const [loading,         setLoading]         = useState(true);
   const [errorMsg,        setErrorMsg]        = useState(null);
   const [detailBg,        setDetailBg]        = useState('#1a1a1a');
-  const [searchFocused,   setSearchFocused]   = useState(false);
+  // Search now lives in a full-screen overlay instead of an inline bar.
+  const [searchOpen,      setSearchOpen]      = useState(false);
   const [suggestionsVisible, setSuggestionsVisible] = useState(() => {
     if (typeof window === 'undefined') return true;
     return getSuggestionsVisibility(window.localStorage).isVisible;
@@ -1524,8 +1553,6 @@ export default function HomeOnline() {
       .finally(() => setForYouLoading(false));
   }, [user?.id]); // eslint-disable-line
 
-  const showDropdown = searchFocused && query.trim() && (localResults.length > 0 || ytResults.length > 0 || ytSearching);
-
   // The downloaded list to show — always from downloadedSongs, never the queue
   const dlSongs = (downloadedSongs && downloadedSongs.length > 0) ? downloadedSongs : songs.filter(s => !s.youtube);
 
@@ -1574,6 +1601,11 @@ export default function HomeOnline() {
 
     return cards;
   }, [moodSlot, moodLoading, moodSongs, moodTitle, forYouLoading, forYou, sections, openDetail, playStreamingSong]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setQuery('');
+  }, []);
 
   /* ─────────────────────────────────────────────────────────────────────
      DETAIL VIEW (Downloaded / future album tiles)
@@ -1672,6 +1704,97 @@ export default function HomeOnline() {
   };
 
   /* ─────────────────────────────────────────────────────────────────────
+     SEARCH OVERLAY — full-screen, opened via the header icon button.
+     Reuses the same query/localResults/ytResults state the old inline
+     search bar used, so behavior is identical — only presentation moved.
+  ───────────────────────────────────────────────────────── */
+  const renderSearchOverlay = () => {
+    if (!searchOpen) return null;
+    const hasAnyResults = localResults.length > 0 || ytResults.length > 0 || ytSearching;
+
+    return (
+      <div className="ho-search-overlay">
+        <div className="ho-search-overlay-top">
+          <FaSearch style={{ color: 'rgba(255,255,255,.4)', fontSize: 14, flexShrink: 0 }} />
+          <input
+            autoFocus
+            className="ho-search-overlay-input"
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Artists, songs, albums…"
+          />
+          <button className="ho-search-overlay-close" onClick={closeSearch} aria-label="Close search">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="ho-search-overlay-body">
+          {!query.trim() && (
+            <div className="ho-search-overlay-empty">
+              Start typing to search your library and YouTube.
+            </div>
+          )}
+
+          {localResults.length > 0 && (
+            <>
+              <div style={{ padding:'8px 16px 4px', fontSize:11, fontWeight:700, color:'rgba(255,255,255,.35)', letterSpacing:'.1em', textTransform:'uppercase' }}>Library</div>
+              {localResults.slice(0,8).map((song,i) => (
+                <div key={song.id??i} className="ho-search-row" onClick={() => {
+                  // Play from the downloaded list, not the current queue
+                  const baseList = (downloadedSongs?.length>0) ? downloadedSongs : songs;
+                  const idx = baseList.findIndex(s => s.id === song.id);
+                  if (idx !== -1) {
+                    setPlayerSongs(baseList, idx);
+                    setTimeout(() => setIsPlaying(true), 50);
+                  }
+                  closeSearch();
+                }}>
+                  <img src={song.cover} alt={song.name} style={{ width:44, height:44, borderRadius:8, objectFit:'cover', flexShrink:0 }}
+                    onError={e => { e.target.src='/default-cover.png'; }} />
+                  <div style={{ minWidth:0 }}>
+                    <p style={{ fontSize:14, fontWeight:600, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{song.name}</p>
+                    <p style={{ fontSize:12, color:'rgba(255,255,255,.4)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{song.artist}</p>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {ytSearching && (
+            <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:10, color:'rgba(255,255,255,.5)', fontSize:13 }}>
+              <div style={{ width:16, height:16, borderRadius:'50%', border:'2px solid rgba(255,255,255,.15)', borderTopColor:'var(--lb-green)', animation:'ho-spin .7s linear infinite' }} />
+              Searching YouTube…
+            </div>
+          )}
+
+          {ytResults.length > 0 && (
+            <>
+              <div style={{ padding:'8px 16px 4px', display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:700, color:'rgba(255,255,255,.35)', letterSpacing:'.1em', textTransform:'uppercase' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#FF4444"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                YouTube
+              </div>
+              {ytResults.slice(0,8).map(v => (
+                <div key={v.id} className="ho-search-row" onClick={() => { playYoutubeVideo(v, v.id); closeSearch(); }}>
+                  <img src={v.thumbnail} alt={v.title} style={{ width:44, height:44, borderRadius:8, objectFit:'cover', flexShrink:0 }} />
+                  <div style={{ minWidth:0 }}>
+                    <p style={{ fontSize:14, fontWeight:600, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.title}</p>
+                    <p style={{ fontSize:12, color:'rgba(255,255,255,.4)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.channel}</p>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {query.trim() && !hasAnyResults && (
+            <div className="ho-search-overlay-empty">No results found.</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /* ─────────────────────────────────────────────────────────────────────
      MAIN HOME RENDER
   ───────────────────────────────────────────────────────── */
   return (
@@ -1681,8 +1804,12 @@ export default function HomeOnline() {
         {loading && songs.length === 0 && <Loader />}
 
         {showDetail ? renderDetail() : (
-          <>
-            {/* ── HEADER: big bold greeting + own-avatar, Apple-Music-Home style ── */}
+          /* Single scroll region — greeting, hero cards, chips, and every
+             shelf below now scroll together as one page instead of the
+             header staying pinned above a separately-scrolling body. */
+          <div className="ho-scroll-all">
+
+            {/* ── HEADER: big bold greeting + search icon + own-avatar ── */}
             <div className="ho-hero">
               <div className="ho-hero-text">
                 <h1 className="ho-greeting">
@@ -1690,10 +1817,19 @@ export default function HomeOnline() {
                 </h1>
                 <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
               </div>
-              <div className="ho-avatar-btn" aria-hidden="true">
-                {authProfile?.avatar_url
-                  ? <img src={authProfile.avatar_url} alt="" onError={e => { e.target.style.display = 'none'; }} />
-                  : avatarInitial}
+              <div className="ho-hero-actions">
+                <button
+                  className="ho-search-icon-btn"
+                  onClick={() => setSearchOpen(true)}
+                  aria-label="Search"
+                >
+                  <FaSearch style={{ fontSize: 15 }} />
+                </button>
+                <div className="ho-avatar-btn" aria-hidden="true">
+                  {authProfile?.avatar_url
+                    ? <img src={authProfile.avatar_url} alt="" onError={e => { e.target.style.display = 'none'; }} />
+                    : avatarInitial}
+                </div>
               </div>
             </div>
 
@@ -1714,72 +1850,6 @@ export default function HomeOnline() {
               </div>
             )}
 
-            {/* ── SEARCH + GENRE CHIPS ── */}
-            <div className="ho-search-wrap">
-              <div className="ho-search-box" style={{ position:'relative' }}>
-                <FaSearch className="ho-search-icon" />
-                <input
-                  className="ho-search-input"
-                  type="text"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onFocus={() => setSearchFocused(true)}
-                  onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-                  placeholder="Artists, songs, albums…"
-                />
-                {showDropdown && (
-                  <div className="ho-dropdown" style={{ position:'absolute', top:'calc(100% + 8px)', left:0, right:0, zIndex:100 }}>
-                    {localResults.length > 0 && (
-                      <>
-                        <div style={{ padding:'8px 16px 4px', fontSize:11, fontWeight:700, color:'var(--lb-text-3)', letterSpacing:'.1em', textTransform:'uppercase' }}>Library</div>
-                        {localResults.slice(0,4).map((song,i) => (
-                          <div key={song.id??i} className="ho-search-row" onClick={() => {
-                            setQuery(song.name);
-                            // Play from the downloaded list, not the current queue
-                            const baseList = (downloadedSongs?.length>0) ? downloadedSongs : songs;
-                            const idx = baseList.findIndex(s => s.id === song.id);
-                            if (idx !== -1) {
-                              setPlayerSongs(baseList, idx);
-                              setTimeout(() => setIsPlaying(true), 50);
-                            }
-                          }}>
-                            <img src={song.cover} alt={song.name} style={{ width:38, height:38, borderRadius:7, objectFit:'cover', flexShrink:0 }} />
-                            <div style={{ minWidth:0 }}>
-                              <p style={{ fontSize:14, fontWeight:600, color:'var(--lb-text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{song.name}</p>
-                              <p style={{ fontSize:12, color:'var(--lb-text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{song.artist}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                    {ytSearching && (
-                      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:10, color:'var(--lb-text-2)', fontSize:13 }}>
-                        <div style={{ width:16, height:16, borderRadius:'50%', border:'2px solid rgba(255,255,255,.15)', borderTopColor:'var(--lb-green)', animation:'ho-spin .7s linear infinite' }} />
-                        Searching YouTube…
-                      </div>
-                    )}
-                    {ytResults.length > 0 && (
-                      <>
-                        <div style={{ padding:'8px 16px 4px', display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:700, color:'var(--lb-text-3)', letterSpacing:'.1em', textTransform:'uppercase' }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="#FF4444"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                          YouTube
-                        </div>
-                        {ytResults.slice(0,5).map(v => (
-                          <div key={v.id} className="ho-search-row" onClick={() => { setQuery(''); playYoutubeVideo(v, v.id); }}>
-                            <img src={v.thumbnail} alt={v.title} style={{ width:38, height:38, borderRadius:7, objectFit:'cover', flexShrink:0 }} />
-                            <div style={{ minWidth:0 }}>
-                              <p style={{ fontSize:14, fontWeight:600, color:'var(--lb-text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.title}</p>
-                              <p style={{ fontSize:12, color:'var(--lb-text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.channel}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* ── GENRE CHIPS ── */}
             <div className="ho-chips-row">
               {GENRES.map(g => (
@@ -1795,277 +1865,276 @@ export default function HomeOnline() {
               </div>
             )}
 
-            {/* ── SCROLLABLE CONTENT ── */}
-            <div style={{ flex:1, overflowY:'auto', paddingBottom:100 }}>
-
-              {/* ── PEOPLE TO FOLLOW ── */}
-              {suggestionsVisible ? (
-                <PeopleRow
-                  people={suggested}
-                  loading={loadingSuggested}
-                  isFollowing={isFollowing}
-                  onToggleFollow={toggleFollow}
-                  onOpenProfile={(person) => setOpenProfileId(person.id)}
-                  onDismiss={() => {
-                    setSuggestionsVisible(false);
-                    const nextState = setSuggestionsVisibility(false, window.localStorage);
-                    setSuggestionsDisabledUntil(nextState.disabledUntil);
+            {/* ── PEOPLE TO FOLLOW ── */}
+            {suggestionsVisible ? (
+              <PeopleRow
+                people={suggested}
+                loading={loadingSuggested}
+                isFollowing={isFollowing}
+                onToggleFollow={toggleFollow}
+                onOpenProfile={(person) => setOpenProfileId(person.id)}
+                onDismiss={() => {
+                  setSuggestionsVisible(false);
+                  const nextState = setSuggestionsVisibility(false, window.localStorage);
+                  setSuggestionsDisabledUntil(nextState.disabledUntil);
+                }}
+                onToggleVisibility={() => {
+                  const nextState = setSuggestionsVisibility(!suggestionsVisible, window.localStorage);
+                  setSuggestionsVisible(nextState.isVisible);
+                  setSuggestionsDisabledUntil(nextState.disabledUntil);
+                }}
+                visible={suggestionsVisible}
+                disabledUntil={suggestionsDisabledUntil}
+              />
+            ) : (
+              showCompactTransient && (
+                <section
+                  style={{
+                    marginBottom: 12,
+                    padding: isMobileViewport ? '8px 12px' : '10px 14px',
+                    borderRadius: 12,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    margin: '0 28px 12px',
                   }}
-                  onToggleVisibility={() => {
-                    const nextState = setSuggestionsVisibility(!suggestionsVisible, window.localStorage);
-                    setSuggestionsVisible(nextState.isVisible);
-                    setSuggestionsDisabledUntil(nextState.disabledUntil);
-                  }}
-                  visible={suggestionsVisible}
-                  disabledUntil={suggestionsDisabledUntil}
-                />
-              ) : (
-                showCompactTransient && (
-                  <section
-                    style={{
-                      marginBottom: 12,
-                      padding: isMobileViewport ? '8px 12px' : '10px 14px',
-                      borderRadius: 12,
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 8, background: 'var(--lb-green, #1DB954)', flexShrink: 0 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '.12em' }}>Suggestions</div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>Hidden for a short cooldown. Bring them back anytime.</div>
-                      </div>
+                >
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 8, background: 'var(--lb-green, #1DB954)', flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '.12em' }}>Suggestions</div>
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>Hidden for a short cooldown. Bring them back anytime.</div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextState = setSuggestionsVisibility(true, window.localStorage);
-                          setSuggestionsVisible(nextState.isVisible);
-                          setSuggestionsDisabledUntil(nextState.disabledUntil);
-                        }}
-                        style={{ padding: '6px 10px', borderRadius: 999, background: 'var(--lb-green, #1DB954)', color: '#000', fontWeight: 700, border: 'none', fontSize: 13 }}
-                      >
-                        Show
-                      </button>
-                    </div>
-                  </section>
-                )
-              )}
-
-              {/* ── FOR YOU shelf — personalised recommendations ── */}
-              {(forYou.length > 0 || forYouLoading) && (
-                <section style={{ marginBottom:32 }}>
-                  <div className="ho-section-head">
-                    <div className="ho-section-title">
-                      <span className="ho-section-dot" />
-                      <span className="ho-section-name">For You</span>
-                    </div>
-                    <span style={{ fontSize:11, color:'rgba(255,255,255,0.35)' }}>
-                      Based on your taste
-                    </span>
                   </div>
-                  <div className="ho-shelf">
-                    {forYouLoading
-                      ? Array.from({ length: 6 }).map((_,i) => (
-                          <div key={i} className="ho-shimmer-card">
-                            <div className="ho-shimmer" style={{ height:160, borderRadius:15 }} />
-                            <div style={{ padding:'8px 0 0' }}>
-                              <div className="ho-shimmer" style={{ height:11, width:'80%', borderRadius:6 }} />
-                            </div>
-                          </div>
-                        ))
-                      : forYou.map(item => {
-                          const isActive = currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId;
-                          return (
-                            <SongCard
-                              key={item.id}
-                              item={item}
-                              isActive={isActive}
-                              isPlaying={isPlaying}
-                              onPlay={() => playStreamingSong(item)}
-                              loadingId={loadingId}
-                            />
-                          );
-                        })
-                    }
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextState = setSuggestionsVisibility(true, window.localStorage);
+                        setSuggestionsVisible(nextState.isVisible);
+                        setSuggestionsDisabledUntil(nextState.disabledUntil);
+                      }}
+                      style={{ padding: '6px 10px', borderRadius: 999, background: 'var(--lb-green, #1DB954)', color: '#000', fontWeight: 700, border: 'none', fontSize: 13 }}
+                    >
+                      Show
+                    </button>
                   </div>
                 </section>
-              )}
+              )
+            )}
 
-              {/* Dynamic sections — horizontal shelves */}
-              {sections.map(sec => (
-                <section key={sec.id} style={{ marginBottom:32 }}>
-                  <div className="ho-section-head">
-                    <div className="ho-section-title">
-                      <span className="ho-section-dot" />
-                      <h2>{sec.title}</h2>
-                      {sec.badge === 'NEW'  && <span className="ho-badge-new">{sec.badge}</span>}
-                      {sec.badge === 'HOT'  && <span className="ho-badge-hot">{sec.badge}</span>}
-                      {sec.badge && !['NEW','HOT'].includes(sec.badge) && <span style={{ fontSize:14 }}>{sec.badge}</span>}
-                      {!sec.loading && sec.items.length > 0 && (
-                        <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{sec.items.length}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {sec.loading
-                    ? <ShimmerShelf count={6} />
-                    : sec.items.length === 0
-                    ? null
-                    : (
-                      <div className="ho-shelf">
-                        {sec.items.map(item => (
-                          <SongCard
-                            key={item.id}
-                            item={item}
-                            isActive={isCardActive(item)}
-                            isPlaying={isPlaying}
-                            loadingId={loadingId}
-                            onPlay={() => playStreamingSong(item)}
-                          />
-                        ))}
-                      </div>
-                    )
-                  }
-                </section>
-              ))}
-
-              {/* ── DOWNLOADED SECTION ── */}
+            {/* ── FOR YOU shelf — personalised recommendations ── */}
+            {(forYou.length > 0 || forYouLoading) && (
               <section style={{ marginBottom:32 }}>
                 <div className="ho-section-head">
                   <div className="ho-section-title">
-                    <span className="ho-section-dot" style={{ background:'rgba(29,185,84,0.6)' }} />
-                    <h2>Downloaded</h2>
-                    {dlSongs.length > 0 && (
-                      <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{dlSongs.length}</span>
+                    <span className="ho-section-dot" />
+                    <span className="ho-section-name">For You</span>
+                  </div>
+                  <span style={{ fontSize:11, color:'rgba(255,255,255,0.35)' }}>
+                    Based on your taste
+                  </span>
+                </div>
+                <div className="ho-shelf">
+                  {forYouLoading
+                    ? Array.from({ length: 6 }).map((_,i) => (
+                        <div key={i} className="ho-shimmer-card">
+                          <div className="ho-shimmer" style={{ height:160, borderRadius:15 }} />
+                          <div style={{ padding:'8px 0 0' }}>
+                            <div className="ho-shimmer" style={{ height:11, width:'80%', borderRadius:6 }} />
+                          </div>
+                        </div>
+                      ))
+                    : forYou.map(item => {
+                        const isActive = currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId;
+                        return (
+                          <SongCard
+                            key={item.id}
+                            item={item}
+                            isActive={isActive}
+                            isPlaying={isPlaying}
+                            onPlay={() => playStreamingSong(item)}
+                            loadingId={loadingId}
+                          />
+                        );
+                      })
+                  }
+                </div>
+              </section>
+            )}
+
+            {/* Dynamic sections — horizontal shelves */}
+            {sections.map(sec => (
+              <section key={sec.id} style={{ marginBottom:32 }}>
+                <div className="ho-section-head">
+                  <div className="ho-section-title">
+                    <span className="ho-section-dot" />
+                    <h2>{sec.title}</h2>
+                    {sec.badge === 'NEW'  && <span className="ho-badge-new">{sec.badge}</span>}
+                    {sec.badge === 'HOT'  && <span className="ho-badge-hot">{sec.badge}</span>}
+                    {sec.badge && !['NEW','HOT'].includes(sec.badge) && <span style={{ fontSize:14 }}>{sec.badge}</span>}
+                    {!sec.loading && sec.items.length > 0 && (
+                      <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{sec.items.length}</span>
                     )}
                   </div>
-                  {dlSongs.length > 0 && (
-                    <button
-                      className="ho-see-all"
-                      aria-label="See all downloaded songs"
-                      onClick={() => openDetail({
-                        type:'downloaded', name:'Downloaded Songs',
-                        cover:dlSongs[0]?.cover, accent:'#1DB954',
-                        songCount:dlSongs.length, songs:dlSongs,
-                      })}
-                    >
-                      <FaChevronRight style={{ fontSize:10 }} />
-                    </button>
-                  )}
                 </div>
 
-                {dlSongs.length > 0 ? (
-                  <div className="ho-shelf">
-                    {/* Smart Radio tile — always first in the Downloaded shelf */}
-                    <RadioTile
-                      songs={dlSongs}
-                      onShowDetail={() => openDetail({ type: 'radio' })}
-                    />
+                {sec.loading
+                  ? <ShimmerShelf count={6} />
+                  : sec.items.length === 0
+                  ? null
+                  : (
+                    <div className="ho-shelf">
+                      {sec.items.map(item => (
+                        <SongCard
+                          key={item.id}
+                          item={item}
+                          isActive={isCardActive(item)}
+                          isPlaying={isPlaying}
+                          loadingId={loadingId}
+                          onPlay={() => playStreamingSong(item)}
+                        />
+                      ))}
+                    </div>
+                  )
+                }
+              </section>
+            ))}
 
-                    {/* Summary mosaic tile */}
-                    <div className="ho-dl-tile" onClick={() => openDetail({
+            {/* ── DOWNLOADED SECTION ── */}
+            <section style={{ marginBottom:32 }}>
+              <div className="ho-section-head">
+                <div className="ho-section-title">
+                  <span className="ho-section-dot" style={{ background:'rgba(29,185,84,0.6)' }} />
+                  <h2>Downloaded</h2>
+                  {dlSongs.length > 0 && (
+                    <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{dlSongs.length}</span>
+                  )}
+                </div>
+                {dlSongs.length > 0 && (
+                  <button
+                    className="ho-see-all"
+                    aria-label="See all downloaded songs"
+                    onClick={() => openDetail({
                       type:'downloaded', name:'Downloaded Songs',
                       cover:dlSongs[0]?.cover, accent:'#1DB954',
                       songCount:dlSongs.length, songs:dlSongs,
-                    })}>
+                    })}
+                  >
+                    <FaChevronRight style={{ fontSize:10 }} />
+                  </button>
+                )}
+              </div>
+
+              {dlSongs.length > 0 ? (
+                <div className="ho-shelf">
+                  {/* Smart Radio tile — always first in the Downloaded shelf */}
+                  <RadioTile
+                    songs={dlSongs}
+                    onShowDetail={() => openDetail({ type: 'radio' })}
+                  />
+
+                  {/* Summary mosaic tile */}
+                  <div className="ho-dl-tile" onClick={() => openDetail({
+                    type:'downloaded', name:'Downloaded Songs',
+                    cover:dlSongs[0]?.cover, accent:'#1DB954',
+                    songCount:dlSongs.length, songs:dlSongs,
+                  })}>
+                    <div className="ho-dl-mosaic">
+                      {[0,1,2,3].map(i => (
+                        <img key={i}
+                          src={dlSongs[i]?.cover ?? dlSongs[0]?.cover ?? '/default-cover.png'}
+                          alt=""
+                          onError={e => { e.target.src='/default-cover.png'; }}
+                        />
+                      ))}
+                    </div>
+                    <div className="ho-dl-info">
+                      <p className="ho-dl-name">Downloaded</p>
+                      <p className="ho-dl-count">{dlSongs.length} songs</p>
+                    </div>
+                    <button className="ho-dl-play" onClick={e => {
+                      e.stopPropagation();
+                      setPlayerSongs(dlSongs, 0);
+                      setTimeout(() => setIsPlaying(true), 50);
+                    }}>
+                      <FaPlay style={{ color:'#fff', fontSize:12, marginLeft:2 }} />
+                    </button>
+                  </div>
+
+                  {/* Individual song tiles (first 8) */}
+                  {dlSongs.slice(0,8).map(song => {
+                    const isActive = activeSong?.id === song.id;
+                    return (
+                      <SongCard
+                        key={song.id}
+                        item={{ ...song, badge: null }}
+                        isActive={isActive}
+                        isPlaying={isPlaying}
+                        loadingId={loadingId}
+                        onPlay={() => {
+                          const idx = dlSongs.findIndex(s => s.id === song.id);
+                          if (idx !== -1) {
+                            setPlayerSongs(dlSongs, idx);
+                            setTimeout(() => setIsPlaying(true), 50);
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ margin:'0 28px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:16, padding:'40px 24px', textAlign:'center' }}>
+                  <FontAwesomeIcon icon={faCircleArrowDown} style={{ fontSize:28, color:'var(--lb-text-3)', marginBottom:12, display:'block', margin:'0 auto 12px' }} />
+                  <p style={{ fontSize:15, color:'var(--lb-text-2)', marginBottom:4 }}>No downloads yet</p>
+                  <p style={{ fontSize:13, color:'var(--lb-text-3)' }}>Download songs for offline listening</p>
+                </div>
+              )}
+
+              {/* ── Daypart-based mood mix card ── */}
+              {moodSlot && moodSongs.length > 0 && (
+                <div className="ho-shelf" style={{ marginBottom: 28 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--lb-green,#1DB954)', marginLeft: 2, paddingLeft: 26 }}>
+                      Mix for you
+                    </div>
+                    <div className="ho-dl-tile" onClick={() => openDetail({
+                      type:'mood', name: moodTitle,
+                      cover: moodSongs[0]?.cover, accent: '#1DB954',
+                      songCount: moodSongs.length, songs: moodSongs,
+                    })} style={{ cursor: 'pointer' }}>
                       <div className="ho-dl-mosaic">
                         {[0,1,2,3].map(i => (
                           <img key={i}
-                            src={dlSongs[i]?.cover ?? dlSongs[0]?.cover ?? '/default-cover.png'}
+                            src={moodSongs[i]?.cover ?? moodSongs[0]?.cover ?? '/default-cover.png'}
                             alt=""
                             onError={e => { e.target.src='/default-cover.png'; }}
                           />
                         ))}
                       </div>
                       <div className="ho-dl-info">
-                        <p className="ho-dl-name">Downloaded</p>
-                        <p className="ho-dl-count">{dlSongs.length} songs</p>
+                        <p className="ho-dl-name">{moodTitle}</p>
+                        <p className="ho-dl-count">{moodSongs.length} songs</p>
                       </div>
                       <button className="ho-dl-play" onClick={e => {
                         e.stopPropagation();
-                        setPlayerSongs(dlSongs, 0);
+                        setPlayerSongs(moodSongs, 0);
                         setTimeout(() => setIsPlaying(true), 50);
                       }}>
                         <FaPlay style={{ color:'#fff', fontSize:12, marginLeft:2 }} />
                       </button>
                     </div>
-
-                    {/* Individual song tiles (first 8) */}
-                    {dlSongs.slice(0,8).map(song => {
-                      const isActive = activeSong?.id === song.id;
-                      return (
-                        <SongCard
-                          key={song.id}
-                          item={{ ...song, badge: null }}
-                          isActive={isActive}
-                          isPlaying={isPlaying}
-                          loadingId={loadingId}
-                          onPlay={() => {
-                            const idx = dlSongs.findIndex(s => s.id === song.id);
-                            if (idx !== -1) {
-                              setPlayerSongs(dlSongs, idx);
-                              setTimeout(() => setIsPlaying(true), 50);
-                            }
-                          }}
-                        />
-                      );
-                    })}
                   </div>
-                ) : (
-                  <div style={{ margin:'0 28px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:16, padding:'40px 24px', textAlign:'center' }}>
-                    <FontAwesomeIcon icon={faCircleArrowDown} style={{ fontSize:28, color:'var(--lb-text-3)', marginBottom:12, display:'block', margin:'0 auto 12px' }} />
-                    <p style={{ fontSize:15, color:'var(--lb-text-2)', marginBottom:4 }}>No downloads yet</p>
-                    <p style={{ fontSize:13, color:'var(--lb-text-3)' }}>Download songs for offline listening</p>
-                  </div>
-                )}
-
-                {/* ── Daypart-based mood mix card ── */}
-                {moodSlot && moodSongs.length > 0 && (
-                  <div className="ho-shelf" style={{ marginBottom: 28 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--lb-green,#1DB954)', marginLeft: 2, paddingLeft: 26 }}>
-                        Mix for you
-                      </div>
-                      <div className="ho-dl-tile" onClick={() => openDetail({
-                        type:'mood', name: moodTitle,
-                        cover: moodSongs[0]?.cover, accent: '#1DB954',
-                        songCount: moodSongs.length, songs: moodSongs,
-                      })} style={{ cursor: 'pointer' }}>
-                        <div className="ho-dl-mosaic">
-                          {[0,1,2,3].map(i => (
-                            <img key={i}
-                              src={moodSongs[i]?.cover ?? moodSongs[0]?.cover ?? '/default-cover.png'}
-                              alt=""
-                              onError={e => { e.target.src='/default-cover.png'; }}
-                            />
-                          ))}
-                        </div>
-                        <div className="ho-dl-info">
-                          <p className="ho-dl-name">{moodTitle}</p>
-                          <p className="ho-dl-count">{moodSongs.length} songs</p>
-                        </div>
-                        <button className="ho-dl-play" onClick={e => {
-                          e.stopPropagation();
-                          setPlayerSongs(moodSongs, 0);
-                          setTimeout(() => setIsPlaying(true), 50);
-                        }}>
-                          <FaPlay style={{ color:'#fff', fontSize:12, marginLeft:2 }} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </section>
-            </div>
-          </>
+                </div>
+              )}
+            </section>
+          </div>
         )}
+
+        {renderSearchOverlay()}
 
         {openProfileId && (
           <ProfileDetailView
