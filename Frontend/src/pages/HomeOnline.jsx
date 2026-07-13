@@ -285,19 +285,22 @@ const STYLES = `
   .ho-root ::-webkit-scrollbar-track { background: transparent; }
   .ho-root ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
 
-  /* ── Greeting hero row ── */
+  /* ── Header row: big bold greeting + own-avatar button, Apple-Music-Home style ── */
   .ho-hero {
-    padding: 32px 28px 24px;
-    position: relative;
+    padding: 30px 28px 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
     flex-shrink: 0;
   }
-
+  .ho-hero-text { min-width: 0; }
   .ho-greeting {
     font-family: 'Syne', sans-serif;
-    font-size: clamp(26px, 3.5vw, 40px);
+    font-size: clamp(30px, 4.4vw, 46px);
     font-weight: 800;
     letter-spacing: -0.04em;
-    line-height: 1.1;
+    line-height: 1.05;
     color: #fff;
     margin-bottom: 4px;
   }
@@ -306,6 +309,64 @@ const STYLES = `
     color: rgba(255,255,255,0.38);
     font-weight: 400;
   }
+  .ho-avatar-btn {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 4px;
+    color: rgba(255,255,255,0.4);
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px;
+  }
+  .ho-avatar-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* ── Hero "Top Picks" cards — mirrors Apple Music's Home hero row ── */
+  .ho-hero-cards {
+    display: flex; gap: 14px;
+    overflow-x: auto;
+    padding: 6px 28px 26px;
+    flex-shrink: 0;
+    -ms-overflow-style: none; scrollbar-width: none;
+  }
+  .ho-hero-cards::-webkit-scrollbar { display: none; }
+  .ho-hero-card {
+    position: relative;
+    flex-shrink: 0;
+    width: 220px; height: 276px;
+    border-radius: 22px;
+    overflow: hidden;
+    cursor: pointer;
+    background: linear-gradient(135deg, rgba(29,185,84,0.35) 0%, rgba(0,0,0,0.45) 100%);
+    transition: transform 0.2s cubic-bezier(0.22,1,0.36,1);
+  }
+  .ho-hero-card:hover { transform: translateY(-3px); }
+  .ho-hero-card-img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  }
+  .ho-hero-card-scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.20) 45%, rgba(0,0,0,0.82) 100%);
+  }
+  .ho-hero-card-badge {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+    color: #fff; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 4px 9px; border-radius: 9999px;
+  }
+  .ho-hero-card-text { position: absolute; left: 16px; right: 16px; bottom: 16px; }
+  .ho-hero-card-sub {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: rgba(255,255,255,0.75); margin-bottom: 4px;
+  }
+  .ho-hero-card-title {
+    font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+    color: #fff; line-height: 1.15;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .ho-hero-card.loading { background: rgba(255,255,255,0.04); cursor: default; }
 
   /* ── Search bar ── */
   .ho-search-wrap {
@@ -394,7 +455,7 @@ const STYLES = `
   }
   .ho-section-title h2 {
     font-family: 'Syne', sans-serif;
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 800;
     letter-spacing: -0.02em;
     color: #fff;
@@ -405,21 +466,18 @@ const STYLES = `
     background: var(--lb-green);
     flex-shrink: 0;
   }
+  /* Icon-only "see all" — Apple Music's Home just uses a plain chevron
+     after the section title, not a labeled pill button. */
   .ho-see-all {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--lb-green);
-    background: none;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    opacity: 0.8;
-    transition: opacity 0.15s;
-    font-family: 'DM Sans', sans-serif;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.45);
+    border: none; cursor: pointer;
+    transition: background 0.15s, color 0.15s;
   }
-  .ho-see-all:hover { opacity: 1; }
+  .ho-see-all:hover { background: rgba(255,255,255,0.11); color: #fff; }
 
   /* ── Horizontal shelf ── */
   .ho-shelf {
@@ -432,7 +490,7 @@ const STYLES = `
   }
   .ho-shelf::-webkit-scrollbar { display: none; }
 
-  /* ── TiltedCard ── */
+  /* ── TiltedCard (UNCHANGED — tile style stays exactly as-is) ── */
   .ho-tcard {
     flex-shrink: 0;
     width: 160px;
@@ -565,23 +623,21 @@ const STYLES = `
     padding: 2px 7px; border-radius: 6px; letter-spacing: .05em;
   }
 
-  /* ── Downloaded tile ── */
+  /* ── Downloaded tile — flattened toward the reference's plain style ── */
   .ho-dl-tile {
     flex-shrink: 0;
     width: 190px;
     border-radius: 16px;
     overflow: hidden;
-    background: rgba(29,185,84,0.08);
-    border: 1px solid rgba(29,185,84,0.18);
+    background: rgba(29,185,84,0.07);
+    border: 1px solid rgba(29,185,84,0.15);
     cursor: pointer;
-    transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
-                border-color 0.22s, box-shadow 0.22s;
+    transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), border-color 0.18s;
     position: relative;
   }
   .ho-dl-tile:hover {
-    transform: translateY(-3px) scale(1.02);
-    border-color: rgba(29,185,84,0.4);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    transform: translateY(-2px);
+    border-color: rgba(29,185,84,0.32);
   }
   .ho-dl-mosaic {
     display: grid;
@@ -780,7 +836,7 @@ const SpinIcon = () => (
   </svg>
 );
 
-/* ─── TiltedCard — 3D hover card ─────────────────────────────────── */
+/* ─── TiltedCard — 3D hover card (UNCHANGED) ─────────────────────────────────── */
 const SPRING = { damping: 30, stiffness: 100, mass: 2 };
 
 function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlaying, isLoading, badge }) {
@@ -887,7 +943,7 @@ function TiltedCard({ imageSrc, altText, captionText, onPlay, isActive, isPlayin
   );
 }
 
-/* Song card — wraps TiltedCard with item data */
+/* Song card — wraps TiltedCard with item data (UNCHANGED) */
 const SongCard = memo(({ item, isActive, isPlaying, onPlay, loadingId }) => {
   const isLoading = loadingId === item.id;
   return (
@@ -917,6 +973,31 @@ const ShimmerShelf = ({ count = 6 }) => (
     ))}
   </div>
 );
+
+/* ─── HeroCard — the new "Top Picks for You" style featured card ─────────────
+   Built purely from data already fetched elsewhere in this component (mood
+   mix, For You, trending sections) — no new data sources introduced. ─── */
+const HeroCard = memo(({ title, subtitle, cover, badgeText, onClick, loading }) => {
+  if (loading) return <div className="ho-hero-card loading" />;
+  return (
+    <div className="ho-hero-card" onClick={onClick}>
+      {cover && (
+        <img
+          src={cover}
+          alt={title}
+          className="ho-hero-card-img"
+          onError={e => { e.target.style.display = 'none'; }}
+        />
+      )}
+      <div className="ho-hero-card-scrim" />
+      {badgeText && <span className="ho-hero-card-badge">{badgeText}</span>}
+      <div className="ho-hero-card-text">
+        <p className="ho-hero-card-sub">{subtitle}</p>
+        <p className="ho-hero-card-title">{title}</p>
+      </div>
+    </div>
+  );
+});
 
 function useOutsideClick(ref, handler) {
   useEffect(() => {
@@ -1135,6 +1216,7 @@ export default function HomeOnline() {
   // Greeting + username
   const greeting  = useMemo(() => getGreeting(), []);
   const firstName = useMemo(() => getFirstName(authProfile, user), [authProfile, user]);
+  const avatarInitial = (firstName || authProfile?.username || user?.email || '?')[0]?.toUpperCase() || '?';
 
   /* ── Initial load ── */
   useEffect(() => { if (volume === 1) setVolume(0.2); }, []); // eslint-disable-line
@@ -1447,6 +1529,52 @@ export default function HomeOnline() {
   // The downloaded list to show — always from downloadedSongs, never the queue
   const dlSongs = (downloadedSongs && downloadedSongs.length > 0) ? downloadedSongs : songs.filter(s => !s.youtube);
 
+  /* ── "Top Picks for You" hero row — built entirely from data already
+     fetched elsewhere in this component (mood mix + For You + trending
+     fallback). No new fetches introduced. ── */
+  const heroCards = useMemo(() => {
+    const cards = [];
+
+    if (moodSlot && (moodLoading || moodSongs.length > 0)) {
+      cards.push({
+        key: 'mood',
+        loading: moodLoading,
+        title: moodTitle,
+        subtitle: 'Mix for you',
+        cover: moodSongs[0]?.cover,
+        onClick: () => moodSongs.length && openDetail({
+          type: 'mood', name: moodTitle, cover: moodSongs[0]?.cover,
+          accent: '#1DB954', songCount: moodSongs.length, songs: moodSongs,
+        }),
+      });
+    }
+
+    if (forYouLoading || forYou.length > 0) {
+      cards.push({
+        key: 'for-you',
+        loading: forYouLoading,
+        title: 'For You',
+        subtitle: 'Based on your taste',
+        cover: forYou[0]?.cover,
+        badgeText: null,
+        onClick: () => forYou[0] && playStreamingSong(forYou[0]),
+      });
+    } else if (sections[0]?.items?.length) {
+      const sec = sections[0];
+      cards.push({
+        key: 'trending-fallback',
+        loading: false,
+        title: sec.title,
+        subtitle: sec.items[0]?.artist ? `Featuring ${sec.items[0].artist}` : 'Trending now',
+        cover: sec.items[0]?.cover,
+        badgeText: sec.badge,
+        onClick: () => sec.items[0] && playStreamingSong(sec.items[0]),
+      });
+    }
+
+    return cards;
+  }, [moodSlot, moodLoading, moodSongs, moodTitle, forYouLoading, forYou, sections, openDetail, playStreamingSong]);
+
   /* ─────────────────────────────────────────────────────────────────────
      DETAIL VIEW (Downloaded / future album tiles)
   ───────────────────────────────────────────────────────── */
@@ -1554,13 +1682,37 @@ export default function HomeOnline() {
 
         {showDetail ? renderDetail() : (
           <>
-            {/* ── GREETING HERO ── */}
+            {/* ── HEADER: big bold greeting + own-avatar, Apple-Music-Home style ── */}
             <div className="ho-hero">
-              <h1 className="ho-greeting">
-                {firstName ? <>{greeting}, {firstName}</> : greeting}
-              </h1>
-              <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
+              <div className="ho-hero-text">
+                <h1 className="ho-greeting">
+                  {firstName ? <>{greeting}, {firstName}</> : greeting}
+                </h1>
+                <p className="ho-greeting-sub">Stream millions of songs · Discover new music daily</p>
+              </div>
+              <div className="ho-avatar-btn" aria-hidden="true">
+                {authProfile?.avatar_url
+                  ? <img src={authProfile.avatar_url} alt="" onError={e => { e.target.style.display = 'none'; }} />
+                  : avatarInitial}
+              </div>
             </div>
+
+            {/* ── TOP PICKS FOR YOU — hero card row ── */}
+            {heroCards.length > 0 && (
+              <div className="ho-hero-cards">
+                {heroCards.map(card => (
+                  <HeroCard
+                    key={card.key}
+                    title={card.title}
+                    subtitle={card.subtitle}
+                    cover={card.cover}
+                    badgeText={card.badgeText}
+                    loading={card.loading}
+                    onClick={card.onClick}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* ── SEARCH + GENRE CHIPS ── */}
             <div className="ho-search-wrap">
@@ -1795,12 +1947,16 @@ export default function HomeOnline() {
                     )}
                   </div>
                   {dlSongs.length > 0 && (
-                    <button className="ho-see-all" onClick={() => openDetail({
-                      type:'downloaded', name:'Downloaded Songs',
-                      cover:dlSongs[0]?.cover, accent:'#1DB954',
-                      songCount:dlSongs.length, songs:dlSongs,
-                    })}>
-                      See all <FaChevronRight style={{ fontSize:9 }} />
+                    <button
+                      className="ho-see-all"
+                      aria-label="See all downloaded songs"
+                      onClick={() => openDetail({
+                        type:'downloaded', name:'Downloaded Songs',
+                        cover:dlSongs[0]?.cover, accent:'#1DB954',
+                        songCount:dlSongs.length, songs:dlSongs,
+                      })}
+                    >
+                      <FaChevronRight style={{ fontSize:10 }} />
                     </button>
                   )}
                 </div>
