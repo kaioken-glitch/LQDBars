@@ -131,21 +131,18 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom nav — hidden when not logged in OR when inside a DM thread */}
-        {user && !inDMThread && (
+        {/* Bottom nav — hidden only when on Messages tab AND inside a thread */}
+        {user && !(active === 'Messages' && inDMThread) && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* Global player — hidden when inside a DM thread */}
-      {user && !inDMThread && <PlayerControls />}
+      {/* Global player — hidden only when on Messages tab AND inside a thread */}
+      {user && !(active === 'Messages' && inDMThread) && <PlayerControls />}
 
-      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying
-          from PlayerContext into presence so "now listening" updates
-          automatically everywhere (DMPanel, ProfileDetailView, PeopleRow)
-          without those components needing any player wiring themselves. */}
+      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying */}
       {user && <PresenceSync />}
 
       {/* Radio station pill — fixed above BottomNav */}
