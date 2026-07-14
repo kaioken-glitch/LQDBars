@@ -1,12 +1,11 @@
-// src/components/chat/Composer.jsx
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { FaPaperPlane } from 'react-icons/fa';
 
-export default function Composer({ onSend, disabled, onTypingChange }) {
+export default function Composer({ onSend, disabled, sendTyping }) {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
-  const [typing, setTyping] = useState(false);
   const taRef = useRef(null);
+  const typingTimeout = useRef(null);
 
   const autoResize = () => {
     const el = taRef.current;
@@ -15,34 +14,47 @@ export default function Composer({ onSend, disabled, onTypingChange }) {
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   };
 
-  useEffect(() => {
-    if (!typing) return;
-    const id = window.setTimeout(() => {
-      setTyping(false);
-      onTypingChange?.(false);
-    }, 1400);
-    return () => window.clearTimeout(id);
-  }, [typing, value, onTypingChange]);
+  const emitTyping = useCallback((isTyping) => {
+    sendTyping?.(isTyping);
+  }, [sendTyping]);
+
+  const handleChange = (e) => {
+    const next = e.target.value;
+    setValue(next);
+    autoResize();
+
+    // debounce typing indicator
+    if (typingTimeout.current) clearTimeout(typingTimeout.current);
+    const hasText = next.trim().length > 0;
+    if (hasText) {
+      emitTyping(true);
+      typingTimeout.current = setTimeout(() => emitTyping(false), 1400);
+    } else {
+      emitTyping(false);
+    }
+  };
 
   const submit = useCallback(async () => {
     const text = value.trim();
     if (!text || sending || disabled) return;
     setSending(true);
     setValue('');
-    setTyping(false);
-    onTypingChange?.(false);
+    emitTyping(false);
+    if (typingTimeout.current) clearTimeout(typingTimeout.current);
     const { error } = await onSend(text);
     if (error) setValue(text);
     setSending(false);
     requestAnimationFrame(autoResize);
     taRef.current?.focus();
-  }, [value, sending, disabled, onSend, onTypingChange]);
+  }, [value, sending, disabled, onSend, emitTyping]);
 
   useEffect(() => {
     return () => {
+      if (typingTimeout.current) clearTimeout(typingTimeout.current);
+      emitTyping(false);
       try { document.body.classList.remove('chat-input-active'); } catch (_) {}
     };
-  }, []);
+  }, [emitTyping]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -59,21 +71,14 @@ export default function Composer({ onSend, disabled, onTypingChange }) {
           ref={taRef}
           className="dm-composer-input"
           value={value}
-          onChange={e => {
-            const next = e.target.value;
-            setValue(next);
-            autoResize();
-            setTyping(Boolean(next.trim()));
-            onTypingChange?.(Boolean(next.trim()));
-          }}
+          onChange={handleChange}
           onFocus={() => {
-            setTyping(true);
-            onTypingChange?.(true);
+            emitTyping(true);
             try { document.body.classList.add('chat-input-active'); } catch (_) {}
           }}
           onBlur={() => {
-            setTyping(false);
-            onTypingChange?.(false);
+            emitTyping(false);
+            if (typingTimeout.current) clearTimeout(typingTimeout.current);
             try { document.body.classList.remove('chat-input-active'); } catch (_) {}
           }}
           onKeyDown={handleKeyDown}

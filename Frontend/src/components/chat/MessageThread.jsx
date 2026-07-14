@@ -1,6 +1,5 @@
-// src/components/chat/MessageThread.jsx
-import React, { useEffect, useRef } from 'react';
-import { FaHandPeace } from 'react-icons/fa';
+import React, { useEffect, useRef, useState } from 'react';
+import { FaHandPeace, FaEllipsisH } from 'react-icons/fa';
 
 function fmtTime(iso) {
   if (!iso) return '';
@@ -17,12 +16,42 @@ function fmtDateLabel(iso) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function MessageThread({ messages, currentUserId, loading, typing }) {
+export default function MessageThread({
+  messages,
+  currentUserId,
+  loading,
+  typing,
+  onEdit,
+  onDeleteForMe,
+  onDeleteForEveryone,
+}) {
   const bottomRef = useRef(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [menuOpenId, setMenuOpenId] = useState(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length]);
+
+  const handleEditStart = (msg) => {
+    setEditingId(msg.id);
+    setEditText(msg.body);
+    setMenuOpenId(null);
+  };
+
+  const handleEditSave = async (msgId) => {
+    const text = editText.trim();
+    if (!text || !onEdit) return;
+    await onEdit(msgId, text);
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditText('');
+  };
 
   return (
     <div className="dm-thread">
@@ -49,14 +78,81 @@ export default function MessageThread({ messages, currentUserId, loading, typing
           const showDateDivider = !prev ||
             new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
 
+          const isDeleted = !!m.deleted_at;
+          const isEdited = !!m.edited_at;
+
           return (
             <React.Fragment key={m.id}>
               {showDateDivider && (
                 <div className="dm-date-divider"><span>{fmtDateLabel(m.created_at)}</span></div>
               )}
               <div className={`dm-bubble-row ${mine ? 'mine' : 'theirs'}${grouped ? ' grouped' : ''}`}>
-                <div className="dm-bubble">
-                  <span className="dm-bubble-text">{m.body}</span>
+                <div className="dm-bubble" style={{ position: 'relative' }}>
+                  {editingId === m.id ? (
+                    <div className="dm-edit-inline">
+                      <input
+                        className="dm-edit-input"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleEditSave(m.id);
+                          if (e.key === 'Escape') handleEditCancel();
+                        }}
+                      />
+                      <div className="dm-edit-actions">
+                        <button onClick={() => handleEditSave(m.id)}>Save</button>
+                        <button onClick={handleEditCancel}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="dm-bubble-text">
+                        {isDeleted ? '[Message deleted]' : m.body}
+                      </span>
+                      {isEdited && !isDeleted && (
+                        <span className="dm-edited-tag">edited</span>
+                      )}
+                    </>
+                  )}
+                  {mine && !isDeleted && !editingId && (
+                    <div className="dm-message-menu">
+                      <button
+                        className="dm-message-menu-trigger"
+                        onClick={() => setMenuOpenId(menuOpenId === m.id ? null : m.id)}
+                      >
+                        <FaEllipsisH />
+                      </button>
+                      {menuOpenId === m.id && (
+                        <div className="dm-message-menu-dropdown">
+                          <button onClick={() => handleEditStart(m)}>Edit</button>
+                          <button onClick={() => { onDeleteForMe(m.id); setMenuOpenId(null); }}>
+                            Delete for me
+                          </button>
+                          <button onClick={() => { onDeleteForEveryone(m.id); setMenuOpenId(null); }}>
+                            Delete for everyone
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!mine && !isDeleted && !editingId && (
+                    <div className="dm-message-menu">
+                      <button
+                        className="dm-message-menu-trigger"
+                        onClick={() => setMenuOpenId(menuOpenId === m.id ? null : m.id)}
+                      >
+                        <FaEllipsisH />
+                      </button>
+                      {menuOpenId === m.id && (
+                        <div className="dm-message-menu-dropdown">
+                          <button onClick={() => { onDeleteForMe(m.id); setMenuOpenId(null); }}>
+                            Delete for me
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {!grouped && (
                   <div className="dm-bubble-meta">
@@ -77,7 +173,6 @@ export default function MessageThread({ messages, currentUserId, loading, typing
               <span />
               <span />
             </span>
-            <span className="dm-typing-label">typing</span>
           </div>
         </div>
       )}
@@ -131,6 +226,7 @@ const CSS = `
 .dm-bubble-row.theirs { align-self: flex-start; align-items: flex-start; }
 
 .dm-bubble {
+  position: relative;
   padding: 10px 14px; border-radius: 18px;
   font-size: 13.5px; line-height: 1.5; word-break: break-word;
   box-shadow: 0 2px 10px rgba(0,0,0,0.2);
@@ -162,24 +258,81 @@ const CSS = `
 }
 .dm-bubble-receipt.read { color: #6EE7B7; }
 .dm-bubble-row.mine .dm-bubble-meta { justify-content: flex-end; }
+
 .dm-typing-bubble {
-  display: inline-flex; align-items: center; gap: 7px;
-  min-width: 74px; padding: 10px 12px;
+  display: inline-flex; align-items: center;
+  min-width: 52px; padding: 12px 16px;
 }
 .dm-typing-wave {
-  display: inline-flex; align-items: flex-end; gap: 3px; height: 10px;
+  display: inline-flex; align-items: center; gap: 4px; height: 14px;
 }
 .dm-typing-wave span {
-  width: 3px; height: 3px; border-radius: 999px; background: currentColor;
-  animation: dmTypingWave 1s ease-in-out infinite;
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--lb-green, #1DB954);
+  box-shadow: 0 0 6px rgba(29,185,84,0.55);
+  animation: dmTypingWave 1.1s ease-in-out infinite;
 }
-.dm-typing-wave span:nth-child(2) { animation-delay: 0.12s; }
-.dm-typing-wave span:nth-child(3) { animation-delay: 0.24s; }
-.dm-typing-label {
-  font-size: 12px; color: rgba(255,255,255,0.6); font-style: italic;
-}
+.dm-typing-wave span:nth-child(2) { animation-delay: 0.15s; }
+.dm-typing-wave span:nth-child(3) { animation-delay: 0.30s; }
 @keyframes dmTypingWave {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
-  40% { transform: translateY(-4px); opacity: 1; }
+  0%, 60%, 100% { transform: translateY(0) scale(0.85); opacity: 0.5; }
+  30%           { transform: translateY(-5px) scale(1.15); opacity: 1; }
 }
+
+.dm-edited-tag {
+  font-size: 9px; color: rgba(255,255,255,0.4);
+  margin-left: 5px; font-weight: 400;
+  letter-spacing: 0.02em;
+}
+.dm-bubble-row.mine .dm-edited-tag { color: rgba(5,19,10,0.5); }
+
+.dm-message-menu {
+  position: absolute; top: 2px; right: 4px;
+  opacity: 0; transition: opacity 0.15s;
+}
+.dm-bubble:hover .dm-message-menu { opacity: 1; }
+.dm-message-menu-trigger {
+  background: transparent; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.3); padding: 2px 4px;
+  font-size: 13px; line-height: 1;
+  border-radius: 4px;
+}
+.dm-message-menu-trigger:hover { color: #fff; background: rgba(255,255,255,0.06); }
+.dm-bubble-row.mine .dm-message-menu-trigger { color: rgba(5,19,10,0.4); }
+.dm-bubble-row.mine .dm-message-menu-trigger:hover { color: #05130a; background: rgba(255,255,255,0.15); }
+
+.dm-message-menu-dropdown {
+  position: absolute; top: 100%; right: 0; z-index: 10;
+  background: #1a1c1f; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; padding: 4px 0; min-width: 140px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.dm-message-menu-dropdown button {
+  display: block; width: 100%; padding: 8px 14px;
+  background: transparent; border: none; color: rgba(255,255,255,0.7);
+  font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.dm-message-menu-dropdown button:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.dm-message-menu-dropdown button:first-child { border-radius: 10px 10px 0 0; }
+.dm-message-menu-dropdown button:last-child { border-radius: 0 0 10px 10px; }
+
+.dm-edit-inline {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dm-edit-input {
+  background: rgba(0,0,0,0.2); border: 1px solid rgba(29,185,84,0.3);
+  border-radius: 8px; padding: 4px 8px; color: #fff;
+  font-family: inherit; font-size: 13px; outline: none;
+}
+.dm-edit-input:focus { border-color: #1DB954; }
+.dm-edit-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+.dm-edit-actions button {
+  background: transparent; border: none; color: rgba(255,255,255,0.6);
+  font-size: 12px; cursor: pointer; padding: 2px 6px;
+}
+.dm-edit-actions button:hover { color: #fff; }
+.dm-edit-actions button:first-child { color: #1DB954; }
+.dm-edit-actions button:first-child:hover { color: #23E065; }
 `;

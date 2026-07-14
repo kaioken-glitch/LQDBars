@@ -1,4 +1,3 @@
-// src/components/chat/DMPanel.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { FaComments } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
@@ -17,9 +16,18 @@ export default function DMPanel({ onThreadChange }) {
   const [activeId, setActiveId] = useState(null);
   const [activeOther, setActiveOther] = useState(null);
   const [mobileShowThread, setMobileShowThread] = useState(false);
-  const [typing, setTyping] = useState(false);
 
-  const { messages, loading: messagesLoading, sendMessage, markRead } = useMessages(activeId);
+  const {
+    messages,
+    loading: messagesLoading,
+    sendMessage,
+    markRead,
+    otherTyping,
+    sendTyping,
+    editMessage,
+    deleteForMe,
+    deleteForEveryone,
+  } = useMessages(activeId);
 
   const dmTarget = useDMTarget();
   useEffect(() => {
@@ -34,7 +42,6 @@ export default function DMPanel({ onThreadChange }) {
         .eq('id', dmTarget)
         .maybeSingle();
       setActiveId(convId);
-      setTyping(false);
       setActiveOther({
         id: dmTarget,
         name: profile?.display_name || profile?.username || 'Unknown',
@@ -48,7 +55,6 @@ export default function DMPanel({ onThreadChange }) {
 
   const handleSelect = useCallback(async (conv) => {
     setActiveId(conv.id);
-    setTyping(false);
     setMobileShowThread(true);
     const { data: profile } = await supabase
       .from('profiles')
@@ -64,25 +70,19 @@ export default function DMPanel({ onThreadChange }) {
 
   const handleBack = useCallback(() => {
     setMobileShowThread(false);
-    // Notify parent that we're back to the list
     if (onThreadChange) onThreadChange(false);
   }, [onThreadChange]);
 
   useEffect(() => { if (activeId) markRead(); }, [activeId, markRead]);
   useEffect(() => {
     if (activeId && messages.length) markRead();
-  }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [messages.length, activeId, markRead]);
 
-  // Inform parent when the thread view becomes visible/hidden
   useEffect(() => {
     if (!onThreadChange) return;
-    // On desktop, thread is visible if activeId is set.
-    // On mobile, thread is visible only when mobileShowThread is true.
     const isDesktop = window.innerWidth > 767;
     const isThreadVisible = isDesktop ? !!activeId : !!mobileShowThread;
     onThreadChange(isThreadVisible);
-
-    // Cleanup: reset state when component unmounts
     return () => onThreadChange(false);
   }, [activeId, mobileShowThread, onThreadChange]);
 
@@ -97,8 +97,20 @@ export default function DMPanel({ onThreadChange }) {
         {activeId && activeOther ? (
           <>
             <ProfileBanner user={activeOther} onBack={handleBack} />
-            <MessageThread messages={messages} currentUserId={user?.id} loading={messagesLoading} typing={typing} />
-            <Composer onSend={sendMessage} disabled={!activeId} onTypingChange={setTyping} />
+            <MessageThread
+              messages={messages}
+              currentUserId={user?.id}
+              loading={messagesLoading}
+              typing={otherTyping}
+              onEdit={editMessage}
+              onDeleteForMe={deleteForMe}
+              onDeleteForEveryone={deleteForEveryone}
+            />
+            <Composer
+              onSend={sendMessage}
+              disabled={!activeId}
+              sendTyping={sendTyping}
+            />
           </>
         ) : (
           <div className="dm-panel-empty">
