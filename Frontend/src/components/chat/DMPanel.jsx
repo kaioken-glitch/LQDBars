@@ -30,6 +30,26 @@ export default function DMPanel({ onThreadChange }) {
   } = useMessages(activeId);
 
   const dmTarget = useDMTarget();
+
+  // ----- close thread helper -----
+  const closeThread = useCallback(() => {
+    setActiveId(null);
+    setMobileShowThread(false);
+    if (onThreadChange) onThreadChange(false);
+  }, [onThreadChange]);
+
+  // ----- open thread helper (for mobile) -----
+  const openThread = useCallback((convId, other) => {
+    setActiveId(convId);
+    setActiveOther(other);
+    setMobileShowThread(true);
+    // push history state so system back can close the thread
+    if (window.history && typeof window.history.pushState === 'function') {
+      window.history.pushState({ thread: true }, '');
+    }
+  }, []);
+
+  // ----- handle external dm target -----
   useEffect(() => {
     if (!dmTarget) return;
     let cancelled = false;
@@ -41,46 +61,47 @@ export default function DMPanel({ onThreadChange }) {
         .select('id, display_name, username, avatar_url')
         .eq('id', dmTarget)
         .maybeSingle();
-      setActiveId(convId);
-      setActiveOther({
+      openThread(convId, {
         id: dmTarget,
         name: profile?.display_name || profile?.username || 'Unknown',
         avatar: profile?.avatar_url || '',
       });
-      setMobileShowThread(true);
       clearDMTarget();
     })();
     return () => { cancelled = true; };
-  }, [dmTarget, getOrCreateConversation]);
+  }, [dmTarget, getOrCreateConversation, openThread]);
 
+  // ----- handle conversation selection -----
   const handleSelect = useCallback(async (conv) => {
-    setActiveId(conv.id);
-    setMobileShowThread(true);
     const { data: profile } = await supabase
       .from('profiles')
       .select('id, display_name, username, avatar_url')
       .eq('id', conv.otherId)
       .maybeSingle();
-    setActiveOther({
+    openThread(conv.id, {
       id: conv.otherId,
       name: profile?.display_name || profile?.username || 'Unknown',
       avatar: profile?.avatar_url || '',
     });
-  }, []);
+  }, [openThread]);
 
-  // FIX: clear activeId so that onThreadChange(false) is called on desktop as well
-  const handleBack = useCallback(() => {
-    setActiveId(null);           // <-- THIS WAS MISSING
-    setMobileShowThread(false);
-    if (onThreadChange) onThreadChange(false);
-  }, [onThreadChange]);
+  // ----- close thread on system back (popstate) -----
+  useEffect(() => {
+    if (!mobileShowThread) return;
+    const handler = () => {
+      closeThread();
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [mobileShowThread, closeThread]);
 
+  // ----- mark messages read -----
   useEffect(() => { if (activeId) markRead(); }, [activeId, markRead]);
   useEffect(() => {
     if (activeId && messages.length) markRead();
   }, [messages.length, activeId, markRead]);
 
-  // Inform parent when thread view becomes visible/hidden
+  // ----- notify parent of thread visibility -----
   useEffect(() => {
     if (!onThreadChange) return;
     const isDesktop = window.innerWidth > 767;
@@ -99,7 +120,7 @@ export default function DMPanel({ onThreadChange }) {
       <div className={`dm-panel-thread-slot${!mobileShowThread ? ' hide-mobile' : ''}`}>
         {activeId && activeOther ? (
           <>
-            <ProfileBanner user={activeOther} onBack={handleBack} />
+            <ProfileBanner user={activeOther} onBack={closeThread} />
             <MessageThread
               messages={messages}
               currentUserId={user?.id}
