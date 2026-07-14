@@ -7,7 +7,7 @@ import Playlists from './pages/Playlists';
 import Recent from './pages/Recent';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import { PlayerProvider } from './context/PlayerContext';
+import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import BottomNav from './components/BottomNav';
@@ -18,37 +18,49 @@ import { useDMTarget } from './hooks/dmNavigationStore';
 import SplashScreen from './utils/Splashscreen';
 import './index.css';
 
+/* ─── Inner App ───────────────────────────────────────────────── */
 function AppInner() {
-  const [active, setActive] = useState('Home');
-  const { user, loading } = useAuth();
+  const [active, setActive]     = useState('Home');
+  const { user, loading }       = useAuth();
   const [isOnline, setIsOnline] = useState(
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
-  const [inDMThread, setInDMThread] = useState(false);
 
+  // Track whether a DM thread is currently open (list vs. thread view)
+  const [isThreadOpen, setIsThreadOpen] = useState(false);
+
+  // Apply the hiding class only when a thread is actually open on mobile
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(max-width: 767px)');
     const apply = () => {
-      document.body.classList.toggle('chat-page-active', active === 'Messages' && mq.matches);
+      document.body.classList.toggle(
+        'chat-page-active',
+        active === 'Messages' && isThreadOpen && mq.matches
+      );
     };
     apply();
     mq.addEventListener?.('change', apply);
     return () => mq.removeEventListener?.('change', apply);
-  }, [active]);
+  }, [active, isThreadOpen]);
 
+  /* Open the DM panel whenever something elsewhere in the app calls
+     openDirectMessage() — e.g. the "Message" button on ProfileDetailView.
+     DMPanel itself reads useDMTarget() to know which conversation to
+     open; this just makes sure the tab is actually visible. */
   const dmTarget = useDMTarget();
   useEffect(() => {
     if (dmTarget) setActive('Messages');
   }, [dmTarget]);
 
+  /* Connectivity check */
   useEffect(() => {
     let mounted = true;
     const check = async () => {
       try {
         if (!navigator.onLine) { mounted && setIsOnline(false); return; }
         const ctl = new AbortController();
-        const t = setTimeout(() => ctl.abort(), 3000);
+        const t   = setTimeout(() => ctl.abort(), 3000);
         const res = await fetch(`${window.location.origin}/favicon.svg`, {
           method: 'GET', cache: 'no-store', signal: ctl.signal,
         });
@@ -59,15 +71,16 @@ function AppInner() {
       }
     };
     check();
-    window.addEventListener('online', check);
+    window.addEventListener('online',  check);
     window.addEventListener('offline', () => mounted && setIsOnline(false));
     return () => {
       mounted = false;
-      window.removeEventListener('online', check);
+      window.removeEventListener('online',  check);
       window.removeEventListener('offline', () => {});
     };
   }, []);
 
+  /* Keep Render backend warm */
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_API_URL;
     if (!backendUrl) return;
@@ -79,21 +92,17 @@ function AppInner() {
 
   function renderPage() {
     if (loading) return null;
-    if (!user) return <Login onSuccess={() => setActive('Home')} />;
+    if (!user)   return <Login onSuccess={() => setActive('Home')} />;
     switch (active) {
-      case 'Home': return isOnline ? <HomeOnline /> : <Home />;
-      case 'Library': return <Library />;
-      case 'Playlists': return <Playlists />;
+      case 'Home':            return isOnline ? <HomeOnline /> : <Home />;
+      case 'Library':         return <Library />;
+      case 'Playlists':       return <Playlists />;
       case 'Recently Played': return <Recent />;
-      case 'Messages': return <DMPanel onThreadChange={setInDMThread} />;
-      case 'Settings': return <Settings />;
-      default: return isOnline ? <HomeOnline /> : <Home />;
+      case 'Messages':        return <DMPanel onThreadChange={setIsThreadOpen} />;
+      case 'Settings':        return <Settings />;
+      default:                return isOnline ? <HomeOnline /> : <Home />;
     }
   }
-
-  // Only hide bottom nav/player on mobile (<= 767px) when in a DM thread
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
-  const hideBottomUI = isMobile && active === 'Messages' && inDMThread;
 
   return (
     <>
@@ -105,12 +114,17 @@ function AppInner() {
         overflow: 'hidden',
         background: 'var(--lb-bg-base, #07080A)',
       }}>
+        {/* Content row: Sidebar + Page */}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+          {/* Sidebar — desktop only, hidden when not logged in */}
           {user && (
             <div className="sidebar-slot" style={{ display: 'none', flexShrink: 0 }}>
               <Sidebar active={active} setActive={setActive} />
             </div>
           )}
+
+          {/* Page */}
           <div style={{
             flex: 1, minWidth: 0, height: '100%',
             overflow: 'hidden', display: 'flex', flexDirection: 'column',
@@ -119,24 +133,32 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom nav – hidden only on mobile when in a DM thread */}
-        {user && !hideBottomUI && (
+        {/* Bottom nav — hidden when not logged in */}
+        {user && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* Player controls – hidden only on mobile when in a DM thread */}
-      {user && !hideBottomUI && <PlayerControls />}
+      {/* Global player — handles both desktop bar and mobile mini bar */}
+      {user && <PlayerControls />}
 
+      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying
+          from PlayerContext into presence so "now listening" updates
+          automatically everywhere (DMPanel, ProfileDetailView, PeopleRow)
+          without those components needing any player wiring themselves. */}
       {user && <PresenceSync />}
 
+      {/* Radio station pill — fixed above BottomNav */}
       <style>{`
+        /* Desktop */
         @media (min-width: 768px) {
-          .sidebar-slot { display: flex !important; }
+          .sidebar-slot                 { display: flex !important; }
           .bottom-slot .bottom-nav-root { display: none !important; }
         }
+
+        /* Mobile */
         @media (max-width: 767px) {
           .sidebar-slot { display: none !important; }
         }
@@ -145,11 +167,14 @@ function AppInner() {
   );
 }
 
+/* ─── Root ────────────────────────────────────────────────────── */
 function App() {
   const [showSplash, setShowSplash] = useState(true);
+
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
+
   return (
     <AuthProvider>
       <ToastProvider>

@@ -1,3 +1,4 @@
+// src/components/chat/DMPanel.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { FaComments } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
@@ -15,39 +16,12 @@ export default function DMPanel({ onThreadChange }) {
   const { conversations, getOrCreateConversation } = useConversations();
   const [activeId, setActiveId] = useState(null);
   const [activeOther, setActiveOther] = useState(null);
+  const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [typing, setTyping] = useState(false);
 
-  const {
-    messages,
-    loading: messagesLoading,
-    sendMessage,
-    markRead,
-    otherTyping,
-    sendTyping,
-    editMessage,
-    deleteForMe,
-    deleteForEveryone,
-  } = useMessages(activeId);
+  const { messages, loading: messagesLoading, sendMessage, markRead } = useMessages(activeId);
 
   const dmTarget = useDMTarget();
-
-  const closeThread = useCallback(() => {
-    setActiveId(null);
-    setActiveOther(null);
-    if (onThreadChange) onThreadChange(false);
-  }, [onThreadChange]);
-
-  const openThread = useCallback((convId, other) => {
-    setActiveId(convId);
-    setActiveOther(other);
-    if (onThreadChange) onThreadChange(true);
-    // Push history state for system back on mobile
-    if (typeof window !== 'undefined' && window.innerWidth <= 767) {
-      if (window.history && typeof window.history.pushState === 'function') {
-        window.history.pushState({ thread: true }, '');
-      }
-    }
-  }, [onThreadChange]);
-
   useEffect(() => {
     if (!dmTarget) return;
     let cancelled = false;
@@ -59,80 +33,72 @@ export default function DMPanel({ onThreadChange }) {
         .select('id, display_name, username, avatar_url')
         .eq('id', dmTarget)
         .maybeSingle();
-      openThread(convId, {
+      setActiveId(convId);
+      setTyping(false);
+      setActiveOther({
         id: dmTarget,
         name: profile?.display_name || profile?.username || 'Unknown',
         avatar: profile?.avatar_url || '',
       });
+      setMobileShowThread(true);
       clearDMTarget();
     })();
     return () => { cancelled = true; };
-  }, [dmTarget, getOrCreateConversation, openThread]);
+  }, [dmTarget, getOrCreateConversation]);
 
   const handleSelect = useCallback(async (conv) => {
+    setActiveId(conv.id);
+    setTyping(false);
+    setMobileShowThread(true);
     const { data: profile } = await supabase
       .from('profiles')
       .select('id, display_name, username, avatar_url')
       .eq('id', conv.otherId)
       .maybeSingle();
-    openThread(conv.id, {
+    setActiveOther({
       id: conv.otherId,
       name: profile?.display_name || profile?.username || 'Unknown',
       avatar: profile?.avatar_url || '',
     });
-  }, [openThread]);
+  }, []);
 
-  // System back on mobile: close thread
-  useEffect(() => {
-    if (!activeId) return;
-    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
-    if (!isMobile) return;
-    const handler = () => {
-      closeThread();
-    };
-    window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
-  }, [activeId, closeThread]);
+  const handleBack = useCallback(() => {
+    setMobileShowThread(false);
+    // Notify parent that we're back to the list
+    if (onThreadChange) onThreadChange(false);
+  }, [onThreadChange]);
 
   useEffect(() => { if (activeId) markRead(); }, [activeId, markRead]);
   useEffect(() => {
     if (activeId && messages.length) markRead();
-  }, [messages.length, activeId, markRead]);
+  }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ensure parent knows thread state
+  // Inform parent when the thread view becomes visible/hidden
   useEffect(() => {
-    if (onThreadChange) onThreadChange(!!activeId);
-    return () => { if (onThreadChange) onThreadChange(false); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!onThreadChange) return;
+    // On desktop, thread is visible if activeId is set.
+    // On mobile, thread is visible only when mobileShowThread is true.
+    const isDesktop = window.innerWidth > 767;
+    const isThreadVisible = isDesktop ? !!activeId : !!mobileShowThread;
+    onThreadChange(isThreadVisible);
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
+    // Cleanup: reset state when component unmounts
+    return () => onThreadChange(false);
+  }, [activeId, mobileShowThread, onThreadChange]);
 
   return (
     <div className="dm-panel">
       <style>{CSS}</style>
-      <div className={`dm-panel-list-slot${isMobile && activeId ? ' hide-mobile' : ''}`}>
+      <div className={`dm-panel-list-slot${mobileShowThread ? ' hide-mobile' : ''}`}>
         <ConversationList conversations={conversations} activeId={activeId} onSelect={handleSelect} />
       </div>
 
-      <div className={`dm-panel-thread-slot${isMobile && !activeId ? ' hide-mobile' : ''}`}>
+      <div className={`dm-panel-thread-slot${!mobileShowThread ? ' hide-mobile' : ''}`}>
         {activeId && activeOther ? (
           <>
-            <ProfileBanner user={activeOther} onBack={closeThread} />
-            <MessageThread
-              messages={messages}
-              currentUserId={user?.id}
-              loading={messagesLoading}
-              typing={otherTyping}
-              onEdit={editMessage}
-              onDeleteForMe={deleteForMe}
-              onDeleteForEveryone={deleteForEveryone}
-            />
-            <Composer
-              onSend={sendMessage}
-              disabled={!activeId}
-              sendTyping={sendTyping}
-            />
+            <ProfileBanner user={activeOther} onBack={handleBack} />
+            <MessageThread messages={messages} currentUserId={user?.id} loading={messagesLoading} typing={typing} />
+            <Composer onSend={sendMessage} disabled={!activeId} onTypingChange={setTyping} />
           </>
         ) : (
           <div className="dm-panel-empty">
