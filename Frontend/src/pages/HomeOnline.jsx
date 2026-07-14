@@ -807,6 +807,69 @@ const STYLES = `
     display: flex; align-items: center; gap: 8px;
     flex-shrink: 0;
   }
+
+  /* ── Section accent underline — small colored rule under a section
+     title, so scrolling past Rock/Classical/etc. actually reads as
+     distinct sections instead of identical green-dot rows. ── */
+  .ho-section-accent-bar {
+    width: 26px; height: 3px; border-radius: 2px;
+    margin-top: 6px;
+  }
+
+  /* ── Spotlight card — the top track of a badge section (Trending,
+     New Releases, Afrobeats, For You) gets one big featured card;
+     the rest of that section's items still render in the normal
+     shelf below it. Breaks up the "every section is a uniform row
+     of same-size tiles" monotony without touching tile style itself. ── */
+  .ho-spotlight {
+    position: relative;
+    margin: 0 28px 18px;
+    height: 156px;
+    border-radius: 20px;
+    overflow: hidden;
+    cursor: pointer;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .ho-spotlight-img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    filter: brightness(0.55);
+    transition: transform 0.35s ease, filter 0.25s ease;
+  }
+  .ho-spotlight:hover .ho-spotlight-img { transform: scale(1.045); filter: brightness(0.62); }
+  .ho-spotlight-scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.25) 55%, transparent 100%);
+  }
+  .ho-spotlight-badge {
+    position: absolute; top: 14px; left: 18px; z-index: 2;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 9999px; color: #fff;
+  }
+  .ho-spotlight-text { position: absolute; left: 18px; bottom: 16px; right: 90px; z-index: 2; }
+  .ho-spotlight-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgba(255,255,255,0.65); margin-bottom: 4px;
+  }
+  .ho-spotlight-title {
+    font-family: 'Syne', sans-serif; font-size: 21px; font-weight: 800; letter-spacing: -0.02em;
+    color: #fff; line-height: 1.15;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ho-spotlight-sub {
+    font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ho-spotlight-play {
+    position: absolute; right: 18px; bottom: 18px; z-index: 2;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    transition: transform 0.15s, background 0.15s;
+  }
+  .ho-spotlight-play:hover { background: var(--lb-green-bright); transform: scale(1.08); }
+  .ho-spotlight-play:active { transform: scale(0.92); }
 `;
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -832,6 +895,60 @@ function cleanTitle(title) {
     .replace(/\s*[-–]\s*(official\s*(audio|video|music video)|lyrics?)\s*$/gi, '')
     .trim();
 }
+
+/* ── Per-genre accent color — gives each genre section a distinct
+   identity instead of every section header using the same green dot.
+   Badge sections (Trending/New/Afrobeats) keep their own badge colors
+   and aren't affected by this map. ── */
+const GENRE_ACCENTS = {
+  'hip-hop':    '#FF6B4A',
+  'pop':        '#FF4FA3',
+  'rock':       '#FF3B3B',
+  'jazz':       '#FFC24A',
+  'electronic': '#7C4DFF',
+  'classical':  '#4AD9FF',
+  'r&b':        '#FF8A4A',
+  'blues':      '#4A90FF',
+};
+function getGenreAccent(genre) {
+  return GENRE_ACCENTS[genre?.toLowerCase()] || '#1DB954';
+}
+
+/* Solid color for a badge pill, independent of the ho-badge-* gradient classes */
+function getBadgeAccent(badge) {
+  if (badge === 'HOT') return '#FF6B00';
+  if (badge === 'NEW') return '#FF2D55';
+  return '#1DB954';
+}
+
+/* ── Spotlight — one big featured card for a section's top track.
+   Reuses whatever item data the section already fetched; no new
+   fetches introduced. ── */
+const Spotlight = memo(({ item, eyebrow, badge, accent, onPlay }) => {
+  if (!item) return null;
+  return (
+    <div className="ho-spotlight ho-fadeup" onClick={onPlay}>
+      <img
+        src={item.cover}
+        alt={item.name}
+        className="ho-spotlight-img"
+        onError={e => { e.target.style.opacity = 0; }}
+      />
+      <div className="ho-spotlight-scrim" />
+      {badge && (
+        <span className="ho-spotlight-badge" style={{ background: accent }}>{badge}</span>
+      )}
+      <div className="ho-spotlight-text">
+        <p className="ho-spotlight-eyebrow">{eyebrow}</p>
+        <p className="ho-spotlight-title">{item.name}</p>
+        <p className="ho-spotlight-sub">{item.artist}</p>
+      </div>
+      <button className="ho-spotlight-play" onClick={e => { e.stopPropagation(); onPlay(); }} aria-label={`Play ${item.name}`}>
+        <FaPlay style={{ color: '#000', fontSize: 15, marginLeft: 2 }} />
+      </button>
+    </div>
+  );
+});
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SUB-COMPONENTS
@@ -1926,7 +2043,7 @@ export default function HomeOnline() {
               )
             )}
 
-            {/* ── FOR YOU shelf — personalised recommendations ── */}
+            {/* ── FOR YOU — spotlight top track, shelf for the rest ── */}
             {(forYou.length > 0 || forYouLoading) && (
               <section style={{ marginBottom:32 }}>
                 <div className="ho-section-head">
@@ -1938,6 +2055,15 @@ export default function HomeOnline() {
                     Based on your taste
                   </span>
                 </div>
+                {!forYouLoading && forYou.length > 0 && (
+                  <Spotlight
+                    item={forYou[0]}
+                    eyebrow="Top pick for you"
+                    badge={null}
+                    accent="#1DB954"
+                    onPlay={() => playStreamingSong(forYou[0])}
+                  />
+                )}
                 <div className="ho-shelf">
                   {forYouLoading
                     ? Array.from({ length: 6 }).map((_,i) => (
@@ -1948,7 +2074,7 @@ export default function HomeOnline() {
                           </div>
                         </div>
                       ))
-                    : forYou.map(item => {
+                    : forYou.slice(1).map(item => {
                         const isActive = currentSong?.id === item.id || currentSong?.youtubeId === item.youtubeId;
                         return (
                           <SongCard
@@ -1966,43 +2092,67 @@ export default function HomeOnline() {
               </section>
             )}
 
-            {/* Dynamic sections — horizontal shelves */}
-            {sections.map(sec => (
-              <section key={sec.id} style={{ marginBottom:32 }}>
-                <div className="ho-section-head">
-                  <div className="ho-section-title">
-                    <span className="ho-section-dot" />
-                    <h2>{sec.title}</h2>
-                    {sec.badge === 'NEW'  && <span className="ho-badge-new">{sec.badge}</span>}
-                    {sec.badge === 'HOT'  && <span className="ho-badge-hot">{sec.badge}</span>}
-                    {sec.badge && !['NEW','HOT'].includes(sec.badge) && <span style={{ fontSize:14 }}>{sec.badge}</span>}
-                    {!sec.loading && sec.items.length > 0 && (
-                      <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{sec.items.length}</span>
-                    )}
-                  </div>
-                </div>
+            {/* Dynamic sections — spotlight for badge sections, colored
+                accent per genre for plain sections, so scrolling past
+                Rock/Classical/etc. reads as distinct blocks rather than
+                identical rows repeated. */}
+            {sections.map(sec => {
+              const accent = sec.badge ? getBadgeAccent(sec.badge) : getGenreAccent(sec.genre);
+              const hasSpotlight = !!sec.badge && !sec.loading && sec.items.length > 0;
+              const shelfItems = hasSpotlight ? sec.items.slice(1) : sec.items;
 
-                {sec.loading
-                  ? <ShimmerShelf count={6} />
-                  : sec.items.length === 0
-                  ? null
-                  : (
-                    <div className="ho-shelf">
-                      {sec.items.map(item => (
-                        <SongCard
-                          key={item.id}
-                          item={item}
-                          isActive={isCardActive(item)}
-                          isPlaying={isPlaying}
-                          loadingId={loadingId}
-                          onPlay={() => playStreamingSong(item)}
-                        />
-                      ))}
+              return (
+                <section key={sec.id} style={{ marginBottom:32 }}>
+                  <div className="ho-section-head">
+                    <div className="ho-section-title">
+                      <span className="ho-section-dot" style={{ background: accent }} />
+                      <div>
+                        <h2>{sec.title}</h2>
+                        {!sec.badge && (
+                          <div className="ho-section-accent-bar" style={{ background: accent }} />
+                        )}
+                      </div>
+                      {sec.badge === 'NEW'  && <span className="ho-badge-new">{sec.badge}</span>}
+                      {sec.badge === 'HOT'  && <span className="ho-badge-hot">{sec.badge}</span>}
+                      {sec.badge && !['NEW','HOT'].includes(sec.badge) && <span style={{ fontSize:14 }}>{sec.badge}</span>}
+                      {!sec.loading && sec.items.length > 0 && (
+                        <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{sec.items.length}</span>
+                      )}
                     </div>
-                  )
-                }
-              </section>
-            ))}
+                  </div>
+
+                  {sec.loading ? (
+                    <ShimmerShelf count={6} />
+                  ) : sec.items.length === 0 ? null : (
+                    <>
+                      {hasSpotlight && (
+                        <Spotlight
+                          item={sec.items[0]}
+                          eyebrow={sec.title}
+                          badge={sec.badge}
+                          accent={accent}
+                          onPlay={() => playStreamingSong(sec.items[0])}
+                        />
+                      )}
+                      {shelfItems.length > 0 && (
+                        <div className="ho-shelf">
+                          {shelfItems.map(item => (
+                            <SongCard
+                              key={item.id}
+                              item={item}
+                              isActive={isCardActive(item)}
+                              isPlaying={isPlaying}
+                              loadingId={loadingId}
+                              onPlay={() => playStreamingSong(item)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </section>
+              );
+            })}
 
             {/* ── DOWNLOADED SECTION ── */}
             <section style={{ marginBottom:32 }}>
