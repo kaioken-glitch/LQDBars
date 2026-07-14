@@ -26,6 +26,9 @@ function AppInner() {
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
 
+  // NEW: track if we're inside a DM thread
+  const [inDMThread, setInDMThread] = useState(false);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(max-width: 767px)');
@@ -91,7 +94,9 @@ function AppInner() {
       case 'Library':         return <Library />;
       case 'Playlists':       return <Playlists />;
       case 'Recently Played': return <Recent />;
-      case 'Messages':        return <DMPanel />;
+      case 'Messages':
+        // Pass the setter so DMPanel can notify us when entering/leaving a thread
+        return <DMPanel onThreadChange={setInDMThread} />;
       case 'Settings':        return <Settings />;
       default:                return isOnline ? <HomeOnline /> : <Home />;
     }
@@ -126,32 +131,25 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom nav — hidden when not logged in */}
-        {user && (
+        {/* Bottom nav — hide only when on Messages tab AND inside a thread */}
+        {user && !(active === 'Messages' && inDMThread) && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* Global player — handles both desktop bar and mobile mini bar */}
-      {user && <PlayerControls />}
+      {/* Global player — hide only when on Messages tab AND inside a thread */}
+      {user && !(active === 'Messages' && inDMThread) && <PlayerControls />}
 
-      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying
-          from PlayerContext into presence so "now listening" updates
-          automatically everywhere (DMPanel, ProfileDetailView, PeopleRow)
-          without those components needing any player wiring themselves. */}
+      {/* Presence sync */}
       {user && <PresenceSync />}
 
-      {/* Radio station pill — fixed above BottomNav */}
       <style>{`
-        /* Desktop */
         @media (min-width: 768px) {
           .sidebar-slot                 { display: flex !important; }
           .bottom-slot .bottom-nav-root { display: none !important; }
         }
-
-        /* Mobile */
         @media (max-width: 767px) {
           .sidebar-slot { display: none !important; }
         }

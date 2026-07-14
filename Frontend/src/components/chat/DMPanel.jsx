@@ -68,7 +68,9 @@ export default function DMPanel({ onThreadChange }) {
     });
   }, []);
 
+  // FIX: clear activeId so that onThreadChange(false) is called on desktop as well
   const handleBack = useCallback(() => {
+    setActiveId(null);           // <-- THIS WAS MISSING
     setMobileShowThread(false);
     if (onThreadChange) onThreadChange(false);
   }, [onThreadChange]);
@@ -78,6 +80,7 @@ export default function DMPanel({ onThreadChange }) {
     if (activeId && messages.length) markRead();
   }, [messages.length, activeId, markRead]);
 
+  // Inform parent when thread view becomes visible/hidden
   useEffect(() => {
     if (!onThreadChange) return;
     const isDesktop = window.innerWidth > 767;
