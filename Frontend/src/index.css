@@ -224,14 +224,22 @@ body::after {
   }
 }
 
-/* Hide floating player + bottom nav when chat input is focused on mobile
-   This keeps the chat in focus and moves other bottom UI out of view
-   so the keyboard doesn't obscure the conversation. */
-body.chat-input-active .app-bottom-bar {
-  transform: translateY(100%);
-  transition: transform 0.18s var(--lb-ease);
-  pointer-events: none;
-  visibility: hidden;
+/* Hide the mobile player + bottom nav on the DM screen so chat stays full-screen. */
+@media (max-width: 767px) {
+  body.chat-page-active .bottom-slot,
+  body.chat-input-active .bottom-slot {
+    display: none !important;
+  }
+
+  body.chat-page-active .pc-root,
+  body.chat-input-active .pc-root {
+    display: none !important;
+  }
+
+  body.chat-page-active .dm-panel-thread-slot,
+  body.chat-input-active .dm-panel-thread-slot {
+    padding-bottom: 0 !important;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────

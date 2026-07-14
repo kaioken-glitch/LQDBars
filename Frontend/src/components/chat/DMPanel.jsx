@@ -17,6 +17,7 @@ export default function DMPanel() {
   const [activeId, setActiveId] = useState(null);
   const [activeOther, setActiveOther] = useState(null);
   const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [typing, setTyping] = useState(false);
 
   const { messages, loading: messagesLoading, sendMessage, markRead } = useMessages(activeId);
 
@@ -33,6 +34,7 @@ export default function DMPanel() {
         .eq('id', dmTarget)
         .maybeSingle();
       setActiveId(convId);
+      setTyping(false);
       setActiveOther({
         id: dmTarget,
         name: profile?.display_name || profile?.username || 'Unknown',
@@ -46,6 +48,7 @@ export default function DMPanel() {
 
   const handleSelect = useCallback(async (conv) => {
     setActiveId(conv.id);
+    setTyping(false);
     setMobileShowThread(true);
     const { data: profile } = await supabase
       .from('profiles')
@@ -75,8 +78,8 @@ export default function DMPanel() {
         {activeId && activeOther ? (
           <>
             <ProfileBanner user={activeOther} onBack={() => setMobileShowThread(false)} />
-            <MessageThread messages={messages} currentUserId={user?.id} loading={messagesLoading} />
-            <Composer onSend={sendMessage} disabled={!activeId} />
+            <MessageThread messages={messages} currentUserId={user?.id} loading={messagesLoading} typing={typing} />
+            <Composer onSend={sendMessage} disabled={!activeId} onTypingChange={setTyping} />
           </>
         ) : (
           <div className="dm-panel-empty">
@@ -132,5 +135,8 @@ const CSS = `
   .dm-panel-list-slot.hide-mobile,
   .dm-panel-thread-slot.hide-mobile { display: none; }
   .dm-panel-list-slot { width: 100%; }
+  .dm-panel-thread-slot {
+    padding-bottom: 0 !important;
+  }
 }
 `;

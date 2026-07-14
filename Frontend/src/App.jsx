@@ -26,6 +26,17 @@ function AppInner() {
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const apply = () => {
+      document.body.classList.toggle('chat-page-active', active === 'Messages' && mq.matches);
+    };
+    apply();
+    mq.addEventListener?.('change', apply);
+    return () => mq.removeEventListener?.('change', apply);
+  }, [active]);
+
   /* Open the DM panel whenever something elsewhere in the app calls
      openDirectMessage() — e.g. the "Message" button on ProfileDetailView.
      DMPanel itself reads useDMTarget() to know which conversation to

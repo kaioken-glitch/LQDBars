@@ -2,9 +2,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { FaPaperPlane } from 'react-icons/fa';
 
-export default function Composer({ onSend, disabled }) {
+export default function Composer({ onSend, disabled, onTypingChange }) {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [typing, setTyping] = useState(false);
   const taRef = useRef(null);
 
   const autoResize = () => {
@@ -14,17 +15,28 @@ export default function Composer({ onSend, disabled }) {
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   };
 
+  useEffect(() => {
+    if (!typing) return;
+    const id = window.setTimeout(() => {
+      setTyping(false);
+      onTypingChange?.(false);
+    }, 1400);
+    return () => window.clearTimeout(id);
+  }, [typing, value, onTypingChange]);
+
   const submit = useCallback(async () => {
     const text = value.trim();
     if (!text || sending || disabled) return;
     setSending(true);
     setValue('');
+    setTyping(false);
+    onTypingChange?.(false);
     const { error } = await onSend(text);
     if (error) setValue(text);
     setSending(false);
     requestAnimationFrame(autoResize);
     taRef.current?.focus();
-  }, [value, sending, disabled, onSend]);
+  }, [value, sending, disabled, onSend, onTypingChange]);
 
   useEffect(() => {
     return () => {
@@ -47,9 +59,23 @@ export default function Composer({ onSend, disabled }) {
           ref={taRef}
           className="dm-composer-input"
           value={value}
-          onChange={e => { setValue(e.target.value); autoResize(); }}
-          onFocus={() => { try { document.body.classList.add('chat-input-active'); } catch (_) {} }}
-          onBlur={() => { try { document.body.classList.remove('chat-input-active'); } catch (_) {} }}
+          onChange={e => {
+            const next = e.target.value;
+            setValue(next);
+            autoResize();
+            setTyping(Boolean(next.trim()));
+            onTypingChange?.(Boolean(next.trim()));
+          }}
+          onFocus={() => {
+            setTyping(true);
+            onTypingChange?.(true);
+            try { document.body.classList.add('chat-input-active'); } catch (_) {}
+          }}
+          onBlur={() => {
+            setTyping(false);
+            onTypingChange?.(false);
+            try { document.body.classList.remove('chat-input-active'); } catch (_) {}
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Message…"
           rows={1}

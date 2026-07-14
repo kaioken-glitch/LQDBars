@@ -17,7 +17,7 @@ function fmtDateLabel(iso) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function MessageThread({ messages, currentUserId, loading }) {
+export default function MessageThread({ messages, currentUserId, loading, typing }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -58,11 +58,28 @@ export default function MessageThread({ messages, currentUserId, loading }) {
                 <div className="dm-bubble">
                   <span className="dm-bubble-text">{m.body}</span>
                 </div>
-                {!grouped && <span className="dm-bubble-time">{fmtTime(m.created_at)}</span>}
+                {!grouped && (
+                  <div className="dm-bubble-meta">
+                    <span className="dm-bubble-time">{fmtTime(m.created_at)}</span>
+                    {mine && <span className={`dm-bubble-receipt ${m.read_at ? 'read' : 'sent'}`}>{m.read_at ? '✓✓' : '✓'}</span>}
+                  </div>
+                )}
               </div>
             </React.Fragment>
           );
         })
+      )}
+      {typing && (
+        <div className="dm-bubble-row theirs typing">
+          <div className="dm-bubble dm-typing-bubble">
+            <span className="dm-typing-wave" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="dm-typing-label">typing</span>
+          </div>
+        </div>
       )}
       <div ref={bottomRef} />
     </div>
@@ -132,8 +149,37 @@ const CSS = `
   color: #fff;
   border-bottom-left-radius: 5px;
 }
+.dm-bubble-meta {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 4px; padding: 0 4px;
+}
 .dm-bubble-time {
   font-size: 10px; color: rgba(255,255,255,0.28);
-  margin-top: 4px; padding: 0 4px;
+}
+.dm-bubble-receipt {
+  font-size: 10px; color: rgba(255,255,255,0.42);
+  font-weight: 700; letter-spacing: 0.02em;
+}
+.dm-bubble-receipt.read { color: #6EE7B7; }
+.dm-bubble-row.mine .dm-bubble-meta { justify-content: flex-end; }
+.dm-typing-bubble {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-width: 74px; padding: 10px 12px;
+}
+.dm-typing-wave {
+  display: inline-flex; align-items: flex-end; gap: 3px; height: 10px;
+}
+.dm-typing-wave span {
+  width: 3px; height: 3px; border-radius: 999px; background: currentColor;
+  animation: dmTypingWave 1s ease-in-out infinite;
+}
+.dm-typing-wave span:nth-child(2) { animation-delay: 0.12s; }
+.dm-typing-wave span:nth-child(3) { animation-delay: 0.24s; }
+.dm-typing-label {
+  font-size: 12px; color: rgba(255,255,255,0.6); font-style: italic;
+}
+@keyframes dmTypingWave {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+  40% { transform: translateY(-4px); opacity: 1; }
 }
 `;
