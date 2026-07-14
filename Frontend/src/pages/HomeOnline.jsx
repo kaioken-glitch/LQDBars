@@ -100,6 +100,39 @@ function isSingleTrack(video) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   YOUTUBE REQUEST CACHE / DEDUPE (module scope)
+   ───────────────────────────────────────────────────────────────────────────
+   All youtubeConverter.searchVideos() calls in this file go through
+   cachedSearchVideos() instead of calling the converter directly. This:
+     - Reuses an in-flight request if the exact same (query, maxResults) is
+       requested again before the first one resolves (React StrictMode double
+       effects, rapid remounts, etc. no longer double the upstream hit).
+     - Reuses a recently-resolved result for a short window so retyping the
+       same search text, or revisiting a page that just fetched the same
+       section, doesn't re-hit YouTube.
+   This is intentionally a short TTL (in-memory, cleared on full reload) —
+   the longer-lived section cache below (12h, localStorage) is what actually
+   avoids repeat fetches across sessions.
+───────────────────────────────────────────────────────────────────────────── */
+const YT_REQUEST_CACHE = new Map(); // `${query}|${maxResults}` -> { ts, promise }
+const YT_REQUEST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function cachedSearchVideos(query, maxResults = 10) {
+  const key = `${(query || '').trim().toLowerCase()}|${maxResults}`;
+  const hit = YT_REQUEST_CACHE.get(key);
+  if (hit && Date.now() - hit.ts < YT_REQUEST_CACHE_TTL) {
+    return hit.promise;
+  }
+  const promise = youtubeConverter.searchVideos(query, maxResults).catch(err => {
+    // Don't cache failures — a transient error shouldn't block retries
+    YT_REQUEST_CACHE.delete(key);
+    throw err;
+  });
+  YT_REQUEST_CACHE.set(key, { ts: Date.now(), promise });
+  return promise;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    SECTION DEFINITIONS
    Each section has a pool of queries. We pick MULTIPLE queries per load and
    merge results so each section shows diverse tracks, not duplicates.
@@ -245,27 +278,63 @@ const SECTION_DEFINITIONS = [
 ];
 
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   DETERMINISTIC SECTION SELECTION
+   ───────────────────────────────────────────────────────────────────────────
+   Previously "All" picked its 4 sections (and each section's query subset)
+   with Math.random() on every mount. That meant every time HomeOnline
+   remounted — switching tabs and back, navigating away and returning, a
+   StrictMode double-mount in dev — there was a good chance a *different*
+   random combination of sections/queries got picked, which missed the 12h
+   localStorage cache and fired a fresh batch of YouTube searches even though
+   an equivalent batch had just been fetched minutes earlier.
+
+   Seeding the "random" pick from the current date makes it stable for the
+   whole day: same sections, same queries, same cache key → the localStorage
+   cache (getSectionCache/setSectionCache below) actually gets hit on repeat
+   visits instead of being bypassed by chance.
+───────────────────────────────────────────────────────────────────────────── */
+function daySeed() {
+  const d = new Date();
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+function seededShuffle(arr, seed) {
+  const a = [...arr];
+  let s = seed || 1;
+  const rand = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /* Pick sections for the active genre. For each section, pick MULTIPLE queries
-   from the pool so results are diverse. */
+   from the pool so results are diverse — but deterministically per day so
+   repeat visits reuse the same cache instead of re-rolling new combinations. */
 function getSectionsForGenre(genre) {
+  const seed = daySeed();
   if (genre === 'All') {
     const bonus  = SECTION_DEFINITIONS.filter(s => s.genre === null);
     const genre_ = SECTION_DEFINITIONS.filter(s => s.genre !== null);
     const picked = [
-      ...bonus.sort(() => Math.random() - 0.5).slice(0, 2),
-      ...genre_.sort(() => Math.random() - 0.5).slice(0, 2),
+      ...seededShuffle(bonus, seed).slice(0, 2),
+      ...seededShuffle(genre_, seed + 7).slice(0, 2),
     ];
-    return picked.map(sec => ({ ...sec, queries: pickQueries(sec.pool, 4) }));
+    return picked.map((sec, i) => ({ ...sec, queries: pickQueries(sec.pool, 4, seed + i + 1) }));
   }
   const match = SECTION_DEFINITIONS.find(s => s.genre?.toLowerCase() === genre.toLowerCase());
   if (!match) return [];
-  return [{ ...match, queries: pickQueries(match.pool, 6) }];
+  return [{ ...match, queries: pickQueries(match.pool, 6, seed) }];
 }
 
-/* Pick N distinct queries at random from the pool */
-function pickQueries(pool, n) {
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(n, pool.length));
+/* Pick N distinct queries deterministically from the pool */
+function pickQueries(pool, n, seed) {
+  return seededShuffle(pool, seed).slice(0, Math.min(n, pool.length));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1333,6 +1402,10 @@ export default function HomeOnline() {
   const { user, profile: authProfile } = useAuth();
   const ytSongRef   = useRef(null);
   const searchCache = useRef({});
+  // Section fetches already issued this session (survives selectedGenre
+  // toggling back and forth without re-triggering fetchSections' network
+  // calls when the localStorage cache is still fresh — see fetchSections).
+  const sectionFetchInFlight = useRef(new Set());
   const [openProfileId, setOpenProfileId] = useState(null);
   const { suggested, loadingSuggested, isFollowing, toggleFollow, getCounts } = useFollows();
   const {
@@ -1392,8 +1465,15 @@ export default function HomeOnline() {
     evening: { prompt: 'warm electronic rnb smooth grooves evening energy', cacheKey: 'lb:history_mood_evening' },
   };
 
+  // Track which daypart slot we've already resolved (from cache or a fresh
+  // fetch) this mount, so a re-render — or generateMood's identity changing
+  // between renders if the hook doesn't memoize it — can't trigger a second
+  // network call for the same slot.
+  const moodFetchedSlot = useRef(null);
+
   useEffect(() => {
     if (!moodSlot) return;
+    if (moodFetchedSlot.current === moodSlot) return; // already resolved this slot this mount
     let mounted = true;
     async function ensureMood() {
       const config = daypartConfig[moodSlot];
@@ -1403,6 +1483,7 @@ export default function HomeOnline() {
       if (dismissedUntil > Date.now()) {
         setMoodSongs([]);
         setMoodLoading(false);
+        moodFetchedSlot.current = moodSlot;
         return;
       }
 
@@ -1414,6 +1495,7 @@ export default function HomeOnline() {
           if (Date.now() - (parsed.ts || 0) < 4 * 60 * 60 * 1000 && Array.isArray(parsed.songs) && parsed.songs.length) {
             setMoodSongs(parsed.songs);
             setMoodLoading(false);
+            moodFetchedSlot.current = moodSlot;
             return;
           }
         }
@@ -1427,9 +1509,11 @@ export default function HomeOnline() {
         } else {
           setMoodSongs([]);
         }
+        moodFetchedSlot.current = moodSlot;
       } catch (err) {
         console.error(`Mood mix generation failed for ${moodSlot}:`, err);
         setMoodSongs([]);
+        moodFetchedSlot.current = moodSlot;
       } finally {
         if (mounted) setMoodLoading(false);
       }
@@ -1490,9 +1574,13 @@ export default function HomeOnline() {
     return () => clearTimeout(t);
   }, [query]);
 
-  /* ── Search — ONLY searches, never touches the player queue ── */
+  /* ── Search — ONLY searches, never touches the player queue.
+     Routed through cachedSearchVideos so retyping/re-focusing the same
+     query within a few minutes reuses the previous response instead of
+     hitting YouTube again. ── */
   useEffect(() => {
     if (!debouncedQ.trim()) { setLocalResults([]); setYtResults([]); return; }
+    let cancelled = false;
     const q = debouncedQ.toLowerCase();
     // Search in downloadedSongs (the persisted list), not songs (the queue)
     const base = (downloadedSongs && downloadedSongs.length > 0) ? downloadedSongs : songs;
@@ -1502,10 +1590,11 @@ export default function HomeOnline() {
       s.album?.toLowerCase().includes(q)
     ));
     setYtSearching(true);
-    youtubeConverter.searchVideos(debouncedQ, 10)
-      .then(setYtResults)
-      .catch(() => setYtResults([]))
-      .finally(() => setYtSearching(false));
+    cachedSearchVideos(debouncedQ, 10)
+      .then(res => { if (!cancelled) setYtResults(res); })
+      .catch(() => { if (!cancelled) setYtResults([]); })
+      .finally(() => { if (!cancelled) setYtSearching(false); });
+    return () => { cancelled = true; };
   }, [debouncedQ]); // eslint-disable-line
 
   /* ── Patch local song ── */
@@ -1536,7 +1625,7 @@ export default function HomeOnline() {
     }
   }, [downloadedSongs, songs, setPlayerSongs, setIsPlaying]);
 
-  /* ── Play streaming song (uses youtubeId directly, search as fallback) ── */
+  /* ── Play streaming song (uses youtubeId directly, cached search as fallback) ── */
   const playStreamingSong = useCallback(async (item) => {
     const knownId = item.youtubeId || (item.id?.startsWith('yt_') ? item.id.replace('yt_','') : null);
     if (knownId && /^[A-Za-z0-9_-]{11}$/.test(knownId)) {
@@ -1549,7 +1638,7 @@ export default function HomeOnline() {
         if (cached) {
           playYoutubeVideo({ id: cached, title: item.name, channel: item.artist }, item.id);
         } else {
-          const vids = await youtubeConverter.searchVideos(q, 1);
+          const vids = await cachedSearchVideos(q, 1);
           if (!vids?.length) throw new Error('No results');
           searchCache.current[q] = vids[0].id;
           playYoutubeVideo(vids[0], item.id);
@@ -1598,7 +1687,17 @@ export default function HomeOnline() {
     patchSong(id, { liked: next });
   }, [patchSong]);
 
-  /* ── Fetch sections — multiple queries per section for diversity ── */
+  /* ── Fetch sections — multiple queries per section for diversity.
+     getSectionsForGenre() is now deterministic per day (see daySeed above),
+     so the same genre reliably resolves to the same section ids + query
+     subset. Combined with:
+       - the 12h localStorage cache (getSectionCache/setSectionCache), and
+       - the sectionFetchInFlight ref guard below, which skips kicking off a
+         fetch for a genre+section that's already mid-flight this mount
+         (covers React StrictMode's double-invoked effects in dev, and rapid
+         genre-chip toggling back to a genre that's still loading)
+     this only ever calls out to YouTube when there truly is no usable
+     cached data yet. ── */
   const fetchSections = useCallback((genre) => {
     const chosen = getSectionsForGenre(genre);
 
@@ -1610,9 +1709,14 @@ export default function HomeOnline() {
     chosen.forEach((sec, idx) => {
       if (getSectionCache(genre, sec.id)) return;
 
-      // Fire multiple queries in parallel, merge + dedupe results
+      const flightKey = `${genre}:${sec.id}`;
+      if (sectionFetchInFlight.current.has(flightKey)) return; // already fetching this section
+      sectionFetchInFlight.current.add(flightKey);
+
+      // Fire multiple queries in parallel (deduped/cached via cachedSearchVideos),
+      // merge + dedupe results
       const queryPromises = sec.queries.map(q =>
-        youtubeConverter.searchVideos(q, 6).catch(() => [])
+        cachedSearchVideos(q, 6).catch(() => [])
       );
 
       Promise.all(queryPromises).then(allResults => {
@@ -1644,6 +1748,8 @@ export default function HomeOnline() {
         setSections(prev => prev.map((s, i) =>
           i === idx ? { ...s, items, loading: false } : s
         ));
+      }).finally(() => {
+        sectionFetchInFlight.current.delete(flightKey);
       });
     });
   }, []); // eslint-disable-line
