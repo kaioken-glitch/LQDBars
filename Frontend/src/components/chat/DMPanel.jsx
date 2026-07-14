@@ -11,7 +11,7 @@ import ProfileBanner from './Profilebanner';
 import MessageThread from './MessageThread';
 import Composer from './Composer';
 
-export default function DMPanel() {
+export default function DMPanel({ onThreadChange }) {
   const { user } = useAuth();
   const { conversations, getOrCreateConversation } = useConversations();
   const [activeId, setActiveId] = useState(null);
@@ -62,10 +62,29 @@ export default function DMPanel() {
     });
   }, []);
 
+  const handleBack = useCallback(() => {
+    setMobileShowThread(false);
+    // Notify parent that we're back to the list
+    if (onThreadChange) onThreadChange(false);
+  }, [onThreadChange]);
+
   useEffect(() => { if (activeId) markRead(); }, [activeId, markRead]);
   useEffect(() => {
     if (activeId && messages.length) markRead();
   }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Inform parent when the thread view becomes visible/hidden
+  useEffect(() => {
+    if (!onThreadChange) return;
+    // On desktop, thread is visible if activeId is set.
+    // On mobile, thread is visible only when mobileShowThread is true.
+    const isDesktop = window.innerWidth > 767;
+    const isThreadVisible = isDesktop ? !!activeId : !!mobileShowThread;
+    onThreadChange(isThreadVisible);
+
+    // Cleanup: reset state when component unmounts
+    return () => onThreadChange(false);
+  }, [activeId, mobileShowThread, onThreadChange]);
 
   return (
     <div className="dm-panel">
@@ -77,7 +96,7 @@ export default function DMPanel() {
       <div className={`dm-panel-thread-slot${!mobileShowThread ? ' hide-mobile' : ''}`}>
         {activeId && activeOther ? (
           <>
-            <ProfileBanner user={activeOther} onBack={() => setMobileShowThread(false)} />
+            <ProfileBanner user={activeOther} onBack={handleBack} />
             <MessageThread messages={messages} currentUserId={user?.id} loading={messagesLoading} typing={typing} />
             <Composer onSend={sendMessage} disabled={!activeId} onTypingChange={setTyping} />
           </>
