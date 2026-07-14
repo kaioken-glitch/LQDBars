@@ -224,6 +224,16 @@ body::after {
   }
 }
 
+/* Hide floating player + bottom nav when chat input is focused on mobile
+   This keeps the chat in focus and moves other bottom UI out of view
+   so the keyboard doesn't obscure the conversation. */
+body.chat-input-active .app-bottom-bar {
+  transform: translateY(100%);
+  transition: transform 0.18s var(--lb-ease);
+  pointer-events: none;
+  visibility: hidden;
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    SCROLLBARS
 ───────────────────────────────────────────────────────────────────── */

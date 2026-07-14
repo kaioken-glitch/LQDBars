@@ -1,5 +1,5 @@
 // src/components/chat/Composer.jsx
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { FaPaperPlane } from 'react-icons/fa';
 
 export default function Composer({ onSend, disabled }) {
@@ -26,6 +26,12 @@ export default function Composer({ onSend, disabled }) {
     taRef.current?.focus();
   }, [value, sending, disabled, onSend]);
 
+  useEffect(() => {
+    return () => {
+      try { document.body.classList.remove('chat-input-active'); } catch (_) {}
+    };
+  }, []);
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -42,6 +48,8 @@ export default function Composer({ onSend, disabled }) {
           className="dm-composer-input"
           value={value}
           onChange={e => { setValue(e.target.value); autoResize(); }}
+          onFocus={() => { try { document.body.classList.add('chat-input-active'); } catch (_) {} }}
+          onBlur={() => { try { document.body.classList.remove('chat-input-active'); } catch (_) {} }}
           onKeyDown={handleKeyDown}
           placeholder="Message…"
           rows={1}
