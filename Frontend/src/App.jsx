@@ -26,9 +26,6 @@ function AppInner() {
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
 
-  // State to track whether we are inside a DM thread (conversation view)
-  const [inDMThread, setInDMThread] = useState(false);
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(max-width: 767px)');
@@ -94,9 +91,7 @@ function AppInner() {
       case 'Library':         return <Library />;
       case 'Playlists':       return <Playlists />;
       case 'Recently Played': return <Recent />;
-      case 'Messages':
-        // Pass the setter so DMPanel can notify us when entering/leaving a thread
-        return <DMPanel onThreadChange={setInDMThread} />;
+      case 'Messages':        return <DMPanel />;
       case 'Settings':        return <Settings />;
       default:                return isOnline ? <HomeOnline /> : <Home />;
     }
@@ -131,18 +126,21 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom nav — hidden only when on Messages tab AND inside a thread */}
-        {user && !(active === 'Messages' && inDMThread) && (
+        {/* Bottom nav — hidden when not logged in */}
+        {user && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* Global player — hidden only when on Messages tab AND inside a thread */}
-      {user && !(active === 'Messages' && inDMThread) && <PlayerControls />}
+      {/* Global player — handles both desktop bar and mobile mini bar */}
+      {user && <PlayerControls />}
 
-      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying */}
+      {/* Presence sync — mounted once, broadcasts currentSong/isPlaying
+          from PlayerContext into presence so "now listening" updates
+          automatically everywhere (DMPanel, ProfileDetailView, PeopleRow)
+          without those components needing any player wiring themselves. */}
       {user && <PresenceSync />}
 
       {/* Radio station pill — fixed above BottomNav */}
