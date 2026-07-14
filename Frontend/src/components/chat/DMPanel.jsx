@@ -30,25 +30,24 @@ export default function DMPanel({ onThreadChange }) {
 
   const dmTarget = useDMTarget();
 
-  // ----- close thread -----
   const closeThread = useCallback(() => {
     setActiveId(null);
     setActiveOther(null);
     if (onThreadChange) onThreadChange(false);
   }, [onThreadChange]);
 
-  // ----- open thread -----
   const openThread = useCallback((convId, other) => {
     setActiveId(convId);
     setActiveOther(other);
     if (onThreadChange) onThreadChange(true);
-    // push history state so system back can close the thread (mobile)
-    if (window.history && typeof window.history.pushState === 'function') {
-      window.history.pushState({ thread: true }, '');
+    // Push history state for system back on mobile
+    if (typeof window !== 'undefined' && window.innerWidth <= 767) {
+      if (window.history && typeof window.history.pushState === 'function') {
+        window.history.pushState({ thread: true }, '');
+      }
     }
   }, [onThreadChange]);
 
-  // ----- handle external dm target -----
   useEffect(() => {
     if (!dmTarget) return;
     let cancelled = false;
@@ -70,7 +69,6 @@ export default function DMPanel({ onThreadChange }) {
     return () => { cancelled = true; };
   }, [dmTarget, getOrCreateConversation, openThread]);
 
-  // ----- handle conversation selection -----
   const handleSelect = useCallback(async (conv) => {
     const { data: profile } = await supabase
       .from('profiles')
@@ -84,9 +82,11 @@ export default function DMPanel({ onThreadChange }) {
     });
   }, [openThread]);
 
-  // ----- close thread on system back (popstate) -----
+  // System back on mobile: close thread
   useEffect(() => {
     if (!activeId) return;
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
+    if (!isMobile) return;
     const handler = () => {
       closeThread();
     };
@@ -94,30 +94,28 @@ export default function DMPanel({ onThreadChange }) {
     return () => window.removeEventListener('popstate', handler);
   }, [activeId, closeThread]);
 
-  // ----- mark messages read -----
   useEffect(() => { if (activeId) markRead(); }, [activeId, markRead]);
   useEffect(() => {
     if (activeId && messages.length) markRead();
   }, [messages.length, activeId, markRead]);
 
-  // ----- ensure parent knows thread state on mount/unmount -----
+  // Ensure parent knows thread state
   useEffect(() => {
-    // On mount: notify parent if thread is already open (shouldn't happen, but just in case)
     if (onThreadChange) onThreadChange(!!activeId);
     return () => { if (onThreadChange) onThreadChange(false); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
+
   return (
     <div className="dm-panel">
       <style>{CSS}</style>
-      {/* On desktop: always show both; on mobile: show list if no thread, otherwise hide */}
-      <div className={`dm-panel-list-slot${activeId ? ' hide-mobile' : ''}`}>
+      <div className={`dm-panel-list-slot${isMobile && activeId ? ' hide-mobile' : ''}`}>
         <ConversationList conversations={conversations} activeId={activeId} onSelect={handleSelect} />
       </div>
 
-      {/* On desktop: always show thread panel (with empty state if no thread); on mobile: show only when thread is open */}
-      <div className={`dm-panel-thread-slot${!activeId ? ' hide-mobile' : ''}`}>
+      <div className={`dm-panel-thread-slot${isMobile && !activeId ? ' hide-mobile' : ''}`}>
         {activeId && activeOther ? (
           <>
             <ProfileBanner user={activeOther} onBack={closeThread} />
