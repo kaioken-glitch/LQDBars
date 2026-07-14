@@ -26,9 +26,19 @@ function AppInner() {
     () => typeof navigator !== 'undefined' ? navigator.onLine : true
   );
 
-  // DMPanel controls when the mobile chat thread is active and toggles a
-  // body class so the bottom player/nav remain visible when the
-  // conversations list is showing on mobile.
+  // State to track whether we are inside a DM thread (conversation view)
+  const [inDMThread, setInDMThread] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const apply = () => {
+      document.body.classList.toggle('chat-page-active', active === 'Messages' && mq.matches);
+    };
+    apply();
+    mq.addEventListener?.('change', apply);
+    return () => mq.removeEventListener?.('change', apply);
+  }, [active]);
 
   /* Open the DM panel whenever something elsewhere in the app calls
      openDirectMessage() — e.g. the "Message" button on ProfileDetailView.
@@ -84,7 +94,9 @@ function AppInner() {
       case 'Library':         return <Library />;
       case 'Playlists':       return <Playlists />;
       case 'Recently Played': return <Recent />;
-      case 'Messages':        return <DMPanel />;
+      case 'Messages':
+        // Pass the setter so DMPanel can notify us when entering/leaving a thread
+        return <DMPanel onThreadChange={setInDMThread} />;
       case 'Settings':        return <Settings />;
       default:                return isOnline ? <HomeOnline /> : <Home />;
     }
@@ -119,16 +131,16 @@ function AppInner() {
           </div>
         </div>
 
-        {/* Bottom nav — hidden when not logged in */}
-        {user && (
+        {/* Bottom nav — hidden when not logged in OR when inside a DM thread */}
+        {user && !inDMThread && (
           <div className="bottom-slot" style={{ flexShrink: 0 }}>
             <BottomNav active={active} setActive={setActive} />
           </div>
         )}
       </div>
 
-      {/* Global player — handles both desktop bar and mobile mini bar */}
-      {user && <PlayerControls />}
+      {/* Global player — hidden when inside a DM thread */}
+      {user && !inDMThread && <PlayerControls />}
 
       {/* Presence sync — mounted once, broadcasts currentSong/isPlaying
           from PlayerContext into presence so "now listening" updates
