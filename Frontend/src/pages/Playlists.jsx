@@ -96,7 +96,7 @@ function formatDuration(seconds) {
    Same technique PlayerControls.jsx already uses for its accent glow
    (canvas sample, saturation/luminance-weighted pick) — reimplemented
    here scoped to this file since that one isn't exported. Powers the
-   "background mutates to match the art" hero treatment below.
+   "background mutates to match the art" hero treatment in the detail view.
 ───────────────────────────────────────────────────────────────────── */
 const ACCENT_FALLBACK = '29, 185, 84'; // brand green — used until real color resolves
 const ACCENT_CACHE = new Map();
@@ -197,33 +197,92 @@ const CSS = `
 .pl-content { flex: 1; overflow-y: auto; padding: 24px 28px 40px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-content::-webkit-scrollbar { width: 4px; }
 .pl-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
-.pl-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(148px,1fr)); gap: 16px; }
-@media(min-width:500px)  { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(158px,1fr)); gap:18px; } }
-@media(min-width:768px)  { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:20px; } }
-@media(min-width:1024px) { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:24px; } }
-.pl-card { position: relative; background: var(--s1); border: 1px solid var(--b1); border-radius: 18px; overflow: hidden; cursor: pointer; transition: transform .24s var(--spring), border-color .22s var(--ease), box-shadow .22s var(--ease); animation: plUp .38s var(--spring) both; }
-@keyframes plUp { from{opacity:0;transform:translateY(18px) scale(.97)} to{opacity:1;transform:none} }
-.pl-card:hover { transform: translateY(-6px) scale(1.025); border-color: rgba(29,185,84,.28); box-shadow: 0 24px 56px rgba(0,0,0,.55), 0 0 32px rgba(29,185,84,.07); }
+
+/* ══ GRID TILES — Apple Music Browse style: art-first, text lives
+   below the artwork instead of inside a dark card box, small pill
+   badge tucked into the art's corner. This is the ONE canonical grid
+   tile treatment — Library.jsx's AlbumCard mirrors it exactly. ══ */
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: 22px 18px; }
+@media(min-width:500px)  { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap: 24px 20px; } }
+@media(min-width:768px)  { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(172px,1fr)); gap: 26px 22px; } }
+@media(min-width:1024px) { .pl-grid { grid-template-columns:repeat(auto-fill,minmax(184px,1fr)); gap: 28px 24px; } }
+
+.pl-card {
+  position: relative;
+  cursor: pointer;
+  animation: plUp .38s var(--spring) both;
+}
+@keyframes plUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
 .pl-card:nth-child(1){animation-delay:.03s} .pl-card:nth-child(2){animation-delay:.06s} .pl-card:nth-child(3){animation-delay:.09s} .pl-card:nth-child(n+4){animation-delay:.12s}
-.pl-source-badge { position: absolute; top: 8px; left: 8px; z-index: 3; display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; font-size: 9px; font-weight: 700; letter-spacing: .06em; backdrop-filter: blur(8px); }
-.pl-source-badge.yt { background: rgba(0,0,0,.6); color: var(--yt); border: 1px solid rgba(255,0,0,.2); }
-.pl-art { position: relative; width: 100%; padding-top: 100%; background: var(--gdim); }
+
+.pl-art {
+  position: relative; width: 100%; aspect-ratio: 1 / 1;
+  border-radius: 14px; overflow: hidden;
+  background: var(--gdim);
+  box-shadow: 0 10px 26px rgba(0,0,0,.4);
+  transition: box-shadow .22s var(--ease);
+}
+.pl-card:hover .pl-art { box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06); }
+
 .pl-art-mosaic { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
 .pl-art-single { position: absolute; inset: 0; overflow: hidden; }
-.pl-art-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: rgba(29,185,84,.3); background: linear-gradient(135deg, rgba(29,185,84,.1), rgba(0,0,0,.2)); }
-.pl-art-mosaic img, .pl-art-single img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .55s var(--ease); }
-.pl-card:hover .pl-art-mosaic img, .pl-card:hover .pl-art-single img { transform: scale(1.07); }
-.pl-art-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0%, transparent 55%); opacity: 0; transition: opacity .22s var(--ease); display: flex; align-items: center; justify-content: center; }
+.pl-art-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: rgba(29,185,84,.3); background: linear-gradient(135deg, rgba(29,185,84,.14), rgba(0,0,0,.25)); }
+.pl-art-mosaic img, .pl-art-single img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s var(--ease); }
+.pl-card:hover .pl-art-mosaic img, .pl-card:hover .pl-art-single img { transform: scale(1.06); }
+
+/* Small pill badge in the art's corner — mirrors the "Apple Music"
+   badge on editorial tiles, repurposed to flag the playlist source. */
+.pl-source-badge {
+  position: absolute; top: 8px; left: 8px; z-index: 3;
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 7px; border-radius: 6px;
+  font-size: 9px; font-weight: 800; letter-spacing: .05em;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(8px);
+  color: #fff;
+}
+.pl-source-badge.yt { color: #fff; }
+.pl-source-badge.yt svg { color: var(--yt); }
+
+/* Hover play button — small, bottom-right, flat (no big glow ring) */
+.pl-art-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,.35) 0%, transparent 45%);
+  opacity: 0; transition: opacity .2s var(--ease);
+}
 .pl-card:hover .pl-art-overlay { opacity: 1; }
-.pl-art-play { width: 46px; height: 46px; border-radius: 50%; background: var(--g); color: #000; font-size: 15px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 22px rgba(29,185,84,.5); transform: scale(.82) translateY(4px); transition: transform .22s var(--spring), background .15s var(--ease); }
-.pl-card:hover .pl-art-play { transform: scale(1) translateY(0); }
-.pl-art-play:hover { background: var(--g2); }
-.pl-del-badge { position: absolute; top: 8px; right: 8px; z-index: 3; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.1); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--t2); opacity: 0; transition: opacity .18s var(--ease), background .15s var(--ease); }
+.pl-art-play {
+  position: absolute; right: 8px; bottom: 8px; z-index: 3;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: #fff; color: #000; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  opacity: 0; transform: translateY(4px) scale(.9);
+  transition: opacity .18s var(--ease), transform .18s var(--spring), background .15s;
+}
+.pl-card:hover .pl-art-play { opacity: 1; transform: translateY(0) scale(1); }
+.pl-art-play:hover { background: var(--g); color: #000; }
+
+.pl-del-badge {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: var(--t2);
+  opacity: 0; transition: opacity .18s var(--ease), background .15s var(--ease);
+}
 .pl-card:hover .pl-del-badge { opacity: 1; }
-.pl-del-badge:hover { background: rgba(220,40,40,.7); color: #fff; }
-.pl-card-info { padding: 13px 15px 15px; }
-.pl-card-name { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-.pl-card-count { font-size: 11px; color: var(--t3); }
+.pl-del-badge:hover { background: rgba(220,40,40,.75); color: #fff; }
+
+/* Text lives BELOW the art, plain — no card background/border */
+.pl-card-info { padding: 10px 1px 0; }
+.pl-card-name {
+  font-family: 'Syne', sans-serif; font-size: 13.5px; font-weight: 700;
+  color: var(--t1); line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pl-card-count { font-size: 11.5px; color: var(--t3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .pl-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 55vh; gap: 16px; text-align: center; }
 .pl-empty-icon { width: 80px; height: 80px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); display: flex; align-items: center; justify-content: center; font-size: 30px; color: var(--t3); }
 .pl-empty h3 { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: var(--t1); letter-spacing: -.025em; }
@@ -272,13 +331,10 @@ const CSS = `
 .pl-yt-import-btn:active { transform: scale(.97); }
 .pl-yt-import-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-/* ══ DETAIL VIEW — Apple-Music-style, art-color-mutated hero ══ */
+/* ══ DETAIL VIEW — Apple-Music-style, art-color-mutated hero ══
+   (unchanged — this is the canonical detail-view treatment, not part
+   of this pass) ══ */
 .pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: plFadeIn .3s var(--ease) both; }
-
-/* Background: gradient tint derived from the playlist's dominant art
-   color instead of a blurred photo — deepens into the app's normal
-   dark base so text stays legible and it still reads as "Liquid Bars",
-   not a light-mode screenshot. */
 .pl-detail-tint {
   position: absolute; inset: 0; z-index: 1; pointer-events: none;
   transition: background 0.7s ease;
@@ -287,27 +343,20 @@ const CSS = `
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background: linear-gradient(180deg, transparent 0%, rgba(7,8,10,.35) 55%, #07080A 100%);
 }
-
-/* Floating transparent nav — no bar, just pill buttons over the tint */
 .pl-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 4px; }
 .pl-detail-nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.10); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.14); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
 .pl-detail-nav-btn:hover { background: rgba(255,255,255,.18); }
 .pl-detail-nav-btn:active { transform: scale(.9); }
-
-/* Centered Apple-Music-style hero */
 .pl-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 4px; gap: 5px; }
-
 .pl-detail-art-wrap { position: relative; width: min(260px, 58vw); height: min(260px, 58vw); flex-shrink: 0; margin-bottom: 6px; }
 .pl-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(20px); animation: plGlow 3.5s ease-in-out infinite; }
 @keyframes plGlow { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:.9;transform:scale(1.05)} }
 .pl-detail-art { position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 22px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.08); }
 .pl-detail-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pl-detail-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg,rgba(29,185,84,.18),rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
-
 .pl-detail-name { font-family: 'Syne', sans-serif; font-size: clamp(22px,4.5vw,32px); font-weight: 800; letter-spacing: -.03em; color: #fff; line-height: 1.1; max-width: 480px; }
 .pl-detail-subtitle { font-size: 14px; color: rgba(255,255,255,.6); }
 .pl-detail-metaline { font-size: 12px; color: rgba(255,255,255,.38); margin-bottom: 4px; }
-
 .pl-detail-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; width: 100%; max-width: 340px; }
 .pl-detail-circle-btn { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
 .pl-detail-circle-btn:hover { background: rgba(255,255,255,.17); transform: scale(1.06); }
@@ -316,11 +365,7 @@ const CSS = `
 .pl-detail-play-pill:hover { transform: translateY(-1px) scale(1.015); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
 .pl-detail-play-pill:active { transform: scale(.97); }
 .pl-detail-play-pill.playing { background: var(--g); color: #000; }
-
-/* Divider */
 .pl-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 24px 24px 2px; flex-shrink: 0; }
-
-/* Track list */
 .pl-tracks { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-tracks::-webkit-scrollbar { width: 4px; }
 .pl-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
@@ -340,8 +385,6 @@ const CSS = `
 .pl-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .pl-tracks-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 10px; color: var(--t3); font-size: 14px; text-align: center; }
 .pl-track-row .pl-track-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-
-/* ── Playlist detail DotsMenu dropdown ── */
 .pl-dots-wrap { position: relative; }
 .pl-dropdown {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 80;
@@ -363,8 +406,6 @@ const CSS = `
 .pl-dropdown-item:hover { background: rgba(255,255,255,.07); color: #fff; }
 .pl-dropdown-icon { width: 18px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(255,255,255,.4); flex-shrink: 0; }
 .pl-dropdown-sep { height: 1px; background: rgba(255,255,255,.07); margin: 4px 0; }
-
-/* ── Minus (remove) button on track rows in detail view ── */
 .pl-track-remove {
   width: 26px; height: 26px;
   border-radius: 50%;
@@ -384,18 +425,13 @@ const CSS = `
 
 const FB = 'https://placehold.co/200x200/061408/112208?text=\u266a';
 
-/* ── PLAYLIST CARD ── */
+/* ── PLAYLIST CARD — art-first tile, text below, corner badge ── */
 const PlaylistCard = memo(({ pl, onOpen, onPlay, onDelete }) => {
   const covers   = (pl.songs || []).slice(0, 4).map(s => s.cover || FB);
   const hasCover = covers.length > 0;
   const isYT     = pl.source === 'youtube';
   return (
     <div className="pl-card" onClick={() => onOpen(pl)}>
-      {isYT && (
-        <div className="pl-source-badge yt">
-          <FaYoutube style={{ fontSize: 10 }} /> YT
-        </div>
-      )}
       <div className="pl-art">
         {!hasCover
           ? <div className="pl-art-empty"><FaListUl /></div>
@@ -403,11 +439,15 @@ const PlaylistCard = memo(({ pl, onOpen, onPlay, onDelete }) => {
             ? <div className="pl-art-single"><img src={covers[0]} alt={pl.name} onError={e => { e.target.src = FB; }} /></div>
             : <div className="pl-art-mosaic">{covers.map((c, i) => <img key={i} src={c} alt="" onError={e => { e.target.src = FB; }} />)}</div>
         }
-        <div className="pl-art-overlay">
-          <button className="pl-art-play" onClick={e => { e.stopPropagation(); if ((pl.songs || []).length) onPlay(pl.songs); }} aria-label={`Play ${pl.name}`}>
-            <FaPlay style={{ marginLeft: 2 }} />
-          </button>
-        </div>
+        {isYT && (
+          <div className="pl-source-badge yt">
+            <FaYoutube style={{ fontSize: 10 }} /> YT
+          </div>
+        )}
+        <div className="pl-art-overlay" />
+        <button className="pl-art-play" onClick={e => { e.stopPropagation(); if ((pl.songs || []).length) onPlay(pl.songs); }} aria-label={`Play ${pl.name}`}>
+          <FaPlay style={{ marginLeft: 2, fontSize: 11 }} />
+        </button>
         <button className="pl-del-badge" onClick={e => { e.stopPropagation(); onDelete(pl.id); }} aria-label="Delete playlist">
           <FaTrash />
         </button>
@@ -665,14 +705,11 @@ const PlaylistDotsMenu = memo(({ playlist }) => {
   );
 });
 
-/* ── DETAIL VIEW COMPONENT — Apple-Music-style hero ── */
+/* ── DETAIL VIEW COMPONENT — Apple-Music-style hero (unchanged) ── */
 function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuffle, onRemove, mockStates, onMockUpdate }) {
   const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
   const isYT = selected.source === 'youtube';
 
-  // The hooks used elsewhere in this file (usePlaylists, useToast) are
-  // available here too — no new props needed to wire the quick
-  // "add all to Library" hero button.
   const { addToLibrary } = usePlaylists();
   const { show: showToast } = useToast();
 
@@ -719,7 +756,6 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
   return (
     <div className="pl-detail" style={{ zIndex: 50 }}>
 
-        {/* Art-derived color tint — replaces the old blurred-photo background */}
         <div
           className="pl-detail-tint"
           style={{
@@ -731,7 +767,6 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
         />
         <div className="pl-detail-tint-scrim" />
 
-        {/* Floating nav */}
         <div className="pl-detail-nav">
           <button className="pl-detail-nav-btn" onClick={onClose}>
             <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
@@ -739,7 +774,6 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
           <PlaylistDotsMenu playlist={selected} />
         </div>
 
-        {/* Hero */}
         <div className="pl-detail-hero">
           <div className="pl-detail-art-wrap">
             <div className="pl-detail-art-glow" />
@@ -778,7 +812,6 @@ function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuff
 
         <div className="pl-detail-divider" />
 
-        {/* Tracks */}
         <div className="pl-tracks">
           {!(selected.songs || []).length ? (
             <div className="pl-tracks-empty">
