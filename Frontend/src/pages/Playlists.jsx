@@ -176,7 +176,7 @@ const CSS = `
 .pl-search::placeholder { color: var(--t3); }
 .pl-search:focus { border-color: rgba(29,185,84,.5); background: var(--s2); box-shadow: 0 0 0 3px rgba(29,185,84,.10); }
 .pl-import-wrap { position: relative; }
-.pl-import-btn { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 9999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: var(--t1); font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px; transition: background .15s var(--ease), color .15s var(--ease), border-color .15s; }
+.pl-import-btn { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 9999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: var(--t1); font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px; transition: background .15s var(--ease), color .15s var(--ease), border-color .15s; transform: translateZ(0); }
 .pl-import-btn:hover { background: rgba(255,255,255,0.14); color: #fff; border-color: rgba(255,255,255,0.35); }
 .pl-import-btn svg { transition: transform .2s var(--spring); }
 .pl-import-btn.open svg.chevron { transform: rotate(180deg); }
@@ -190,9 +190,9 @@ const CSS = `
 .pl-import-item-label { font-size: 13px; font-weight: 500; }
 .pl-import-item-sub { font-size: 10px; color: var(--t3); margin-top: 1px; }
 .pl-import-sep { height: 1px; background: var(--b1); margin: 4px 0; }
-.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: #1DB954; color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.45); letter-spacing: 0.01em; transition: background .15s, transform .15s cubic-bezier(0.22,1,0.36,1), box-shadow .15s; border: none; cursor: pointer; }
-.pl-new-btn:hover { background: #23E065; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(29,185,84,.5); }
-.pl-new-btn:active { transform: scale(.96); }
+.pl-new-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 9999px; background: #1DB954; color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; box-shadow: 0 4px 18px rgba(29,185,84,.45); letter-spacing: 0.01em; transition: background .15s, transform .15s cubic-bezier(0.22,1,0.36,1), box-shadow .15s; border: none; cursor: pointer; transform: translateZ(0); }
+.pl-new-btn:hover { background: #23E065; transform: translateZ(0) translateY(-1px); box-shadow: 0 6px 24px rgba(29,185,84,.5); }
+.pl-new-btn:active { transform: translateZ(0) scale(.96); }
 .pl-divider { height: 1px; background: var(--b1); margin: 18px 0 0; }
 .pl-content { flex: 1; overflow-y: auto; padding: 24px 28px 40px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
 .pl-content::-webkit-scrollbar { width: 4px; }
@@ -256,10 +256,10 @@ const CSS = `
   background: #fff; color: #000; font-size: 12px;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 18px rgba(0,0,0,.5);
-  opacity: 0; transform: translateY(4px) scale(.9);
+  opacity: 0; transform: translateZ(0) translateY(4px) scale(.9);
   transition: opacity .18s var(--ease), transform .18s var(--spring), background .15s;
 }
-.pl-card:hover .pl-art-play { opacity: 1; transform: translateY(0) scale(1); }
+.pl-card:hover .pl-art-play { opacity: 1; transform: translateZ(0) translateY(0) scale(1); }
 .pl-art-play:hover { background: var(--g); color: #000; }
 
 .pl-del-badge {
@@ -270,6 +270,7 @@ const CSS = `
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; color: var(--t2);
   opacity: 0; transition: opacity .18s var(--ease), background .15s var(--ease);
+  transform: translateZ(0);
 }
 .pl-card:hover .pl-del-badge { opacity: 1; }
 .pl-del-badge:hover { background: rgba(220,40,40,.75); color: #fff; }
@@ -299,9 +300,9 @@ const CSS = `
 .pl-create-input { width: 100%; padding: 13px 16px; background: var(--s1); border: 1px solid var(--b1); border-radius: 13px; color: var(--t1); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color .18s, background .18s; margin-bottom: 24px; }
 .pl-create-input::placeholder { color: var(--t3); }
 .pl-create-input:focus { border-color: rgba(29,185,84,.5); background: var(--s2); }
-.pl-create-submit { width: 100%; padding: 14px; background: var(--g); border-radius: 13px; color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 4px 18px rgba(29,185,84,.35); transition: background .15s, transform .15s var(--spring); }
-.pl-create-submit:hover:not(:disabled) { background: var(--g2); transform: translateY(-1px); }
-.pl-create-submit:active { transform: scale(.97); }
+.pl-create-submit { width: 100%; padding: 14px; background: var(--g); border-radius: 13px; color: #000; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 4px 18px rgba(29,185,84,.35); transition: background .15s, transform .15s var(--spring); transform: translateZ(0); }
+.pl-create-submit:hover:not(:disabled) { background: var(--g2); transform: translateZ(0) translateY(-1px); }
+.pl-create-submit:active { transform: translateZ(0) scale(.97); }
 .pl-create-submit:disabled { opacity: .4; cursor: not-allowed; }
 .pl-yt-modal-overlay { position: fixed; inset: 0; z-index: 75; background: rgba(0,0,0,.7); backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; animation: plFadeIn .22s var(--ease); }
 .pl-yt-modal { width: min(480px,95vw); background: #0D0F11; border: 1px solid var(--b2); border-radius: 24px; padding: 0; box-shadow: 0 40px 100px rgba(0,0,0,.8); overflow: hidden; animation: plScaleIn .3s var(--spring); }
@@ -326,14 +327,12 @@ const CSS = `
 .pl-yt-spinner { animation: spin .8s linear infinite; color: var(--yt); font-size: 14px; }
 .pl-yt-error { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; background: rgba(255,60,60,.07); border: 1px solid rgba(255,60,60,.2); border-radius: 12px; margin-bottom: 14px; font-size: 12px; color: rgba(255,120,120,0.9); line-height: 1.6; animation: plFadeIn .2s var(--ease); }
 .pl-yt-error-icon { flex-shrink: 0; margin-top: 2px; }
-.pl-yt-import-btn { width: 100%; padding: 14px; background: var(--yt); border-radius: 12px; color: #fff; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 4px 18px rgba(255,0,0,.25); transition: background .15s, transform .15s var(--spring), opacity .15s; }
-.pl-yt-import-btn:hover:not(:disabled) { background: #cc0000; transform: translateY(-1px); }
-.pl-yt-import-btn:active { transform: scale(.97); }
+.pl-yt-import-btn { width: 100%; padding: 14px; background: var(--yt); border-radius: 12px; color: #fff; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; box-shadow: 0 4px 18px rgba(255,0,0,.25); transition: background .15s, transform .15s var(--spring), opacity .15s; transform: translateZ(0); }
+.pl-yt-import-btn:hover:not(:disabled) { background: #cc0000; transform: translateZ(0) translateY(-1px); }
+.pl-yt-import-btn:active { transform: translateZ(0) scale(.97); }
 .pl-yt-import-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-/* ══ DETAIL VIEW — Apple-Music-style, art-color-mutated hero ══
-   (unchanged — this is the canonical detail-view treatment, not part
-   of this pass) ══ */
+/* ══ DETAIL VIEW — Apple-Music-style, art-color-mutated hero ══ */
 .pl-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: plFadeIn .3s var(--ease) both; }
 .pl-detail-tint {
   position: absolute; inset: 0; z-index: 1; pointer-events: none;
@@ -343,10 +342,13 @@ const CSS = `
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background: linear-gradient(180deg, transparent 0%, rgba(7,8,10,.35) 55%, #07080A 100%);
 }
-.pl-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 4px; }
-.pl-detail-nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.10); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.14); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+/* NOTE: nav sits ABOVE hero (30 > 10) so its dropdown menu correctly
+   overlays the album art instead of getting painted underneath it —
+   equal z-index siblings stack by DOM order, and hero comes after nav. */
+.pl-detail-nav { position: relative; z-index: 30; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 4px; }
+.pl-detail-nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.10); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.14); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; transform: translateZ(0); }
 .pl-detail-nav-btn:hover { background: rgba(255,255,255,.18); }
-.pl-detail-nav-btn:active { transform: scale(.9); }
+.pl-detail-nav-btn:active { transform: translateZ(0) scale(.9); }
 .pl-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 4px; gap: 5px; }
 .pl-detail-art-wrap { position: relative; width: min(260px, 58vw); height: min(260px, 58vw); flex-shrink: 0; margin-bottom: 6px; }
 .pl-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(20px); animation: plGlow 3.5s ease-in-out infinite; }
@@ -358,12 +360,12 @@ const CSS = `
 .pl-detail-subtitle { font-size: 14px; color: rgba(255,255,255,.6); }
 .pl-detail-metaline { font-size: 12px; color: rgba(255,255,255,.38); margin-bottom: 4px; }
 .pl-detail-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; width: 100%; max-width: 340px; }
-.pl-detail-circle-btn { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
-.pl-detail-circle-btn:hover { background: rgba(255,255,255,.17); transform: scale(1.06); }
-.pl-detail-circle-btn:active { transform: scale(.92); }
-.pl-detail-play-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 14px 0; border-radius: 9999px; background: #fff; color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; box-shadow: 0 10px 32px rgba(0,0,0,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; }
-.pl-detail-play-pill:hover { transform: translateY(-1px) scale(1.015); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
-.pl-detail-play-pill:active { transform: scale(.97); }
+.pl-detail-circle-btn { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; transform: translateZ(0); }
+.pl-detail-circle-btn:hover { background: rgba(255,255,255,.17); transform: translateZ(0) scale(1.06); }
+.pl-detail-circle-btn:active { transform: translateZ(0) scale(.92); }
+.pl-detail-play-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 14px 0; border-radius: 9999px; background: #fff; color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; box-shadow: 0 10px 32px rgba(0,0,0,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; transform: translateZ(0); }
+.pl-detail-play-pill:hover { transform: translateZ(0) translateY(-1px) scale(1.015); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
+.pl-detail-play-pill:active { transform: translateZ(0) scale(.97); }
 .pl-detail-play-pill.playing { background: var(--g); color: #000; }
 .pl-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 24px 24px 2px; flex-shrink: 0; }
 .pl-tracks { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent; }
@@ -705,7 +707,7 @@ const PlaylistDotsMenu = memo(({ playlist }) => {
   );
 });
 
-/* ── DETAIL VIEW COMPONENT — Apple-Music-style hero (unchanged) ── */
+/* ── DETAIL VIEW COMPONENT ── */
 function DetailView({ selected, currentSong, isPlaying, onClose, onPlay, onShuffle, onRemove, mockStates, onMockUpdate }) {
   const isActivePlaylist = selected.songs?.some(s => s.id === currentSong?.id);
   const isYT = selected.source === 'youtube';
