@@ -1,9 +1,51 @@
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronLeft, faEllipsisH } from '@fortawesome/free-solid-svg-icons';
-import { FaSearch, FaPlay, FaRandom, FaMusic } from 'react-icons/fa';
+import { FaSearch, FaPlay, FaRandom, FaMusic, FaListUl } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylists } from '../hooks/usePlaylists';
+
+/* ── DOMINANT COLOR EXTRACTION ──────────────────────────────────────
+   Same technique used by Playlists.jsx's DetailView — canvas sample,
+   saturation/luminance-weighted pick. Powers the "background mutates
+   to match the art" hero treatment so every detail view in the app
+   behaves identically.
+───────────────────────────────────────────────────────────────────── */
+const ACCENT_FALLBACK = '29, 185, 84'; // brand green — used until real color resolves
+const ACCENT_CACHE = new Map();
+
+function extractAccentRGB(src) {
+  return new Promise((resolve) => {
+    if (!src) { resolve(null); return; }
+    if (ACCENT_CACHE.has(src)) { resolve(ACCENT_CACHE.get(src)); return; }
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      try {
+        const size = 48;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        let bestR = 0, bestG = 0, bestB = 0, bestScore = -1;
+        for (let i = 0; i < data.length; i += 16) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+          const score = sat * 1.5 + (1 - Math.abs(lum - 0.45));
+          if (score > bestScore) { bestScore = score; bestR = r; bestG = g; bestB = b; }
+        }
+        const result = `${bestR}, ${bestG}, ${bestB}`;
+        ACCENT_CACHE.set(src, result);
+        resolve(result);
+      } catch (_) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
@@ -75,46 +117,59 @@ const CSS = `
 @keyframes libPulse { 0%,100%{box-shadow:0 0 0 0 rgba(29,185,84,0)} 50%{box-shadow:0 0 0 8px rgba(29,185,84,.08)} }
 .lib-empty h3 { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: var(--t1); letter-spacing: -.025em; }
 .lib-empty p { font-size: 14px; color: var(--t3); max-width: 300px; line-height: 1.6; }
-.lib-modal { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; animation: libFadeIn .28s var(--spring) both; }
-@keyframes libFadeIn { from{opacity:0} to{opacity:1} }
-.lib-modal-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 50% at 20% -10%, rgba(29,185,84,.22) 0%, transparent 60%), linear-gradient(180deg, rgba(4,28,16,.95) 0%, #07080A 50%); }
-.lib-modal-grain { position: absolute; inset: 0; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-size: 200px; opacity: .022; mix-blend-mode: screen; }
-.lib-modal-bar { position: relative; z-index: 2; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-bottom: 1px solid var(--b1); background: rgba(0,0,0,.22); backdrop-filter: blur(24px); }
-.lib-modal-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--s1); border: 1px solid var(--b1); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s var(--ease), transform .15s var(--ease); }
-.lib-modal-btn:hover { background: var(--sh); }
-.lib-modal-btn:active { transform: scale(.9); }
-.lib-hero { position: relative; z-index: 2; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; padding: 24px 24px 16px; }
-@media (min-width: 560px) { .lib-hero { flex-direction: row; align-items: flex-end; padding: 28px 32px 20px; } }
-.lib-hero-art { position: relative; flex-shrink: 0; width: 130px; height: 130px; }
-@media (min-width: 560px) { .lib-hero-art { width: 165px; height: 165px; } }
-.lib-hero-glow { position: absolute; inset: -14px; border-radius: 26px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(14px); animation: heroGlow 3.5s ease-in-out infinite; }
-@keyframes heroGlow { 0%,100%{opacity:.7;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
-.lib-hero-img { position: relative; display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 18px; box-shadow: 0 28px 64px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
-.lib-hero-info { flex: 1; min-width: 0; }
-.lib-hero-tag { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--g); margin-bottom: 8px; }
-.lib-hero-tag-bar { width: 3px; height: 18px; border-radius: 2px; background: var(--g); }
-.lib-hero-title { font-family: 'Syne', sans-serif; font-size: clamp(22px, 4vw, 46px); font-weight: 800; letter-spacing: -.04em; color: var(--t1); line-height: 1.04; margin-bottom: 6px; }
-.lib-hero-artist { font-size: 14px; color: var(--t2); margin-bottom: 4px; }
-.lib-hero-count  { font-size: 12px; color: var(--t3); margin-bottom: 18px; }
-.lib-hero-actions { display: flex; align-items: center; gap: 12px; }
-.lib-hero-play { width: 52px; height: 52px; border-radius: 50%; background: var(--g); color: #000; font-size: 18px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 28px rgba(29,185,84,.45); transition: transform .18s var(--spring), background .15s var(--ease), box-shadow .15s var(--ease); }
-.lib-hero-play:hover { background: var(--g2); transform: scale(1.09); box-shadow: 0 10px 36px rgba(29,185,84,.55); }
-.lib-hero-play:active { transform: scale(.93); }
-.lib-hero-shuffle { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s var(--ease), color .15s var(--ease); }
-.lib-hero-shuffle:hover { background: rgba(255,255,255,0.18); color: #fff; }
-.lib-tracks { position: relative; z-index: 2; flex: 1; overflow-y: auto; padding: 0 18px 36px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent; }
+
+/* ══ DETAIL VIEW — Apple-Music-style, art-color-mutated hero.
+   This is the ONE canonical detail-view treatment, shared verbatim
+   (structure + class naming pattern) with Playlists.jsx's DetailView
+   and HomeOnline.jsx's renderDetail. Don't fork this — if the hero
+   needs to change, change it everywhere. ══ */
+.lib-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: libDetailFadeIn .3s var(--ease) both; }
+@keyframes libDetailFadeIn { from{opacity:0} to{opacity:1} }
+
+.lib-detail-tint { position: absolute; inset: 0; z-index: 1; pointer-events: none; transition: background 0.7s ease; }
+.lib-detail-tint-scrim { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(180deg, transparent 0%, rgba(7,8,10,.35) 55%, #07080A 100%); }
+
+.lib-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 4px; }
+.lib-detail-nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.10); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.14); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.lib-detail-nav-btn:hover { background: rgba(255,255,255,.18); }
+.lib-detail-nav-btn:active { transform: scale(.9); }
+
+.lib-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 4px; gap: 5px; }
+.lib-detail-art-wrap { position: relative; width: min(260px, 58vw); height: min(260px, 58vw); flex-shrink: 0; margin-bottom: 6px; }
+.lib-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(20px); animation: libDetailGlow 3.5s ease-in-out infinite; }
+@keyframes libDetailGlow { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:.9;transform:scale(1.05)} }
+.lib-detail-art { position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 22px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.08); }
+.lib-detail-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-detail-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg,rgba(29,185,84,.18),rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
+
+.lib-detail-name { font-family: 'Syne', sans-serif; font-size: clamp(22px,4.5vw,32px); font-weight: 800; letter-spacing: -.03em; color: #fff; line-height: 1.1; max-width: 480px; }
+.lib-detail-subtitle { font-size: 14px; color: rgba(255,255,255,.6); }
+.lib-detail-metaline { font-size: 12px; color: rgba(255,255,255,.38); margin-bottom: 4px; }
+
+.lib-detail-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; width: 100%; max-width: 340px; }
+.lib-detail-circle-btn { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.lib-detail-circle-btn:hover { background: rgba(255,255,255,.17); transform: scale(1.06); }
+.lib-detail-circle-btn:active { transform: scale(.92); }
+.lib-detail-play-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 14px 0; border-radius: 9999px; background: #fff; color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; box-shadow: 0 10px 32px rgba(0,0,0,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; }
+.lib-detail-play-pill:hover { transform: translateY(-1px) scale(1.015); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
+.lib-detail-play-pill:active { transform: scale(.97); }
+
+.lib-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 24px 24px 2px; flex-shrink: 0; }
+
+.lib-tracks { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent; }
 .lib-tracks::-webkit-scrollbar { width: 4px; }
 .lib-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
-.lib-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 0 12px 14px; }
-.lib-track-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .14s var(--ease), border-color .14s var(--ease); }
-.lib-track-row:hover { background: var(--s2); border-color: var(--b1); }
-.lib-track-row.active { background: rgba(29,185,84,.09); border-color: rgba(29,185,84,.2); }
-.lib-track-num { width: 24px; text-align: center; font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.lib-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 14px 12px 12px; }
+.lib-track-row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.05); transition: background .14s; }
+.lib-track-row:last-child { border-bottom: none; }
+.lib-track-row:hover { background: var(--s2); }
+.lib-track-row.active { background: rgba(29,185,84,.09); }
+.lib-track-num { width: 22px; text-align: center; font-size: 13px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .lib-track-row.active .lib-track-num { color: var(--g); }
-.lib-track-thumb { width: 38px; height: 38px; border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.lib-track-thumb { width: 40px; height: 40px; border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
 .lib-track-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .lib-track-meta { flex: 1; min-width: 0; }
-.lib-track-name { font-size: 13px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; transition: color .14s var(--ease); }
+.lib-track-name { font-size: 13.5px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; transition: color .14s; }
 .lib-track-row:hover .lib-track-name, .lib-track-row.active .lib-track-name { color: var(--g); }
 .lib-track-artist { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lib-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
@@ -139,7 +194,6 @@ const CSS = `
   .lib-card-name { font-size: 12px; }
   .lib-card-artist, .lib-card-count { font-size: 10px; }
 
-  /* :hover never fires on touch — keep the play overlay visible so it's reachable */
   .lib-art-overlay { opacity: 1; background: linear-gradient(to top, rgba(0,0,0,.6) 0%, transparent 60%); }
   .lib-play-btn { transform: scale(0.84) translateY(0); width: 40px; height: 40px; font-size: 13px; }
 
@@ -148,17 +202,16 @@ const CSS = `
   .lib-empty h3 { font-size: 20px; }
   .lib-empty p { font-size: 13px; max-width: 260px; }
 
-  .lib-modal-bar { padding: 12px 16px; }
-  .lib-hero { padding: 20px 16px 14px; gap: 16px; }
-  .lib-hero-title { font-size: clamp(20px, 7.5vw, 30px); }
-  .lib-hero-artist { font-size: 13px; }
-  .lib-hero-count { font-size: 11px; margin-bottom: 14px; }
-  .lib-hero-play { width: 46px; height: 46px; font-size: 16px; }
-  .lib-hero-shuffle { width: 36px; height: 36px; font-size: 13px; }
+  .lib-detail-nav { padding: 14px 16px 2px; }
+  .lib-detail-hero { padding: 12px 18px 2px; }
+  .lib-detail-actions { max-width: 300px; gap: 10px; }
+  .lib-detail-circle-btn { width: 44px; height: 44px; }
+  .lib-detail-play-pill { padding: 12px 0; font-size: 14px; }
+  .lib-detail-divider { margin: 18px 16px 2px; }
 
   .lib-tracks { padding: 0 12px 28px; }
   .lib-tracks-label { padding: 0 8px 10px; }
-  .lib-track-row { padding: 8px 8px; gap: 10px; }
+  .lib-track-row { padding: 9px 8px; gap: 10px; }
   .lib-track-thumb { width: 36px; height: 36px; }
   .lib-track-name { font-size: 12px; }
   .lib-track-artist { font-size: 10px; }
@@ -200,7 +253,7 @@ const AlbumCard = memo(({ alb, onOpen, onPlay }) => {
 
 const TrackRow = memo(({ song, index, isActive, onClick }) => (
   <div className={`lib-track-row${isActive ? ' active' : ''}`} onClick={onClick} role="button" aria-label={`Play ${song.name}`}>
-    <span className="lib-track-num">{String(index + 1).padStart(2, '0')}</span>
+    <span className="lib-track-num">{index + 1}</span>
     <div className="lib-track-thumb">
       <img src={song.cover || FB} alt={song.name} onError={e => { e.target.src = FB; }} />
     </div>
@@ -211,6 +264,107 @@ const TrackRow = memo(({ song, index, isActive, onClick }) => (
     <span className="lib-track-dur">{song.formattedDuration || song.duration || ''}</span>
   </div>
 ));
+
+/* ── DETAIL VIEW — same hero pattern as Playlists.jsx's DetailView ── */
+function AlbumDetailView({ selected, currentSong, onClose, onPlay, onShuffle }) {
+  const [accentRGB, setAccentRGB] = useState(ACCENT_FALLBACK);
+  const coverSrc = selected.songs?.[0]?.cover || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!coverSrc) { setAccentRGB(ACCENT_FALLBACK); return; }
+    extractAccentRGB(coverSrc).then(rgb => {
+      if (!cancelled && rgb) setAccentRGB(rgb);
+    });
+    return () => { cancelled = true; };
+  }, [coverSrc]);
+
+  const totalSeconds = useMemo(() => {
+    return (selected.songs || []).reduce((sum, s) => {
+      const raw = s.durationSeconds ?? null;
+      if (raw != null) return sum + raw;
+      const parts = String(s.formattedDuration || s.duration || '').split(':').map(Number);
+      if (parts.length === 2 && !parts.some(Number.isNaN)) return sum + parts[0] * 60 + parts[1];
+      return sum;
+    }, 0);
+  }, [selected.songs]);
+
+  const durationLabel = useMemo(() => {
+    if (!totalSeconds) return null;
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.round((totalSeconds % 3600) / 60);
+    return h > 0 ? `${h} hr ${m} min` : `${m} min`;
+  }, [totalSeconds]);
+
+  return (
+    <div className="lib-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+      <style>{CSS}</style>
+      <div className="lib-detail">
+
+        <div
+          className="lib-detail-tint"
+          style={{
+            background: `
+              radial-gradient(ellipse 70% 42% at 50% 0%, rgba(${accentRGB},0.38) 0%, transparent 62%),
+              linear-gradient(180deg, rgba(${accentRGB},0.30) 0%, rgba(${accentRGB},0.10) 32%, #07080A 76%)
+            `,
+          }}
+        />
+        <div className="lib-detail-tint-scrim" />
+
+        <div className="lib-detail-nav">
+          <button className="lib-detail-nav-btn" onClick={onClose} aria-label="Back">
+            <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
+          </button>
+          <button className="lib-detail-nav-btn" aria-label="More options">
+            <FontAwesomeIcon icon={faEllipsisH} style={{ fontSize: 13 }} />
+          </button>
+        </div>
+
+        <div className="lib-detail-hero">
+          <div className="lib-detail-art-wrap">
+            <div className="lib-detail-art-glow" />
+            <div className="lib-detail-art">
+              {selected.songs?.length > 0
+                ? <img src={selected.songs[0]?.cover || FB} alt={selected.album} onError={e => { e.target.src = FB; }} />
+                : <div className="lib-detail-art-empty"><FaListUl /></div>
+              }
+            </div>
+          </div>
+
+          <h1 className="lib-detail-name">{selected.album}</h1>
+          <p className="lib-detail-subtitle">{selected.songs[0]?.artist || 'Various Artists'}</p>
+          <p className="lib-detail-metaline">
+            {selected.songs.length} song{selected.songs.length !== 1 ? 's' : ''}{durationLabel ? ` · ${durationLabel}` : ''}
+          </p>
+
+          <div className="lib-detail-actions">
+            <button className="lib-detail-circle-btn" onClick={() => onShuffle(selected.songs)} title="Shuffle" aria-label="Shuffle play">
+              <FaRandom />
+            </button>
+            <button className="lib-detail-play-pill" onClick={() => onPlay(selected.songs)}>
+              <FaPlay style={{ fontSize: 13, marginLeft: 1 }} /> Play
+            </button>
+          </div>
+        </div>
+
+        <div className="lib-detail-divider" />
+
+        <div className="lib-tracks">
+          <div className="lib-tracks-label">Tracks · {selected.songs.length}</div>
+          {selected.songs.map((song, i) => (
+            <TrackRow
+              key={song.id || i}
+              song={song} index={i}
+              isActive={currentSong?.id === song.id}
+              onClick={() => onPlay(selected.songs, i)}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Library() {
   const { currentSong, setIsPlaying, setPlayerSongs } = usePlayer();
@@ -256,6 +410,13 @@ export default function Library() {
 
   const shuffleAlbum = useCallback((songs) => {
     playAlbum([...songs].sort(() => Math.random() - 0.5));
+  }, [playAlbum]);
+
+  // AlbumDetailView's onPlay is used both for "Play" (no index) and for
+  // clicking a track row (with index) — playAlbum already handles both.
+  const handleDetailPlay = useCallback((songs, idx) => {
+    if (typeof idx === 'number') playAlbum(songs, idx);
+    else playAlbum(songs);
   }, [playAlbum]);
 
   return (
@@ -304,56 +465,13 @@ export default function Library() {
       </div>
 
       {selected && (
-        <div className="lib-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
-          <div className="lib-modal">
-            <div className="lib-modal-bg" />
-            <div className="lib-modal-grain" />
-            <div className="lib-modal-bar">
-              <button className="lib-modal-btn" onClick={() => setSelected(null)} aria-label="Back">
-                <FontAwesomeIcon icon={faChevronLeft} />
-              </button>
-              <button className="lib-modal-btn" aria-label="More options">
-                <FontAwesomeIcon icon={faEllipsisH} />
-              </button>
-            </div>
-            <div className="lib-hero">
-              <div className="lib-hero-art">
-                <div className="lib-hero-glow" />
-                <img
-                  className="lib-hero-img"
-                  src={selected.songs[0]?.cover || FB}
-                  alt={selected.album}
-                  onError={e => { e.target.src = FB; }}
-                />
-              </div>
-              <div className="lib-hero-info">
-                <div className="lib-hero-tag"><span className="lib-hero-tag-bar" /> Album</div>
-                <h1 className="lib-hero-title">{selected.album}</h1>
-                <p className="lib-hero-artist">{selected.songs[0]?.artist || 'Various Artists'}</p>
-                <p className="lib-hero-count">{selected.songs.length} song{selected.songs.length !== 1 ? 's' : ''}</p>
-                <div className="lib-hero-actions">
-                  <button className="lib-hero-play" onClick={() => playAlbum(selected.songs)} aria-label="Play all">
-                    <FaPlay style={{ marginLeft: 2 }} />
-                  </button>
-                  <button className="lib-hero-shuffle" onClick={() => shuffleAlbum(selected.songs)} aria-label="Shuffle">
-                    <FaRandom />
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="lib-tracks">
-              <div className="lib-tracks-label">Tracks · {selected.songs.length}</div>
-              {selected.songs.map((song, i) => (
-                <TrackRow
-                  key={song.id || i}
-                  song={song} index={i}
-                  isActive={currentSong?.id === song.id}
-                  onClick={() => playSong(song, selected.songs)}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        <AlbumDetailView
+          selected={selected}
+          currentSong={currentSong}
+          onClose={() => setSelected(null)}
+          onPlay={handleDetailPlay}
+          onShuffle={shuffleAlbum}
+        />
       )}
     </div>
   );
