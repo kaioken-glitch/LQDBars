@@ -17,9 +17,18 @@ export default function DMPanel({ onThreadChange }) {
   const [activeId, setActiveId] = useState(null);
   const [activeOther, setActiveOther] = useState(null);
   const [mobileShowThread, setMobileShowThread] = useState(false);
-  const [typing, setTyping] = useState(false);
 
-  const { messages, loading: messagesLoading, sendMessage, markRead } = useMessages(activeId);
+  const {
+    messages,
+    loading: messagesLoading,
+    sendMessage,
+    markRead,
+    sendTyping,
+    otherTyping,
+    editMessage,
+    deleteForMe,
+    deleteForEveryone,
+  } = useMessages(activeId);
 
   const dmTarget = useDMTarget();
   useEffect(() => {
@@ -34,7 +43,6 @@ export default function DMPanel({ onThreadChange }) {
         .eq('id', dmTarget)
         .maybeSingle();
       setActiveId(convId);
-      setTyping(false);
       setActiveOther({
         id: dmTarget,
         name: profile?.display_name || profile?.username || 'Unknown',
@@ -48,7 +56,6 @@ export default function DMPanel({ onThreadChange }) {
 
   const handleSelect = useCallback(async (conv) => {
     setActiveId(conv.id);
-    setTyping(false);
     setMobileShowThread(true);
     const { data: profile } = await supabase
       .from('profiles')
@@ -64,7 +71,6 @@ export default function DMPanel({ onThreadChange }) {
 
   const handleBack = useCallback(() => {
     setMobileShowThread(false);
-    // Notify parent that we're back to the list
     if (onThreadChange) onThreadChange(false);
   }, [onThreadChange]);
 
@@ -73,16 +79,11 @@ export default function DMPanel({ onThreadChange }) {
     if (activeId && messages.length) markRead();
   }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Inform parent when the thread view becomes visible/hidden
   useEffect(() => {
     if (!onThreadChange) return;
-    // On desktop, thread is visible if activeId is set.
-    // On mobile, thread is visible only when mobileShowThread is true.
     const isDesktop = window.innerWidth > 767;
     const isThreadVisible = isDesktop ? !!activeId : !!mobileShowThread;
     onThreadChange(isThreadVisible);
-
-    // Cleanup: reset state when component unmounts
     return () => onThreadChange(false);
   }, [activeId, mobileShowThread, onThreadChange]);
 
@@ -97,12 +98,23 @@ export default function DMPanel({ onThreadChange }) {
         {activeId && activeOther ? (
           <>
             <ProfileBanner user={activeOther} onBack={handleBack} />
-            <MessageThread messages={messages} currentUserId={user?.id} loading={messagesLoading} typing={typing} />
-            <Composer onSend={sendMessage} disabled={!activeId} onTypingChange={setTyping} />
+            <MessageThread
+              messages={messages}
+              currentUserId={user?.id}
+              otherUser={activeOther}
+              loading={messagesLoading}
+              typing={otherTyping}
+              onEdit={editMessage}
+              onDeleteForMe={deleteForMe}
+              onDeleteForEveryone={deleteForEveryone}
+            />
+            <Composer onSend={sendMessage} disabled={!activeId} sendTyping={sendTyping} />
           </>
         ) : (
           <div className="dm-panel-empty">
             <div className="dm-panel-empty-glow" />
+            <div className="dm-panel-empty-orb dm-orb1" />
+            <div className="dm-panel-empty-orb dm-orb2" />
             <div className="dm-panel-empty-icon"><FaComments /></div>
             <h3>Your Messages</h3>
             <p>Select a conversation on the left, or start a new one from someone's profile.</p>
@@ -127,22 +139,31 @@ const CSS = `
 
 .dm-panel-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; text-align: center; position: relative; padding: 20px;
+  gap: 10px; text-align: center; position: relative; padding: 20px; overflow: hidden;
 }
 .dm-panel-empty-glow {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  width: 340px; height: 340px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(29,185,84,0.08) 0%, transparent 70%);
+  width: 360px; height: 360px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(29,185,84,0.09) 0%, transparent 70%);
   pointer-events: none;
 }
+.dm-panel-empty-orb {
+  position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.16; pointer-events: none;
+  animation: dmOrbFloat 8s ease-in-out infinite;
+}
+.dm-orb1 { width: 260px; height: 260px; background: #1DB954; top: 10%; left: 12%; }
+.dm-orb2 { width: 200px; height: 200px; background: #23E065; bottom: 12%; right: 15%; animation-delay: 3s; }
+@keyframes dmOrbFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-24px)} }
+
 .dm-panel-empty-icon {
-  position: relative; width: 68px; height: 68px; border-radius: 50%;
+  position: relative; width: 72px; height: 72px; border-radius: 50%;
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
   display: flex; align-items: center; justify-content: center;
-  font-size: 26px; color: rgba(29,185,84,0.55); margin-bottom: 4px;
+  font-size: 28px; color: rgba(29,185,84,0.6); margin-bottom: 4px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset, 0 20px 50px rgba(0,0,0,0.4);
 }
 .dm-panel-empty h3 {
-  position: relative; font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800;
+  position: relative; font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
   color: #fff; letter-spacing: -0.02em;
 }
 .dm-panel-empty p {
