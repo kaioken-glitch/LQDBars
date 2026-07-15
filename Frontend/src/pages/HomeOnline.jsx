@@ -806,17 +806,6 @@ const STYLES = `
   }
   .ho-search-row:hover { background: rgba(255,255,255,0.06); }
 
-  /* ── Track row (detail view) ── */
-  .ho-track {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 12px; border-radius: 10px;
-    cursor: pointer; transition: background 0.15s; position: relative;
-  }
-  .ho-track:hover { background: rgba(255,255,255,0.06); }
-  .ho-track.active { background: rgba(29,185,84,0.10); }
-  .ho-track .ho-track-actions { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity 0.15s; }
-  .ho-track:hover .ho-track-actions { opacity: 1; }
-
   /* ── Dropdown menus ── */
   .lb-dropdown {
     position: absolute; right: 0; top: calc(100% + 6px);
@@ -939,6 +928,164 @@ const STYLES = `
   }
   .ho-spotlight-play:hover { background: var(--lb-green-bright); transform: scale(1.08); }
   .ho-spotlight-play:active { transform: scale(0.92); }
+`;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DETAIL VIEW — canonical hero treatment
+   ───────────────────────────────────────────────────────────────────────────
+   This is the SAME "art-color-mutated hero" detail view used by
+   Library.jsx's AlbumDetailView and Playlists.jsx's DetailView — same
+   dominant-color extraction, same `.lib-detail-*` class names and CSS.
+   Don't fork this: if the hero needs to change, change it in all three
+   places identically.
+───────────────────────────────────────────────────────────────────────────── */
+const ACCENT_FALLBACK = '29, 185, 84'; // brand green — used until real color resolves
+const ACCENT_CACHE = new Map();
+
+function extractAccentRGB(src) {
+  return new Promise((resolve) => {
+    if (!src) { resolve(null); return; }
+    if (ACCENT_CACHE.has(src)) { resolve(ACCENT_CACHE.get(src)); return; }
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      try {
+        const size = 48;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        let bestR = 0, bestG = 0, bestB = 0, bestScore = -1;
+        for (let i = 0; i < data.length; i += 16) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+          const score = sat * 1.5 + (1 - Math.abs(lum - 0.45));
+          if (score > bestScore) { bestScore = score; bestR = r; bestG = g; bestB = b; }
+        }
+        const result = `${bestR}, ${bestG}, ${bestB}`;
+        ACCENT_CACHE.set(src, result);
+        resolve(result);
+      } catch (_) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/* Copied verbatim from Library.jsx's CSS (the `.lib-root` variable scope +
+   every `.lib-detail-*` / `.lib-tracks*` rule, incl. the mobile overrides).
+   Two small additive blocks are appended at the end — clearly marked —
+   for things Library's plain AlbumDetailView doesn't need: per-track
+   favorite/like/add-to-playlist actions, and styling the existing DotsMenu
+   trigger to sit in the nav row like a second `.lib-detail-nav-btn`. */
+const DETAIL_CSS = `
+.lib-root {
+  --g:      #1DB954;
+  --g2:     #23E065;
+  --gdim:   rgba(29,185,84,0.14);
+  --gglow:  rgba(29,185,84,0.28);
+  --s1:     rgba(255,255,255,0.04);
+  --s2:     rgba(255,255,255,0.07);
+  --sh:     rgba(255,255,255,0.09);
+  --b1:     rgba(255,255,255,0.07);
+  --b2:     rgba(255,255,255,0.13);
+  --t1:     #fff;
+  --t2:     rgba(255,255,255,0.55);
+  --t3:     rgba(255,255,255,0.28);
+  --ease:   cubic-bezier(0.4,0,0.2,1);
+  --spring: cubic-bezier(0.22,1,0.36,1);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--t1);
+}
+.lib-root *, .lib-root *::before, .lib-root *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.lib-root button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+.lib-detail { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; overflow: hidden; background: #07080A; animation: libDetailFadeIn .3s var(--ease) both; }
+@keyframes libDetailFadeIn { from{opacity:0} to{opacity:1} }
+
+.lib-detail-tint { position: absolute; inset: 0; z-index: 1; pointer-events: none; transition: background 0.7s ease; }
+.lib-detail-tint-scrim { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(180deg, transparent 0%, rgba(7,8,10,.35) 55%, #07080A 100%); }
+
+.lib-detail-nav { position: relative; z-index: 10; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 4px; }
+.lib-detail-nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.10); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.14); color: var(--t1); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.lib-detail-nav-btn:hover { background: rgba(255,255,255,.18); }
+.lib-detail-nav-btn:active { transform: scale(.9); }
+
+.lib-detail-hero { position: relative; z-index: 10; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 24px 4px; gap: 5px; }
+.lib-detail-art-wrap { position: relative; width: min(260px, 58vw); height: min(260px, 58vw); flex-shrink: 0; margin-bottom: 6px; }
+.lib-detail-art-glow { position: absolute; inset: -16px; border-radius: 32px; background: radial-gradient(circle, var(--gglow) 0%, transparent 70%); filter: blur(20px); animation: libDetailGlow 3.5s ease-in-out infinite; }
+@keyframes libDetailGlow { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:.9;transform:scale(1.05)} }
+.lib-detail-art { position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 22px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.08); }
+.lib-detail-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-detail-art-empty { width: 100%; height: 100%; background: linear-gradient(135deg,rgba(29,185,84,.18),rgba(0,0,0,.35)); display: flex; align-items: center; justify-content: center; font-size: 52px; color: rgba(29,185,84,.3); }
+
+.lib-detail-name { font-family: 'Syne', sans-serif; font-size: clamp(22px,4.5vw,32px); font-weight: 800; letter-spacing: -.03em; color: #fff; line-height: 1.1; max-width: 480px; }
+.lib-detail-subtitle { font-size: 14px; color: rgba(255,255,255,.6); }
+.lib-detail-metaline { font-size: 12px; color: rgba(255,255,255,.38); margin-bottom: 4px; }
+
+.lib-detail-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; width: 100%; max-width: 340px; }
+.lib-detail-circle-btn { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .15s; }
+.lib-detail-circle-btn:hover { background: rgba(255,255,255,.17); transform: scale(1.06); }
+.lib-detail-circle-btn:active { transform: scale(.92); }
+.lib-detail-play-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 14px 0; border-radius: 9999px; background: #fff; color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; box-shadow: 0 10px 32px rgba(0,0,0,.45); transition: background .15s, transform .15s var(--spring), box-shadow .15s; }
+.lib-detail-play-pill:hover { transform: translateY(-1px) scale(1.015); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
+.lib-detail-play-pill:active { transform: scale(.97); }
+
+.lib-detail-divider { position: relative; z-index: 10; height: 1px; background: rgba(255,255,255,.07); margin: 24px 24px 2px; flex-shrink: 0; }
+
+.lib-tracks { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding: 0 20px 48px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.07) transparent; }
+.lib-tracks::-webkit-scrollbar { width: 4px; }
+.lib-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 3px; }
+.lib-tracks-label { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); padding: 14px 12px 12px; }
+.lib-track-row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.05); transition: background .14s; position: relative; }
+.lib-track-row:last-child { border-bottom: none; }
+.lib-track-row:hover { background: var(--s2); }
+.lib-track-row.active { background: rgba(29,185,84,.09); }
+.lib-track-num { width: 22px; text-align: center; font-size: 13px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.lib-track-row.active .lib-track-num { color: var(--g); }
+.lib-track-thumb { width: 40px; height: 40px; border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.lib-track-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-track-meta { flex: 1; min-width: 0; }
+.lib-track-name { font-size: 13.5px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; transition: color .14s; }
+.lib-track-row:hover .lib-track-name, .lib-track-row.active .lib-track-name { color: var(--g); }
+.lib-track-artist { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-track-dur { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+@media (max-width: 767px) {
+  .lib-detail-nav { padding: 14px 16px 2px; }
+  .lib-detail-hero { padding: 12px 18px 2px; }
+  .lib-detail-actions { max-width: 300px; gap: 10px; }
+  .lib-detail-circle-btn { width: 44px; height: 44px; }
+  .lib-detail-play-pill { padding: 12px 0; font-size: 14px; }
+  .lib-detail-divider { margin: 18px 16px 2px; }
+
+  .lib-tracks { padding: 0 12px 28px; }
+  .lib-tracks-label { padding: 0 8px 10px; }
+  .lib-track-row { padding: 9px 8px; gap: 10px; }
+  .lib-track-thumb { width: 36px; height: 36px; }
+  .lib-track-name { font-size: 12px; }
+  .lib-track-artist { font-size: 10px; }
+  .lib-track-dur { font-size: 10px; }
+}
+
+/* ── Additive, HomeOnline-only: per-track social actions (fav/like/add-to-
+   playlist) that Library's plain track rows don't have, plus fitting the
+   existing DotsMenu trigger into the nav row next to the back button. ── */
+.lib-track-actions { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
+.lib-track-row:hover .lib-track-actions,
+.lib-track-row:focus-within .lib-track-actions { opacity: 1; }
+.lib-detail-nav .lb-icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,.10); backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,.14); color: var(--t1);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, transform .15s;
+}
+.lib-detail-nav .lb-icon-btn:hover { background: rgba(255,255,255,.18); }
 `;
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1311,24 +1458,24 @@ const AddToPlaylistBtn = memo(({ song }) => {
 });
 
 const TrackRow = memo(({ song, index, isActive, isPlaying, onPlay, isFav, isLiked, onFav, onLike }) => (
-  <div className={`ho-track${isActive?' active':''}`} onClick={onPlay}>
-    <span style={{ width:28, textAlign:'center', fontSize:12, color:'var(--lb-text-3)', flexShrink:0 }}>
-      {isActive && isPlaying ? <WaveIcon /> : String(index+1).padStart(2,'0')}
+  <div className={`lib-track-row${isActive ? ' active' : ''}`} onClick={onPlay} role="button" aria-label={`Play ${song.name}`}>
+    <span className="lib-track-num">
+      {isActive && isPlaying ? <WaveIcon /> : index + 1}
     </span>
-    <div style={{ width:40, height:40, borderRadius:8, overflow:'hidden', flexShrink:0 }}>
-      <img src={song.cover} alt={song.name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
-        onError={e => { e.target.src='/default-cover.png'; }} />
+    <div className="lib-track-thumb">
+      <img src={song.cover} alt={song.name} onError={e => { e.target.src = '/default-cover.png'; }} />
     </div>
-    <div style={{ flex:1, minWidth:0 }}>
-      <p style={{ fontSize:14, fontWeight:600, color:isActive?'var(--lb-green)':'var(--lb-text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{song.name}</p>
-      <p style={{ fontSize:12, color:'var(--lb-text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{song.artist}</p>
+    <div className="lib-track-meta">
+      <div className="lib-track-name">{song.name}</div>
+      <div className="lib-track-artist">{song.artist || 'Unknown'}</div>
     </div>
-    <div className="ho-track-actions">
-      <button onClick={e=>{e.stopPropagation();onFav();}} style={{ width:28, height:28, borderRadius:'50%', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-        <FaStar style={{ fontSize:11, color:isFav?'#FFD600':'var(--lb-text-3)' }} />
+    <span className="lib-track-dur">{song.formattedDuration || song.duration || ''}</span>
+    <div className="lib-track-actions">
+      <button onClick={e => { e.stopPropagation(); onFav(); }} style={{ width:28, height:28, borderRadius:'50%', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <FaStar style={{ fontSize:11, color:isFav?'#FFD600':'var(--t3)' }} />
       </button>
-      <button onClick={e=>{e.stopPropagation();onLike();}} style={{ width:28, height:28, borderRadius:'50%', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-        <FaHeart style={{ fontSize:11, color:isLiked?'#FF4455':'var(--lb-text-3)' }} />
+      <button onClick={e => { e.stopPropagation(); onLike(); }} style={{ width:28, height:28, borderRadius:'50%', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <FaHeart style={{ fontSize:11, color:isLiked?'#FF4455':'var(--t3)' }} />
       </button>
       <AddToPlaylistBtn song={song} />
     </div>
@@ -1384,7 +1531,9 @@ export default function HomeOnline() {
   }, [trackStates]);
   const [loading,         setLoading]         = useState(true);
   const [errorMsg,        setErrorMsg]        = useState(null);
-  const [detailBg,        setDetailBg]        = useState('#1a1a1a');
+  // Dominant-color accent for the detail view hero — same extraction Library.jsx
+  // and Playlists.jsx use, so the tinted background behaves identically everywhere.
+  const [detailAccentRGB, setDetailAccentRGB] = useState(ACCENT_FALLBACK);
   // Search now lives in a full‑screen overlay
   const [searchOpen,      setSearchOpen]      = useState(false);
   const [suggestionsVisible, setSuggestionsVisible] = useState(() => {
@@ -1655,7 +1804,6 @@ export default function HomeOnline() {
   /* ── Detail view (only for Downloaded and future album tiles) ── */
   const openDetail = useCallback((item) => {
     setSelectedItem(item);
-    setDetailBg(item.accent || '#1a2a1a');
     setShowDetail(true);
   }, []);
 
@@ -1663,6 +1811,19 @@ export default function HomeOnline() {
     setShowDetail(false);
     setTimeout(() => setSelectedItem(null), 300);
   }, []);
+
+  // Extract the hero tint from whatever's showing — same technique Library.jsx's
+  // AlbumDetailView and Playlists.jsx's DetailView use, kept in sync here so all
+  // three feel like one continuous UI rather than three reimplementations.
+  useEffect(() => {
+    let cancelled = false;
+    const cover = selectedItem?.cover || selectedItem?.songs?.[0]?.cover || null;
+    if (!cover) { setDetailAccentRGB(ACCENT_FALLBACK); return; }
+    extractAccentRGB(cover).then(rgb => {
+      if (!cancelled && rgb) setDetailAccentRGB(rgb);
+    });
+    return () => { cancelled = true; };
+  }, [selectedItem]);
 
   const addToQueue = useCallback((song) => {
     if (!song) return;
@@ -1840,87 +2001,112 @@ export default function HomeOnline() {
     if (selectedItem.type === 'radio') {
       return <RadioDetailView onClose={closeDetail} />;
     }
-    const songList  = selectedItem.songs ?? [];
-    const cover     = selectedItem.cover || songList[0]?.cover;
-    const title     = selectedItem.name || 'Downloaded';
-    const subtitle  = selectedItem.songCount ? `${selectedItem.songCount} songs` : (selectedItem.artist || '');
-    const typeLabel = selectedItem.type === 'downloaded' ? 'LOCAL LIBRARY' : (selectedItem.type?.replace('-',' ').toUpperCase() || 'PLAYLIST');
+
+    const songList = selectedItem.songs ?? [];
+    const cover    = selectedItem.cover || songList[0]?.cover;
+    const title    = selectedItem.name || 'Playlist';
+    const subtitle = selectedItem.artist || songList[0]?.artist || 'Various Artists';
+
+    const totalSeconds = songList.reduce((sum, s) => {
+      const raw = s.durationSeconds ?? null;
+      if (raw != null) return sum + raw;
+      const parts = String(s.duration || s.formattedDuration || '').split(':').map(Number);
+      if (parts.length === 2 && !parts.some(Number.isNaN)) return sum + parts[0] * 60 + parts[1];
+      return sum;
+    }, 0);
+    const durationLabel = totalSeconds
+      ? (totalSeconds >= 3600
+          ? `${Math.floor(totalSeconds / 3600)} hr ${Math.round((totalSeconds % 3600) / 60)} min`
+          : `${Math.round(totalSeconds / 60)} min`)
+      : null;
+
+    const playFromStart = () => {
+      if (!songList.length) return;
+      setPlayerSongs(songList, 0);
+      setTimeout(() => setIsPlaying(true), 50);
+    };
+    const shuffleList = () => {
+      if (!songList.length) return;
+      setPlayerSongs([...songList].sort(() => Math.random() - 0.5), 0);
+      setTimeout(() => setIsPlaying(true), 50);
+    };
 
     return (
-      <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', position:'relative' }}>
-        <div style={{ position:'absolute', inset:0, zIndex:0, background:`linear-gradient(160deg,${detailBg}55 0%,#0A0A0A 45%)`, pointerEvents:'none' }} />
+      <div className="lib-root" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+        <style>{DETAIL_CSS}</style>
+        <div className="lib-detail">
 
-        {/* Header */}
-        <div style={{ position:'sticky', top:0, zIndex:20, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(10,10,10,.7)', backdropFilter:'blur(24px)', borderBottom:'1px solid var(--lb-border-1)', flexShrink:0 }}>
-          <button onClick={closeDetail} className="lb-icon-btn">
-            <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize:14 }} />
-          </button>
-          <span style={{ fontFamily:'Syne,sans-serif', fontWeight:700, fontSize:15 }}>{title}</span>
-          <div style={{ display:'flex', gap:8, alignItems:'center', position:'relative' }}>
-            <button className="lb-icon-btn"><FaHeart style={{ fontSize:14 }} /></button>
+          <div
+            className="lib-detail-tint"
+            style={{
+              background: `
+                radial-gradient(ellipse 70% 42% at 50% 0%, rgba(${detailAccentRGB},0.38) 0%, transparent 62%),
+                linear-gradient(180deg, rgba(${detailAccentRGB},0.30) 0%, rgba(${detailAccentRGB},0.10) 32%, #07080A 76%)
+              `,
+            }}
+          />
+          <div className="lib-detail-tint-scrim" />
+
+          <div className="lib-detail-nav">
+            <button className="lib-detail-nav-btn" onClick={closeDetail} aria-label="Back">
+              <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: 13 }} />
+            </button>
             <DotsMenu song={selectedItem} songList={songList} onAddToQueue={() => addToQueue(selectedItem)} />
           </div>
-        </div>
 
-        {/* Hero */}
-        <div style={{ position:'relative', zIndex:1, padding:'20px 24px 16px', display:'flex', gap:20, alignItems:'center', flexShrink:0 }}>
-          <div style={{ position:'relative', flexShrink:0 }}>
-            <div style={{ position:'absolute', inset:-6, borderRadius:20, background:`radial-gradient(circle,${detailBg}60 0%,transparent 70%)`, filter:'blur(16px)', zIndex:0 }} />
-            <img src={cover||'/default-cover.png'} alt={title}
-              style={{ position:'relative', zIndex:1, width:130, height:130, borderRadius:14, objectFit:'cover', boxShadow:'0 20px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.1)' }}
-              onError={e => { e.target.src='/default-cover.png'; }} />
-            <div style={{ position:'absolute', top:-6, right:-6, zIndex:2, width:24, height:24, borderRadius:'50%', background:'var(--lb-green)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 12px rgba(29,185,84,.5)' }}>
-              <FontAwesomeIcon icon={faCircleArrowDown} style={{ color:'#fff', fontSize:10 }} />
+          <div className="lib-detail-hero">
+            <div className="lib-detail-art-wrap">
+              <div className="lib-detail-art-glow" />
+              <div className="lib-detail-art">
+                {cover
+                  ? <img src={cover} alt={title} onError={e => { e.target.src = '/default-cover.png'; }} />
+                  : <div className="lib-detail-art-empty"><FaListUl /></div>
+                }
+              </div>
+            </div>
+
+            <h1 className="lib-detail-name">{title}</h1>
+            <p className="lib-detail-subtitle">{subtitle}</p>
+            <p className="lib-detail-metaline">
+              {songList.length} song{songList.length !== 1 ? 's' : ''}{durationLabel ? ` · ${durationLabel}` : ''}
+            </p>
+
+            <div className="lib-detail-actions">
+              <button className="lib-detail-circle-btn" onClick={shuffleList} title="Shuffle" aria-label="Shuffle play">
+                <FaRandom />
+              </button>
+              <button className="lib-detail-play-pill" onClick={playFromStart}>
+                <FaPlay style={{ fontSize: 13, marginLeft: 1 }} /> Play
+              </button>
             </div>
           </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ fontSize:10, fontWeight:700, color:'var(--lb-green)', letterSpacing:'.12em', textTransform:'uppercase', marginBottom:5 }}>{typeLabel}</p>
-            <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:'clamp(18px,3.5vw,32px)', fontWeight:800, letterSpacing:'-0.03em', lineHeight:1.1, color:'#fff', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title}</h1>
-            <p style={{ fontSize:13, color:'var(--lb-text-2)', marginBottom:14 }}>{subtitle}</p>
-            <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-              <button onClick={() => { if (songList.length) { setPlayerSongs(songList, 0); setTimeout(() => setIsPlaying(true), 50); } }}
-                className="lb-btn-primary" style={{ width:52, height:52, padding:0, borderRadius:'50%' }}>
-                <FaPlay style={{ fontSize:18, marginLeft:3 }} />
-              </button>
-              <button className="lb-btn-ghost" style={{ height:40, padding:'0 18px', fontSize:13 }}>
-                <FaRandom style={{ fontSize:12 }} /> Shuffle
-              </button>
-            </div>
+
+          <div className="lib-detail-divider" />
+
+          <div className="lib-tracks">
+            <div className="lib-tracks-label">Tracks · {songList.length}</div>
+            {songList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--t3)' }}>
+                <FontAwesomeIcon icon={faCompactDisc} style={{ fontSize: 36, marginBottom: 14, display: 'block', margin: '0 auto 14px' }} />
+                <p style={{ fontSize: 15 }}>No tracks available</p>
+              </div>
+            ) : songList.map((song, idx) => {
+              const sId = song.id ?? `song-${idx}`;
+              const globalIdx = songs.findIndex(s => s.id === song.id);
+              const isActive = globalIdx === currentIndex;
+              const ts = trackStates[sId] ?? {};
+              return (
+                <TrackRow key={sId} song={song} index={idx}
+                  isActive={isActive} isPlaying={isPlaying}
+                  isFav={ts.fav ?? song.favorite ?? false}
+                  isLiked={ts.liked ?? song.liked ?? false}
+                  onPlay={() => { if (globalIdx !== -1) { setCurrentIndex(globalIdx); setTimeout(() => setIsPlaying(true), 50); } }}
+                  onFav={() => toggleFav(sId, ts.fav ?? song.favorite ?? false)}
+                  onLike={() => toggleLiked(sId, ts.liked ?? song.liked ?? false)}
+                />
+              );
+            })}
           </div>
-        </div>
-
-        <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'0 20px', flexShrink:0 }} />
-
-        {/* Track list */}
-        <div style={{ position:'relative', zIndex:1, flex:1, overflowY:'auto', padding:'12px 16px 24px' }}>
-          {songList.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--lb-text-3)' }}>
-              <FontAwesomeIcon icon={faCompactDisc} style={{ fontSize:36, marginBottom:14, display:'block', margin:'0 auto 14px' }} />
-              <p style={{ fontSize:15 }}>No tracks available</p>
-            </div>
-          ) : (
-            <>
-              <p style={{ fontSize:11, fontWeight:700, color:'var(--lb-text-3)', letterSpacing:'.1em', textTransform:'uppercase', padding:'0 12px 10px' }}>
-                Tracks · {songList.length}
-              </p>
-              {songList.map((song, idx) => {
-                const sId = song.id ?? `song-${idx}`;
-                const globalIdx = songs.findIndex(s => s.id === song.id);
-                const isActive = globalIdx === currentIndex;
-                const ts = trackStates[sId] ?? {};
-                return (
-                  <TrackRow key={sId} song={song} index={idx}
-                    isActive={isActive} isPlaying={isPlaying}
-                    isFav={ts.fav ?? song.favorite ?? false}
-                    isLiked={ts.liked ?? song.liked ?? false}
-                    onPlay={() => { if (globalIdx !== -1) { setCurrentIndex(globalIdx); setTimeout(() => setIsPlaying(true), 50); } }}
-                    onFav={() => toggleFav(sId, ts.fav ?? song.favorite ?? false)}
-                    onLike={() => toggleLiked(sId, ts.liked ?? song.liked ?? false)}
-                  />
-                );
-              })}
-            </>
-          )}
         </div>
       </div>
     );
@@ -2347,43 +2533,6 @@ export default function HomeOnline() {
                   <FontAwesomeIcon icon={faCircleArrowDown} style={{ fontSize:28, color:'var(--lb-text-3)', marginBottom:12, display:'block', margin:'0 auto 12px' }} />
                   <p style={{ fontSize:15, color:'var(--lb-text-2)', marginBottom:4 }}>No downloads yet</p>
                   <p style={{ fontSize:13, color:'var(--lb-text-3)' }}>Download songs for offline listening</p>
-                </div>
-              )}
-
-              {/* ── Daypart‑based mood mix card ── */}
-              {moodSlot && moodSongs.length > 0 && (
-                <div className="ho-shelf" style={{ marginBottom: 28 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--lb-green,#1DB954)', marginLeft: 2, paddingLeft: 26 }}>
-                      Mix for you
-                    </div>
-                    <div className="ho-dl-tile" onClick={() => openDetail({
-                      type:'mood', name: moodTitle,
-                      cover: moodSongs[0]?.cover, accent: '#1DB954',
-                      songCount: moodSongs.length, songs: moodSongs,
-                    })} style={{ cursor: 'pointer' }}>
-                      <div className="ho-dl-mosaic">
-                        {[0,1,2,3].map(i => (
-                          <img key={i}
-                            src={moodSongs[i]?.cover ?? moodSongs[0]?.cover ?? '/default-cover.png'}
-                            alt=""
-                            onError={e => { e.target.src='/default-cover.png'; }}
-                          />
-                        ))}
-                      </div>
-                      <div className="ho-dl-info">
-                        <p className="ho-dl-name">{moodTitle}</p>
-                        <p className="ho-dl-count">{moodSongs.length} songs</p>
-                      </div>
-                      <button className="ho-dl-play" onClick={e => {
-                        e.stopPropagation();
-                        setPlayerSongs(moodSongs, 0);
-                        setTimeout(() => setIsPlaying(true), 50);
-                      }}>
-                        <FaPlay style={{ color:'#fff', fontSize:12, marginLeft:2 }} />
-                      </button>
-                    </div>
-                  </div>
                 </div>
               )}
             </section>
