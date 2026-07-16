@@ -91,7 +91,7 @@ function useLyrics(currentSong, currentTime) {
   return { lines, plainLyrics, activeLine, status };
 }
 
-/* ─── Iridescence WebGL Background (desktop expanded) ───────────── */
+/* ─── Iridescence WebGL Background ──────────────────────────────── */
 const VERT = `
 attribute vec2 uv;
 attribute vec2 position;
@@ -207,29 +207,6 @@ function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
     />
   );
 }
-
-/* ─── Album-art Backdrop (mobile) ─────────────────────────────────
-   Apple Music–style: the cover itself, blurred + darkened + slow
-   Ken Burns drift, tinted with the extracted accent color. Replaces
-   the abstract shader on mobile so the backdrop always reads as
-   "this song" rather than a generic visual.
-──────────────────────────────────────────────────────────────────── */
-function AlbumBackdrop({ cover, accentRGB }) {
-  return (
-    <div className="pc-mob-backdrop" aria-hidden="true">
-      <div
-        className="pc-mob-backdrop-img"
-        style={{ backgroundImage: `url(${cover || FALLBACK_COVER})` }}
-      />
-      <div
-        className="pc-mob-backdrop-wash"
-        style={{ background: `radial-gradient(ellipse 70% 50% at 50% 12%, rgba(${accentRGB},0.40) 0%, transparent 65%)` }}
-      />
-      <div className="pc-mob-backdrop-scrim" />
-    </div>
-  );
-}
-
 /* ─── Shimmer ────────────────────────────────────────────────────── */
 const WIDTHS = ['68%','52%','78%','44%','72%','58%','82%','48%','65%','74%'];
 function LpShimmer() {
@@ -579,8 +556,6 @@ const CSS = `
   to   { background-position:   0% 0; }
 }
 
-/* Iridescence canvas fills the container div absolutely via JS — no extra CSS needed */
-
 /* ════ LYRICS PANEL ════ */
 .lp-root {
   display: flex; flex-direction: column;
@@ -662,9 +637,11 @@ const CSS = `
 .pc-bar-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; border-radius: inherit; will-change: width; }
 .pc-bar-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
 .pc-bar-hovered .pc-bar-thumb { opacity: 1; }
-/* Always show the thumb on "thick" tracks — these are the mobile / expanded
-   progress bars where there's no hover state to reveal it otherwise. */
-.pc-bar-thick .pc-bar-thumb { opacity: 1; width: 13px; height: 13px; box-shadow: 0 2px 10px rgba(0,0,0,0.55), 0 0 0 3px rgba(255,255,255,0.12); }
+/* FIX: hover never fires on touch, so the thumb was permanently invisible on mobile.
+   Show it unconditionally on touch/no-hover devices and on small screens. */
+@media (hover: none), (max-width: 767px) {
+  .pc-bar-thumb { opacity: 1; }
+}
 .pc-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--pc-text-3); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .pc-bar-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; gap: 16px; max-width: 1600px; margin: 0 auto; }
 .pc-song-info { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; max-width: 320px; }
@@ -853,100 +830,42 @@ const CSS = `
 .pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 /* ════ MOBILE EXPANDED ════ */
-.pc-mob-expanded {
-  position: fixed; inset: 0; z-index: 70; /* above BottomNav (60) so it never bleeds through */
-  display: flex; flex-direction: column; overflow: hidden;
-}
-
-/* Album-art backdrop — replaces the abstract shader on mobile.
-   Blurred, darkened cover with a slow drift and an accent-color wash,
-   so the background always visually belongs to the track playing. */
-.pc-mob-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
-.pc-mob-backdrop-img {
-  position: absolute; inset: -12%;
-  background-size: cover; background-position: center;
-  filter: blur(56px) saturate(1.35) brightness(0.5);
-  transform: scale(1.18);
-  animation: pcBackdropDrift 28s ease-in-out infinite alternate;
-}
-@keyframes pcBackdropDrift {
-  0%   { transform: scale(1.18) translate(0,0); }
-  100% { transform: scale(1.32) translate(-2.5%, 2%); }
-}
-.pc-mob-backdrop-wash { position: absolute; inset: 0; mix-blend-mode: screen; transition: background 1s ease; }
-.pc-mob-backdrop-scrim {
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(4,4,8,0.30) 0%, rgba(4,4,8,0.50) 45%, rgba(3,3,6,0.92) 100%);
-}
-
-/* Drag handle + grab zone — swipe down to dismiss, Apple-sheet style */
-.pc-mob-grab-zone { position: relative; z-index: 3; touch-action: none; }
-.pc-mob-drag-handle {
-  width: 36px; height: 4px; border-radius: 3px;
-  background: rgba(255,255,255,0.28);
-  margin: 10px auto 2px;
-}
-.pc-mob-header {
-  position: relative; z-index: 3;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 16px 12px;
-  background: transparent;
-}
-.pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
-.pc-mob-header-right { display: flex; align-items: center; gap: 2px; }
-.pc-mob-header-count { font-size: 11px; color: rgba(255,255,255,0.38); font-variant-numeric: tabular-nums; margin-right: 2px; }
-
-.pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 12px 24px 32px; flex: 1; overflow-y: auto; }
+/* FIX: was z-index 55, sitting BELOW BottomNav's z-index 60 — nav bled
+   through the full-screen Now Playing view. Raised above the nav. */
+.pc-mob-expanded { position: fixed; inset: 0; z-index: 62; display: flex; flex-direction: column; overflow: hidden; }
+.pc-mob-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.44); pointer-events: none; }
+.pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
+.pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.38); }
+.pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 28px 24px 32px; flex: 1; overflow-y: auto; }
 .pc-mob-art-frame { position: relative; margin-bottom: 28px; flex-shrink: 0; }
 .pc-mob-art-glow { position: absolute; inset: -16px; border-radius: 28px; background: radial-gradient(circle,rgba(var(--pc-accent),0.42) 0%,transparent 70%); filter: blur(22px); animation: glowPulse 4s ease-in-out infinite; pointer-events: none; }
-.pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 26px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); }
+.pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 22px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); }
 .pc-mob-art.playing { animation: artFloat 7s ease-in-out infinite; }
 .pc-mob-meta { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 20px; }
-.pc-mob-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-mob-artist { font-size: 14px; color: rgba(255,255,255,0.48); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-mob-progress { width: 100%; margin-bottom: 22px; }
-.pc-mob-ctrl-row { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-bottom: 22px; }
+.pc-mob-name {
+  font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff;
+  letter-spacing: -0.03em; margin-bottom: 4px;
+  /* FIX: unbounded long titles pushed the layout around oddly — now clamp
+     cleanly to two lines instead of letting them run on or get clipped. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.25;
+}
+.pc-mob-artist { font-size: 14px; color: rgba(255,255,255,0.48); }
+.pc-mob-progress { width: 100%; margin-bottom: 24px; }
+.pc-mob-ctrl-row { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-bottom: 20px; }
 .pc-mob-ctrl-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 18px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, transform 0.15s; position: relative; }
 .pc-mob-ctrl-btn:active { transform: scale(0.88); }
 .pc-mob-ctrl-btn.active { color: var(--pc-green-bright); }
 .pc-mob-play-btn { width: 68px; height: 68px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 24px; box-shadow: 0 8px 36px rgba(0,0,0,0.5); transition: transform 0.18s, background 0.2s; }
 .pc-mob-play-btn:active { transform: scale(0.92); }
-
-/* Full-width volume slider — Apple Music style, replaces the old
-   "mute icon + percentage text" row which had no way to actually drag. */
-.pc-mob-volume-row { width: 100%; margin-bottom: 20px; }
-.pc-mob-volume-row .pc-volume { width: 100%; min-width: 0; gap: 10px; }
-.pc-mob-volume-row .pc-vol-track { height: 4px; }
-.pc-mob-volume-row .pc-vol-track:hover { height: 4px; }
-.pc-mob-volume-row .pc-vol-fill { background: rgba(255,255,255,0.9); }
-.pc-mob-volume-row .pc-vol-track::after {
-  content: '';
-  position: absolute; top: 50%; right: -1px; transform: translate(50%, -50%);
-  width: 12px; height: 12px; border-radius: 50%;
-  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  pointer-events: none; opacity: 0.001; /* visual thumb handled by input's own affordance on touch */
-}
-
-/* Secondary actions — Lyrics / Devices / Queue. Evenly spaced circular
-   buttons rather than a cramped inline row of tiny icons + stray text. */
-.pc-mob-action-row {
-  display: flex; align-items: center; justify-content: space-around;
-  width: 100%; padding: 2px 4px 0;
-}
-.pc-mob-action-btn {
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09);
-  cursor: pointer; color: rgba(255,255,255,0.62);
-  width: 46px; height: 46px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; transition: background 0.18s, color 0.18s, border-color 0.18s, transform 0.15s;
-}
-.pc-mob-action-btn:active { transform: scale(0.9); }
-.pc-mob-action-btn.active { background: rgba(29,185,84,0.18); color: var(--pc-green-bright); border-color: rgba(29,185,84,0.32); }
-
 .pc-mob-extras { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
-.pc-mob-vol { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pc-text-2); cursor: pointer; background: none; border: none; }
+/* FIX: was a mute-toggle button with a static "70%" label — not a real
+   control. Now a working range slider, same visual language as desktop's
+   volume control (reuses .pc-vol-track/.pc-vol-fill/.pc-vol-input). */
+.pc-mob-vol { display: flex; align-items: center; gap: 8px; width: 128px; flex-shrink: 0; }
+.pc-mob-vol-icon { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 4px; }
 .pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
-.pc-mob-queue { margin-top: 18px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; }
+.pc-mob-queue { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; max-height: 240px; overflow-y: auto; }
 .pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
 .pc-mob-queue .pc-queue-item { align-items: flex-start; }
 .pc-mob-queue .pc-queue-thumb { margin-top: 2px; }
@@ -967,12 +886,13 @@ const CSS = `
 
 /* ════ MOBILE FULLSCREEN LYRICS ════ */
 .pc-mob-lyrics-fs {
-  position: fixed; inset: 0; z-index: 80; /* above pc-mob-expanded (70) */
+  position: fixed; inset: 0; z-index: 65;
   display: flex; flex-direction: column; overflow: hidden;
   transform: translateY(100%);
   transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
 }
 .pc-mob-lyrics-fs.open { transform: translateY(0); }
+.pc-mob-lyrics-dark { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,5,0.50); pointer-events: none; }
 
 .pc-mob-lyrics-header {
   position: relative; z-index: 3; flex-shrink: 0;
@@ -1035,11 +955,6 @@ export default function PlayerControls() {
   const [liked,         setLiked]         = useState(false);
   const prevCoverRef = useRef(null);
 
-  // Swipe-down-to-dismiss for the mobile "Now Playing" sheet
-  const [dragY,      setDragY]      = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartYRef = useRef(null);
-
   const openQueue   = () => { setShowQueue(true);  setShowLyrics(false); setShowDevices(false); };
   const openLyrics  = () => { setShowLyrics(true); setShowQueue(false);  setShowDevices(false); };
   const openDevices = () => { setShowDevices(true); setShowQueue(false); setShowLyrics(false); };
@@ -1057,22 +972,6 @@ export default function PlayerControls() {
   const handleSeek = useCallback((t) => seekTo(t), [seekTo]);
   const togglePlay = useCallback(() => setIsPlaying(p => !p), [setIsPlaying]);
   const accentStyle = { '--pc-accent': accentRGB };
-
-  const handleGrabTouchStart = useCallback((e) => {
-    dragStartYRef.current = e.touches[0].clientY;
-    setIsDragging(true);
-  }, []);
-  const handleGrabTouchMove = useCallback((e) => {
-    if (dragStartYRef.current === null) return;
-    const delta = e.touches[0].clientY - dragStartYRef.current;
-    if (delta > 0) setDragY(delta);
-  }, []);
-  const handleGrabTouchEnd = useCallback(() => {
-    if (dragY > 110) setShowBackgroundDetail(false);
-    setDragY(0);
-    setIsDragging(false);
-    dragStartYRef.current = null;
-  }, [dragY, setShowBackgroundDetail]);
 
   if (!currentSong) {
     return (
@@ -1259,41 +1158,16 @@ export default function PlayerControls() {
     </div>
   );
 
-  /* ── mobile expanded (Now Playing) ────────────────────────────────
-     Apple Music–inspired: album-art backdrop (not an abstract shader),
-     drag handle + swipe-to-dismiss, a real full-width volume slider,
-     and an evenly-spaced Lyrics / Devices / Queue action row. ──────── */
+  /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
-    <div
-      className="pc-mob-expanded"
-      style={{
-        ...accentStyle,
-        transform: dragY ? `translateY(${dragY}px)` : undefined,
-        transition: isDragging ? 'none' : 'transform 0.32s cubic-bezier(0.22,1,0.36,1)',
-        opacity: dragY ? Math.max(0.45, 1 - dragY / 420) : 1,
-      }}
-    >
-      <AlbumBackdrop cover={currentSong.cover} accentRGB={accentRGB} />
-
-      <div
-        className="pc-mob-grab-zone"
-        onTouchStart={handleGrabTouchStart}
-        onTouchMove={handleGrabTouchMove}
-        onTouchEnd={handleGrabTouchEnd}
-      >
-        <div className="pc-mob-drag-handle" />
-        <div className="pc-mob-header">
-          <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)} aria-label="Minimize">
-            <FaChevronDown style={{ fontSize: 16 }} />
-          </button>
-          <span className="pc-mob-header-label">Now Playing</span>
-          <div className="pc-mob-header-right">
-            <span className="pc-mob-header-count">{currentIndex + 1}/{songs.length}</span>
-            <button className="pc-icon-btn"><FaEllipsisH /></button>
-          </div>
-        </div>
+    <div className="pc-mob-expanded" style={accentStyle}>
+      <IridescenceBg accentRGB={accentRGB} />
+      <div className="pc-mob-dark-overlay" />
+      <div className="pc-mob-header">
+        <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
+        <span className="pc-mob-header-label">Now Playing</span>
+        <button className="pc-icon-btn"><FaEllipsisH /></button>
       </div>
-
       <div className="pc-mob-body">
         <div className="pc-mob-art-frame">
           <div className="pc-mob-art-glow" />
@@ -1317,31 +1191,33 @@ export default function PlayerControls() {
             <FaRedoAlt />{repeatMode === 'one' && <span className="pc-repeat-badge">1</span>}
           </button>
         </div>
-
-        {/* Full-width volume — draggable, unlike the old mute-only button */}
-        <div className="pc-mob-volume-row">
-          <VolumeSlider volume={volume} isMuted={isMuted} onVolume={setVolume} onMute={toggleMute} />
+        <div className="pc-mob-extras">
+          <div className="pc-mob-vol">
+            <button className="pc-mob-vol-icon" onClick={toggleMute} aria-label={isMuted ? 'Unmute' : 'Mute'}>
+              {isMuted || volume === 0 ? <FaVolumeMute /> : <FaVolumeUp />}
+            </button>
+            <div className="pc-vol-track">
+              <div className="pc-vol-fill" style={{ width: `${isMuted ? 0 : volume * 100}%` }} />
+              <input
+                type="range" min="0" max="1" step="0.01"
+                value={isMuted ? 0 : volume}
+                onChange={e => {
+                  const v = parseFloat(e.target.value);
+                  setVolume(v);
+                  if (isMuted && v > 0) toggleMute();
+                }}
+                className="pc-vol-input"
+                aria-label="Volume"
+              />
+            </div>
+          </div>
+          <span className="pc-mob-count">{currentIndex + 1} / {songs.length}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button className="pc-icon-btn" style={{ color: showMobLyrics ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowMobLyrics(true)} aria-label="Show lyrics"><FaMusic /></button>
+            <button className="pc-icon-btn" style={{ color: showDevices ? 'var(--pc-green-bright)' : undefined }} onClick={() => showDevices ? setShowDevices(false) : openDevices()} aria-label="Devices"><FaMobileAlt /></button>
+            <button className="pc-icon-btn" style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowQueue(q => !q)} aria-label="Queue"><FaList /></button>
+          </div>
         </div>
-
-        {/* Lyrics / Devices / Queue — evenly spaced, Apple Music order */}
-        <div className="pc-mob-action-row">
-          <button
-            className={`pc-mob-action-btn ${showMobLyrics ? 'active' : ''}`}
-            onClick={() => setShowMobLyrics(true)}
-            aria-label="Lyrics"
-          ><FaMusic /></button>
-          <button
-            className={`pc-mob-action-btn ${showDevices ? 'active' : ''}`}
-            onClick={() => showDevices ? setShowDevices(false) : openDevices()}
-            aria-label="Devices"
-          ><FaMobileAlt /></button>
-          <button
-            className={`pc-mob-action-btn ${showQueue ? 'active' : ''}`}
-            onClick={() => setShowQueue(q => !q)}
-            aria-label="Queue"
-          ><FaList /></button>
-        </div>
-
         {showDevices && (
           <div className="pc-devices-mobile">
             <DevicesPanel onClose={() => setShowDevices(false)} />
@@ -1366,7 +1242,8 @@ export default function PlayerControls() {
   /* ── mobile fullscreen lyrics ── */
   const mobileLyricsFs = (
     <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
-      <AlbumBackdrop cover={currentSong?.cover} accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
+      <div className="pc-mob-lyrics-dark" />
       <div className="pc-mob-lyrics-header">
         <div className="pc-mob-lyrics-header-info">
           <span className="pc-mob-lyrics-label">Lyrics</span>
