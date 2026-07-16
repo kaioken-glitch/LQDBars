@@ -637,8 +637,6 @@ const CSS = `
 .pc-bar-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; border-radius: inherit; will-change: width; }
 .pc-bar-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
 .pc-bar-hovered .pc-bar-thumb { opacity: 1; }
-/* FIX: hover never fires on touch, so the thumb was permanently invisible on mobile.
-   Show it unconditionally on touch/no-hover devices and on small screens. */
 @media (hover: none), (max-width: 767px) {
   .pc-bar-thumb { opacity: 1; }
 }
@@ -830,8 +828,6 @@ const CSS = `
 .pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 /* ════ MOBILE EXPANDED ════ */
-/* FIX: was z-index 55, sitting BELOW BottomNav's z-index 60 — nav bled
-   through the full-screen Now Playing view. Raised above the nav. */
 .pc-mob-expanded { position: fixed; inset: 0; z-index: 62; display: flex; flex-direction: column; overflow: hidden; }
 .pc-mob-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.44); pointer-events: none; }
 .pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
@@ -845,8 +841,6 @@ const CSS = `
 .pc-mob-name {
   font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff;
   letter-spacing: -0.03em; margin-bottom: 4px;
-  /* FIX: unbounded long titles pushed the layout around oddly — now clamp
-     cleanly to two lines instead of letting them run on or get clipped. */
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; line-height: 1.25;
 }
@@ -859,16 +853,40 @@ const CSS = `
 .pc-mob-play-btn { width: 68px; height: 68px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 24px; box-shadow: 0 8px 36px rgba(0,0,0,0.5); transition: transform 0.18s, background 0.2s; }
 .pc-mob-play-btn:active { transform: scale(0.92); }
 .pc-mob-extras { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
-/* FIX: was a mute-toggle button with a static "70%" label — not a real
-   control. Now a working range slider, same visual language as desktop's
-   volume control (reuses .pc-vol-track/.pc-vol-fill/.pc-vol-input). */
 .pc-mob-vol { display: flex; align-items: center; gap: 8px; width: 128px; flex-shrink: 0; }
 .pc-mob-vol-icon { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 4px; }
 .pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
-.pc-mob-queue { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; max-height: 240px; overflow-y: auto; }
-.pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
-.pc-mob-queue .pc-queue-item { align-items: flex-start; }
-.pc-mob-queue .pc-queue-thumb { margin-top: 2px; }
+
+/* FIX: queue was a boxed card (background/border/border-radius/padding)
+   with its own max-height + overflow-y: auto, creating a scroll-inside-
+   scroll that squeezed the list down to ~1.5 visible rows. Now it flows
+   flat into the page (no card, no inner scrollbox) and .pc-mob-body's
+   existing overflow-y:auto scrolls the whole Now Playing screen instead,
+   matching the flat, undecorated list styling used elsewhere in the app. */
+.pc-mob-queue {
+  margin-top: 24px;
+  width: 100%;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.pc-mob-queue-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 6px;
+}
+.pc-mob-queue .pc-queue-item {
+  align-items: center;
+  padding: 12px 4px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pc-mob-queue .pc-queue-item:last-child { border-bottom: none; }
+.pc-mob-queue .pc-queue-item.active { background: rgba(29,185,84,0.08); }
+.pc-mob-queue .pc-queue-thumb { width: 44px; height: 44px; margin-top: 0; }
 .pc-mob-queue .pc-queue-name {
   white-space: normal;
   overflow: visible;
@@ -882,7 +900,7 @@ const CSS = `
   text-overflow: unset;
   overflow-wrap: anywhere;
 }
-.pc-mob-queue .pc-queue-active-dot { margin-top: 6px; }
+.pc-mob-queue .pc-queue-active-dot { margin-top: 0; }
 
 /* ════ MOBILE FULLSCREEN LYRICS ════ */
 .pc-mob-lyrics-fs {
@@ -1225,7 +1243,7 @@ export default function PlayerControls() {
         )}
         {showQueue && (
           <div className="pc-mob-queue">
-            <div className="pc-mob-queue-title">Queue</div>
+            <div className="pc-mob-queue-title">Queue · {songs.length}</div>
             {songs.map((song, idx) => (
               <div key={song.id || idx} className={`pc-queue-item ${idx === currentIndex ? 'active' : ''}`} onClick={() => setCurrentIndex(idx)}>
                 <img src={song.cover || FALLBACK_COVER} alt={song.name} className="pc-queue-thumb" onError={e => { e.target.src = FALLBACK_COVER; }} />
