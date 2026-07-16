@@ -131,7 +131,6 @@ function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
   const ctnRef  = useRef(null);
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
 
-  // Convert "r, g, b" string (0-255) to normalised [0..1] triplet
   const color = (accentRGB || '29, 185, 84')
     .split(',')
     .map(s => Math.max(0.18, parseInt(s.trim(), 10) / 255));
@@ -208,11 +207,37 @@ function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
   );
 }
 
+/* ─── Liquid Glass filter defs (rendered once) ────────────────────
+   Real "liquid glass" reads as glass because content behind it visibly
+   refracts/warps, not just blurs. This SVG filter takes the blurred
+   album-art field and pushes it through a slow-drifting turbulence
+   displacement map — a literal liquid warp — before any glass panel
+   sits on top of it.
+──────────────────────────────────────────────────────────────────── */
+function LiquidGlassDefs() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+      <filter id="lg-liquid-warp" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence
+          type="fractalNoise" baseFrequency="0.010 0.014" numOctaves="2" seed="7" result="lg-noise"
+        >
+          <animate
+            attributeName="baseFrequency"
+            values="0.010 0.014;0.015 0.009;0.010 0.014"
+            dur="24s" repeatCount="indefinite"
+          />
+        </feTurbulence>
+        <feDisplacementMap in="SourceGraphic" in2="lg-noise" scale="24" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
+  );
+}
+
 /* ─── Album-art Backdrop (mobile) ─────────────────────────────────
-   Apple Music–style: the cover itself, blurred + darkened + slow
-   Ken Burns drift, tinted with the extracted accent color. Replaces
-   the abstract shader on mobile so the backdrop always reads as
-   "this song" rather than a generic visual.
+   The cover art itself — blurred, darkened, and pushed through the
+   liquid-warp filter above — tinted with the extracted accent color.
+   This is the "liquid" half of liquid glass: a slow-moving color
+   field the glass panels sit on top of and refract.
 ──────────────────────────────────────────────────────────────────── */
 function AlbumBackdrop({ cover, accentRGB }) {
   return (
@@ -223,7 +248,7 @@ function AlbumBackdrop({ cover, accentRGB }) {
       />
       <div
         className="pc-mob-backdrop-wash"
-        style={{ background: `radial-gradient(ellipse 70% 50% at 50% 12%, rgba(${accentRGB},0.40) 0%, transparent 65%)` }}
+        style={{ background: `radial-gradient(ellipse 75% 55% at 50% 10%, rgba(${accentRGB},0.5) 0%, transparent 65%)` }}
       />
       <div className="pc-mob-backdrop-scrim" />
     </div>
@@ -579,8 +604,6 @@ const CSS = `
   to   { background-position:   0% 0; }
 }
 
-/* Iridescence canvas fills the container div absolutely via JS — no extra CSS needed */
-
 /* ════ LYRICS PANEL ════ */
 .lp-root {
   display: flex; flex-direction: column;
@@ -656,15 +679,42 @@ const CSS = `
   background: linear-gradient(to right, transparent 0%, rgba(var(--pc-accent),0.7) 20%, rgba(var(--pc-accent),0.9) 50%, rgba(var(--pc-accent),0.7) 80%, transparent 100%);
   transition: background 0.8s ease;
 }
-.pc-bar-track { position: relative; height: 3px; background: rgba(255,255,255,0.08); cursor: pointer; transition: height 0.18s ease; user-select: none; }
-.pc-bar-thick { height: 5px; }
+.pc-bar-track { position: relative; height: 3px; background: rgba(255,255,255,0.08); cursor: pointer; transition: height 0.18s ease; user-select: none; border-radius: 999px; }
+.pc-bar-thick { height: 6px; }
 .pc-bar-hovered { height: 5px; }
-.pc-bar-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; border-radius: inherit; will-change: width; }
-.pc-bar-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
+.pc-bar-fill { position: relative; height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; border-radius: inherit; will-change: width; overflow: hidden; }
+.pc-bar-thumb {
+  position: absolute; top: 50%; transform: translate(-50%,-50%);
+  width: 12px; height: 12px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff 0%, rgba(255,255,255,0.9) 45%, rgba(255,255,255,0.55) 100%);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  opacity: 0; transition: opacity 0.18s ease; pointer-events: none;
+}
 .pc-bar-hovered .pc-bar-thumb { opacity: 1; }
-/* Always show the thumb on "thick" tracks — these are the mobile / expanded
-   progress bars where there's no hover state to reveal it otherwise. */
-.pc-bar-thick .pc-bar-thumb { opacity: 1; width: 13px; height: 13px; box-shadow: 0 2px 10px rgba(0,0,0,0.55), 0 0 0 3px rgba(255,255,255,0.12); }
+
+/* Liquid glass treatment for the "thick" tracks — mobile Now Playing,
+   desktop expanded footer. A recessed frosted channel with a moving
+   light traveling through the liquid fill, and a glossy droplet thumb
+   always visible (there's no hover state on touch). */
+.pc-bar-track.pc-bar-thick {
+  background: rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 4px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.05);
+  overflow: hidden;
+}
+.pc-bar-track.pc-bar-thick .pc-bar-fill::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.55) 48%, transparent 66%);
+  background-size: 220% 100%;
+  animation: lgLiquidTravel 3.4s ease-in-out infinite;
+  mix-blend-mode: overlay;
+}
+@keyframes lgLiquidTravel { 0% { background-position: 160% 0; } 100% { background-position: -60% 0; } }
+.pc-bar-track.pc-bar-thick .pc-bar-thumb {
+  opacity: 1; width: 15px; height: 15px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.6), 0 0 0 3px rgba(255,255,255,0.14);
+}
+
 .pc-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--pc-text-3); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .pc-bar-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; gap: 16px; max-width: 1600px; margin: 0 auto; }
 .pc-song-info { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; max-width: 320px; }
@@ -709,8 +759,6 @@ const CSS = `
   position: absolute; inset: 0; z-index: 1;
   background: rgba(2,2,6,0.48); pointer-events: none;
 }
-
-/* Header */
 .pc-exp-header {
   position: relative; z-index: 3;
   display: flex; align-items: center; justify-content: space-between;
@@ -724,28 +772,17 @@ const CSS = `
   color: rgba(255,255,255,0.38); font-weight: 600;
 }
 .pc-exp-header-btns { display: flex; align-items: center; gap: 6px; }
-
-/* Body */
 .pc-exp-body {
   position: relative; z-index: 2;
   display: flex; flex-direction: column; flex: 1;
   overflow: hidden; min-height: 0;
 }
-
-/* Lyrics area — full width, centered text */
 .pc-exp-lyrics-area {
   flex: 1; min-width: 0; min-height: 0;
   overflow: hidden; position: relative;
 }
-/* Centre lyrics in desktop expanded */
-.pc-exp-lyrics-area .lp-list {
-  text-align: center;
-}
-.pc-exp-lyrics-area .lp-line {
-  transform-origin: center center !important;
-}
-
-/* Footer: progress + controls */
+.pc-exp-lyrics-area .lp-list { text-align: center; }
+.pc-exp-lyrics-area .lp-line { transform-origin: center center !important; }
 .pc-exp-footer {
   position: relative; z-index: 3; flex-shrink: 0;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -753,24 +790,14 @@ const CSS = `
   background: rgba(0,0,0,0.24); backdrop-filter: blur(28px);
   border-top: 1px solid rgba(255,255,255,0.07);
 }
-.pc-exp-footer-meta {
-  display: flex; align-items: center; gap: 16px; width: 100%; max-width: 680px;
-}
-.pc-exp-footer-thumb {
-  width: 40px; height: 40px; border-radius: 9px; object-fit: cover; flex-shrink: 0;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
-}
+.pc-exp-footer-meta { display: flex; align-items: center; gap: 16px; width: 100%; max-width: 680px; }
+.pc-exp-footer-thumb { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; flex-shrink: 0; box-shadow: 0 4px 14px rgba(0,0,0,0.5); }
 .pc-exp-footer-text { flex: 1; min-width: 0; }
-.pc-exp-footer-name {
-  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
-  color: #fff; letter-spacing: -0.01em; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px;
-}
+.pc-exp-footer-name { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
 .pc-exp-footer-artist { font-size: 11px; color: rgba(255,255,255,0.42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-exp-footer-heart { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.3); font-size: 14px; padding: 6px; border-radius: 50%; transition: color 0.2s, transform 0.15s; flex-shrink: 0; }
 .pc-exp-footer-heart:hover { color: #FF4455; transform: scale(1.2); }
 .pc-exp-footer-heart.liked { color: #FF4455; }
-
 .pc-exp-progress { width: 100%; max-width: 680px; }
 .pc-exp-ctrl-row { display: flex; align-items: center; gap: 10px; }
 .pc-exp-ctrl-btn {
@@ -790,16 +817,12 @@ const CSS = `
 .pc-exp-play-btn:hover  { transform: scale(1.07); background: var(--pc-green-bright); box-shadow: 0 12px 44px rgba(29,185,84,0.45); }
 .pc-exp-play-btn:active { transform: scale(0.95); }
 .pc-exp-footer-right { display: flex; align-items: center; gap: 8px; }
-
-/* art/glow kept for mobile — unused in desktop expanded now but keep classes */
 .pc-art-frame { position: relative; }
 .pc-art-glow { position: absolute; inset: -20px; border-radius: 32px; background: radial-gradient(circle, rgba(var(--pc-accent),0.42) 0%, transparent 70%); filter: blur(30px); animation: glowPulse 4s ease-in-out infinite; }
 @keyframes glowPulse { 0%,100%{opacity:0.62;transform:scale(1)} 50%{opacity:1;transform:scale(1.06)} }
 .pc-art-img { position: relative; display: block; border-radius: 22px; object-fit: cover; }
 .pc-art-img.playing { animation: artFloat 7s ease-in-out infinite; }
 @keyframes artFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-
-/* Queue panel — floats as overlay on right when open */
 .pc-queue {
   position: absolute; right: 24px; top: 0; bottom: 0; z-index: 5;
   width: 300px; flex-shrink: 0;
@@ -818,17 +841,9 @@ const CSS = `
 .pc-queue-name { font-size: 13px; font-weight: 600; color: var(--pc-text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-queue-artist { font-size: 11px; color: var(--pc-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-queue-active-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pc-green); flex-shrink: 0; }
-
 @keyframes slideInRight { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
-
-/* Devices panel — desktop floats top-right of expanded body; mobile sits inline */
-.pc-devices-desktop {
-  position: absolute; right: 24px; top: 20px; z-index: 6;
-  animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1);
-}
+.pc-devices-desktop { position: absolute; right: 24px; top: 20px; z-index: 6; animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1); }
 .pc-devices-mobile { margin-top: 16px; width: 100%; }
-
-/* Desktop compact lyrics drawer */
 .pc-lyrics-drawer { position: fixed; left: 0; right: 0; bottom: 73px; z-index: 39; height: 0; overflow: hidden; display: flex; flex-direction: column; background: rgba(6,6,10,0.96); backdrop-filter: blur(40px) saturate(180%); border-top: 1px solid rgba(255,255,255,0.08); box-shadow: 0 -8px 40px rgba(0,0,0,0.6); transition: height 0.42s cubic-bezier(0.22,1,0.36,1); }
 .pc-lyrics-drawer.open { height: 420px; }
 .pc-lyrics-drawer-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 12px 28px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); }
@@ -852,117 +867,179 @@ const CSS = `
 .pc-mobile-play:active { transform: scale(0.92); }
 .pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
+/* ════════════════════════════════════════════════════════════════
+   LIQUID GLASS — shared material for every floating module in the
+   mobile Now Playing view. Frosted, edge-lit, with a slow specular
+   sweep and a glow tinted to the current track's accent color, so
+   every panel visibly reacts to the music behind it.
+════════════════════════════════════════════════════════════════ */
+.lg-glass {
+  position: relative;
+  background: linear-gradient(165deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.05) 55%, rgba(255,255,255,0.09) 100%);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(var(--pc-accent), 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.4),
+    inset 0 -1px 8px rgba(0,0,0,0.22),
+    0 14px 34px rgba(0,0,0,0.38),
+    0 0 0 1px rgba(255,255,255,0.03),
+    0 6px 24px rgba(var(--pc-accent), 0.16);
+}
+.lg-glass::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.30) 42%, rgba(255,255,255,0.06) 52%, transparent 100%);
+  background-size: 260% 100%;
+  animation: lgSheenSweep 8s ease-in-out infinite;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+@keyframes lgSheenSweep {
+  0%   { background-position: 220% 0; }
+  50%  { background-position: -40% 0; }
+  100% { background-position: -220% 0; }
+}
+.lg-glass:active { transform: scale(0.985); }
+
 /* ════ MOBILE EXPANDED ════ */
 .pc-mob-expanded {
   position: fixed; inset: 0; z-index: 70; /* above BottomNav (60) so it never bleeds through */
   display: flex; flex-direction: column; overflow: hidden;
 }
 
-/* Album-art backdrop — replaces the abstract shader on mobile.
-   Blurred, darkened cover with a slow drift and an accent-color wash,
-   so the background always visually belongs to the track playing. */
+/* Album-art backdrop — the "liquid" half of liquid glass. The cover,
+   blurred + darkened + pushed through a slow SVG turbulence warp,
+   tinted by the extracted accent color. */
 .pc-mob-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
 .pc-mob-backdrop-img {
-  position: absolute; inset: -12%;
+  position: absolute; inset: -14%;
   background-size: cover; background-position: center;
-  filter: blur(56px) saturate(1.35) brightness(0.5);
-  transform: scale(1.18);
-  animation: pcBackdropDrift 28s ease-in-out infinite alternate;
+  filter: url(#lg-liquid-warp) blur(58px) saturate(1.4) brightness(0.5);
+  transform: scale(1.2);
+  animation: pcBackdropDrift 30s ease-in-out infinite alternate;
 }
 @keyframes pcBackdropDrift {
-  0%   { transform: scale(1.18) translate(0,0); }
-  100% { transform: scale(1.32) translate(-2.5%, 2%); }
+  0%   { transform: scale(1.2) translate(0,0); }
+  100% { transform: scale(1.34) translate(-2.5%, 2%); }
 }
 .pc-mob-backdrop-wash { position: absolute; inset: 0; mix-blend-mode: screen; transition: background 1s ease; }
 .pc-mob-backdrop-scrim {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(4,4,8,0.30) 0%, rgba(4,4,8,0.50) 45%, rgba(3,3,6,0.92) 100%);
+  background: linear-gradient(180deg, rgba(4,4,8,0.25) 0%, rgba(4,4,8,0.42) 45%, rgba(3,3,6,0.90) 100%);
 }
 
-/* Drag handle + grab zone — swipe down to dismiss, Apple-sheet style */
-.pc-mob-grab-zone { position: relative; z-index: 3; touch-action: none; }
+/* Drag handle + floating glass header pill */
+.pc-mob-grab-zone { position: relative; z-index: 3; touch-action: none; padding: 10px 16px 0; }
 .pc-mob-drag-handle {
   width: 36px; height: 4px; border-radius: 3px;
-  background: rgba(255,255,255,0.28);
-  margin: 10px auto 2px;
+  background: rgba(255,255,255,0.35);
+  margin: 0 auto 10px;
 }
 .pc-mob-header {
-  position: relative; z-index: 3;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 16px 12px;
-  background: transparent;
+  padding: 8px 8px 8px 16px;
+  border-radius: 999px;
 }
-.pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+.pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.5); }
 .pc-mob-header-right { display: flex; align-items: center; gap: 2px; }
-.pc-mob-header-count { font-size: 11px; color: rgba(255,255,255,0.38); font-variant-numeric: tabular-nums; margin-right: 2px; }
+.pc-mob-header-count { font-size: 11px; color: rgba(255,255,255,0.4); font-variant-numeric: tabular-nums; margin-right: 2px; }
 
-.pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 12px 24px 32px; flex: 1; overflow-y: auto; }
-.pc-mob-art-frame { position: relative; margin-bottom: 28px; flex-shrink: 0; }
-.pc-mob-art-glow { position: absolute; inset: -16px; border-radius: 28px; background: radial-gradient(circle,rgba(var(--pc-accent),0.42) 0%,transparent 70%); filter: blur(22px); animation: glowPulse 4s ease-in-out infinite; pointer-events: none; }
-.pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 26px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); }
+.pc-mob-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 20px 24px 32px; flex: 1; overflow-y: auto; }
+
+/* Album art — glass ring + glossy diagonal sheen, so it reads as an
+   object sitting inside a glass frame rather than a flat photo. */
+.pc-mob-art-frame { position: relative; margin-bottom: 30px; flex-shrink: 0; }
+.pc-mob-art-glow { position: absolute; inset: -18px; border-radius: 34px; background: radial-gradient(circle,rgba(var(--pc-accent),0.48) 0%,transparent 70%); filter: blur(24px); animation: glowPulse 4s ease-in-out infinite; pointer-events: none; }
+.pc-mob-art-ring {
+  position: absolute; inset: -2px; border-radius: 30px;
+  border: 1px solid rgba(255,255,255,0.4);
+  box-shadow: inset 0 1px 3px rgba(255,255,255,0.5);
+  pointer-events: none;
+}
+.pc-mob-art { display: block; width: min(70vw,290px); height: min(70vw,290px); border-radius: 28px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); position: relative; }
 .pc-mob-art.playing { animation: artFloat 7s ease-in-out infinite; }
-.pc-mob-meta { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 20px; }
+.pc-mob-art-sheen {
+  position: absolute; inset: 0; border-radius: 28px;
+  background: linear-gradient(128deg, rgba(255,255,255,0.35) 0%, transparent 30%, transparent 70%, rgba(255,255,255,0.06) 100%);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.pc-mob-meta { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 22px; }
 .pc-mob-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-mob-artist { font-size: 14px; color: rgba(255,255,255,0.48); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-mob-progress { width: 100%; margin-bottom: 22px; }
-.pc-mob-ctrl-row { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-bottom: 22px; }
-.pc-mob-ctrl-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 18px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, transform 0.15s; position: relative; }
-.pc-mob-ctrl-btn:active { transform: scale(0.88); }
-.pc-mob-ctrl-btn.active { color: var(--pc-green-bright); }
-.pc-mob-play-btn { width: 68px; height: 68px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 24px; box-shadow: 0 8px 36px rgba(0,0,0,0.5); transition: transform 0.18s, background 0.2s; }
-.pc-mob-play-btn:active { transform: scale(0.92); }
+.pc-mob-artist { font-size: 14px; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-mob-progress { width: 100%; margin-bottom: 24px; }
 
-/* Full-width volume slider — Apple Music style, replaces the old
-   "mute icon + percentage text" row which had no way to actually drag. */
-.pc-mob-volume-row { width: 100%; margin-bottom: 20px; }
-.pc-mob-volume-row .pc-volume { width: 100%; min-width: 0; gap: 10px; }
-.pc-mob-volume-row .pc-vol-track { height: 4px; }
-.pc-mob-volume-row .pc-vol-track:hover { height: 4px; }
-.pc-mob-volume-row .pc-vol-fill { background: rgba(255,255,255,0.9); }
-.pc-mob-volume-row .pc-vol-track::after {
-  content: '';
-  position: absolute; top: 50%; right: -1px; transform: translate(50%, -50%);
-  width: 12px; height: 12px; border-radius: 50%;
-  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  pointer-events: none; opacity: 0.001; /* visual thumb handled by input's own affordance on touch */
-}
-
-/* Secondary actions — Lyrics / Devices / Queue. Evenly spaced circular
-   buttons rather than a cramped inline row of tiny icons + stray text. */
-.pc-mob-action-row {
-  display: flex; align-items: center; justify-content: space-around;
-  width: 100%; padding: 2px 4px 0;
-}
-.pc-mob-action-btn {
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09);
-  cursor: pointer; color: rgba(255,255,255,0.62);
-  width: 46px; height: 46px; border-radius: 50%;
+/* Playback controls — a single glass capsule module, with the play
+   button rising slightly proud of the glass like a raised glass dome
+   rather than five icons floating loose in space. */
+.pc-mob-ctrl-pill {
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; transition: background 0.18s, color 0.18s, border-color 0.18s, transform 0.15s;
+  width: 100%; padding: 8px 10px; border-radius: 999px;
+  margin-bottom: 20px;
 }
-.pc-mob-action-btn:active { transform: scale(0.9); }
-.pc-mob-action-btn.active { background: rgba(29,185,84,0.18); color: var(--pc-green-bright); border-color: rgba(29,185,84,0.32); }
+.pc-mob-ctrl-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.55); font-size: 18px; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: color 0.18s, transform 0.15s, background 0.18s; position: relative; }
+.pc-mob-ctrl-btn:active { transform: scale(0.88); }
+.pc-mob-ctrl-btn.active { color: var(--pc-green-bright); background: rgba(255,255,255,0.08); }
+.pc-mob-play-btn {
+  width: 62px; height: 62px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #fff 0%, #f2f2f2 55%, #e2e2e2 100%);
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: #000; font-size: 22px; flex-shrink: 0;
+  margin: 0 6px;
+  transform: translateY(-9px);
+  box-shadow:
+    0 10px 26px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(255,255,255,0.5) inset,
+    0 4px 18px rgba(var(--pc-accent),0.4);
+  transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s;
+}
+.pc-mob-play-btn:active { transform: translateY(-9px) scale(0.93); }
 
-.pc-mob-extras { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
-.pc-mob-vol { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pc-text-2); cursor: pointer; background: none; border: none; }
-.pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
-.pc-mob-queue { margin-top: 18px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; }
+/* Full-width liquid volume channel */
+.pc-mob-volume-pill {
+  width: 100%; padding: 10px 16px; border-radius: 999px;
+  margin-bottom: 18px;
+}
+.pc-mob-volume-pill .pc-volume { width: 100%; min-width: 0; gap: 10px; }
+.pc-mob-volume-pill .pc-icon-btn { color: rgba(255,255,255,0.55); }
+.pc-mob-volume-pill .pc-vol-track {
+  height: 5px; border-radius: 999px;
+  background: rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+}
+.pc-mob-volume-pill .pc-vol-track:hover { height: 5px; }
+.pc-mob-volume-pill .pc-vol-fill { background: linear-gradient(90deg, rgba(255,255,255,0.6), #fff); }
+.pc-mob-volume-pill .pc-vol-label { color: rgba(255,255,255,0.4); }
+
+/* Lyrics / Devices / Queue — a single segmented glass capsule rather
+   than three separate floating bubbles. */
+.pc-mob-action-pill {
+  display: flex; align-items: center; width: 100%;
+  border-radius: 999px; padding: 5px;
+}
+.pc-mob-action-seg {
+  flex: 1; height: 44px; border: none; background: transparent;
+  color: rgba(255,255,255,0.55); display: flex; align-items: center; justify-content: center;
+  font-size: 16px; border-radius: 999px; cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.pc-mob-action-seg:active { transform: scale(0.92); }
+.pc-mob-action-seg.active {
+  background: rgba(var(--pc-accent), 0.24);
+  color: var(--pc-green-bright);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.pc-mob-action-divider { width: 1px; height: 22px; background: rgba(255,255,255,0.14); flex-shrink: 0; }
+
+.pc-mob-queue { margin-top: 18px; width: 100%; padding: 16px; border-radius: 22px; }
 .pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
 .pc-mob-queue .pc-queue-item { align-items: flex-start; }
 .pc-mob-queue .pc-queue-thumb { margin-top: 2px; }
-.pc-mob-queue .pc-queue-name {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: unset;
-  overflow-wrap: anywhere;
-  line-height: 1.35;
-}
-.pc-mob-queue .pc-queue-artist {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: unset;
-  overflow-wrap: anywhere;
-}
+.pc-mob-queue .pc-queue-name { white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: anywhere; line-height: 1.35; }
+.pc-mob-queue .pc-queue-artist { white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: anywhere; }
 .pc-mob-queue .pc-queue-active-dot { margin-top: 6px; }
 
 /* ════ MOBILE FULLSCREEN LYRICS ════ */
@@ -973,7 +1050,6 @@ const CSS = `
   transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
 }
 .pc-mob-lyrics-fs.open { transform: translateY(0); }
-
 .pc-mob-lyrics-header {
   position: relative; z-index: 3; flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between;
@@ -985,13 +1061,10 @@ const CSS = `
 .pc-mob-lyrics-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pc-green-bright); margin-bottom: 2px; }
 .pc-mob-lyrics-song { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
 .pc-mob-lyrics-artist { font-size: 11px; color: rgba(255,255,255,0.42); }
-
 .pc-mob-lyrics-body { position: relative; z-index: 2; flex: 1; min-height: 0; overflow: hidden; }
-/* Centre lyrics text in mobile fullscreen */
 .pc-mob-lyrics-body .lp-list { padding: 0 24px; text-align: center; }
 .pc-mob-lyrics-body .lp-line { transform-origin: center center !important; }
 .pc-mob-lyrics-body .lp-line-inner { padding: 3px 4px; }
-
 .pc-mob-lyrics-footer {
   position: relative; z-index: 3; flex-shrink: 0;
   padding: 16px 24px 28px;
@@ -1091,7 +1164,6 @@ export default function PlayerControls() {
       <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-exp-dark-overlay" />
 
-      {/* Top nav strip */}
       <div className="pc-exp-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}>
           <FaChevronDown style={{ fontSize: 18 }} />
@@ -1114,15 +1186,11 @@ export default function PlayerControls() {
         </div>
       </div>
 
-      {/* Body: art left | lyrics right */}
       <div className="pc-exp-body">
-
-        {/* Full-width centered lyrics */}
         <div className="pc-exp-lyrics-area">
           <LyricsPanel accentColor={accent} bg="transparent" fontSize="large" />
         </div>
 
-        {/* Queue overlay */}
         {showQueue && (
           <QueuePanel
             songs={songs}
@@ -1132,7 +1200,6 @@ export default function PlayerControls() {
           />
         )}
 
-        {/* Devices overlay */}
         {showDevices && (
           <div className="pc-devices-desktop">
             <DevicesPanel onClose={() => setShowDevices(false)} />
@@ -1140,7 +1207,6 @@ export default function PlayerControls() {
         )}
       </div>
 
-      {/* Footer: progress + controls */}
       <div className="pc-exp-footer">
         <div className="pc-exp-footer-meta">
           <img
@@ -1160,12 +1226,10 @@ export default function PlayerControls() {
           <span className="pc-track-count">{currentIndex + 1} / {songs.length}</span>
         </div>
 
-        {/* Progress */}
         <div className="pc-exp-progress">
           <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
         </div>
 
-        {/* Playback controls */}
         <div className="pc-exp-ctrl-row">
           <button className={`pc-exp-ctrl-btn ${shuffle ? 'active' : ''}`} onClick={toggleShuffle}><FaRandom /></button>
           <button className="pc-exp-ctrl-btn" onClick={playPrev}><FaStepBackward style={{ fontSize: 22 }} /></button>
@@ -1259,10 +1323,10 @@ export default function PlayerControls() {
     </div>
   );
 
-  /* ── mobile expanded (Now Playing) ────────────────────────────────
-     Apple Music–inspired: album-art backdrop (not an abstract shader),
-     drag handle + swipe-to-dismiss, a real full-width volume slider,
-     and an evenly-spaced Lyrics / Devices / Queue action row. ──────── */
+  /* ── mobile expanded (Now Playing) — Liquid Glass ─────────────────
+     Frosted glass modules (control capsule, volume channel, action
+     segment bar) floating over a liquid-warped album-art backdrop,
+     each panel edge-lit and tinted with the track's accent color. ─── */
   const mobileExpanded = showBackgroundDetail && (
     <div
       className="pc-mob-expanded"
@@ -1273,6 +1337,7 @@ export default function PlayerControls() {
         opacity: dragY ? Math.max(0.45, 1 - dragY / 420) : 1,
       }}
     >
+      <LiquidGlassDefs />
       <AlbumBackdrop cover={currentSong.cover} accentRGB={accentRGB} />
 
       <div
@@ -1282,7 +1347,7 @@ export default function PlayerControls() {
         onTouchEnd={handleGrabTouchEnd}
       >
         <div className="pc-mob-drag-handle" />
-        <div className="pc-mob-header">
+        <div className="pc-mob-header lg-glass">
           <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)} aria-label="Minimize">
             <FaChevronDown style={{ fontSize: 16 }} />
           </button>
@@ -1297,16 +1362,22 @@ export default function PlayerControls() {
       <div className="pc-mob-body">
         <div className="pc-mob-art-frame">
           <div className="pc-mob-art-glow" />
+          <div className="pc-mob-art-ring" />
           <img src={currentSong.cover || FALLBACK_COVER} alt={currentSong.name} className={`pc-mob-art ${isPlaying ? 'playing' : ''}`} onError={e => { e.target.src = FALLBACK_COVER; }} />
+          <div className="pc-mob-art-sheen" />
         </div>
+
         <div className="pc-mob-meta">
           <div className="pc-mob-name">{currentSong.name}</div>
           <div className="pc-mob-artist">{currentSong.artist}</div>
         </div>
+
         <div className="pc-mob-progress">
           <ProgressBar currentTime={currentTime} duration={duration} onSeek={handleSeek} showTimes thick />
         </div>
-        <div className="pc-mob-ctrl-row">
+
+        {/* Playback controls — single glass capsule, play button raised */}
+        <div className="pc-mob-ctrl-pill lg-glass">
           <button className={`pc-mob-ctrl-btn ${shuffle ? 'active' : ''}`} onClick={toggleShuffle}><FaRandom /></button>
           <button className="pc-mob-ctrl-btn" onClick={playPrev} style={{ fontSize: 22 }}><FaStepBackward /></button>
           <button className="pc-mob-play-btn" onClick={togglePlay} style={{ position: 'relative' }}>
@@ -1318,37 +1389,39 @@ export default function PlayerControls() {
           </button>
         </div>
 
-        {/* Full-width volume — draggable, unlike the old mute-only button */}
-        <div className="pc-mob-volume-row">
+        {/* Full-width liquid volume channel */}
+        <div className="pc-mob-volume-pill lg-glass">
           <VolumeSlider volume={volume} isMuted={isMuted} onVolume={setVolume} onMute={toggleMute} />
         </div>
 
-        {/* Lyrics / Devices / Queue — evenly spaced, Apple Music order */}
-        <div className="pc-mob-action-row">
+        {/* Lyrics / Devices / Queue — segmented glass capsule */}
+        <div className="pc-mob-action-pill lg-glass">
           <button
-            className={`pc-mob-action-btn ${showMobLyrics ? 'active' : ''}`}
+            className={`pc-mob-action-seg ${showMobLyrics ? 'active' : ''}`}
             onClick={() => setShowMobLyrics(true)}
             aria-label="Lyrics"
           ><FaMusic /></button>
+          <span className="pc-mob-action-divider" />
           <button
-            className={`pc-mob-action-btn ${showDevices ? 'active' : ''}`}
+            className={`pc-mob-action-seg ${showDevices ? 'active' : ''}`}
             onClick={() => showDevices ? setShowDevices(false) : openDevices()}
             aria-label="Devices"
           ><FaMobileAlt /></button>
+          <span className="pc-mob-action-divider" />
           <button
-            className={`pc-mob-action-btn ${showQueue ? 'active' : ''}`}
+            className={`pc-mob-action-seg ${showQueue ? 'active' : ''}`}
             onClick={() => setShowQueue(q => !q)}
             aria-label="Queue"
           ><FaList /></button>
         </div>
 
         {showDevices && (
-          <div className="pc-devices-mobile">
+          <div className="pc-devices-mobile lg-glass" style={{ borderRadius: 22 }}>
             <DevicesPanel onClose={() => setShowDevices(false)} />
           </div>
         )}
         {showQueue && (
-          <div className="pc-mob-queue">
+          <div className="pc-mob-queue lg-glass">
             <div className="pc-mob-queue-title">Queue</div>
             {songs.map((song, idx) => (
               <div key={song.id || idx} className={`pc-queue-item ${idx === currentIndex ? 'active' : ''}`} onClick={() => setCurrentIndex(idx)}>
