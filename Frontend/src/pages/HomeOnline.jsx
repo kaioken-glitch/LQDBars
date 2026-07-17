@@ -8,7 +8,7 @@ import {
 } from 'react-icons/fa';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faCircleArrowDown, faChevronLeft, faEllipsisH,
+  faChevronLeft, faEllipsisH,
   faCompactDisc, faBolt,
 } from '@fortawesome/free-solid-svg-icons';
 import { fetchSongs, patchSong as apiPatchSong } from '../services/api';
@@ -718,52 +718,6 @@ const STYLES = `
     color: #fff; font-size: 9px; font-weight: 800;
     padding: 2px 7px; border-radius: 6px; letter-spacing: .05em;
   }
-
-  /* ── Downloaded tile — flattened toward the reference's plain style ── */
-  .ho-dl-tile {
-    flex-shrink: 0;
-    width: 190px;
-    border-radius: 16px;
-    overflow: hidden;
-    background: rgba(29,185,84,0.07);
-    border: 1px solid rgba(29,185,84,0.15);
-    cursor: pointer;
-    transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), border-color 0.18s;
-    position: relative;
-  }
-  .ho-dl-tile:hover {
-    transform: translateY(-2px);
-    border-color: rgba(29,185,84,0.32);
-  }
-  .ho-dl-mosaic {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    aspect-ratio: 1;
-    gap: 2px;
-    background: #111;
-  }
-  .ho-dl-mosaic img {
-    width: 100%; height: 100%;
-    object-fit: cover;
-  }
-  .ho-dl-info { padding: 12px 14px 44px; }
-  .ho-dl-name {
-    font-family: 'Syne', sans-serif;
-    font-size: 14px; font-weight: 700;
-    color: #fff; margin-bottom: 2px;
-  }
-  .ho-dl-count { font-size: 12px; color: rgba(255,255,255,0.42); }
-  .ho-dl-play {
-    position: absolute;
-    bottom: 12px; right: 12px;
-    width: 36px; height: 36px; border-radius: 50%;
-    background: var(--lb-green); border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 6px 20px rgba(29,185,84,0.45);
-    transition: background 0.15s, transform 0.15s;
-  }
-  .ho-dl-play:hover { background: var(--lb-green-bright); transform: scale(1.1); }
 
   /* ── Shimmer cards ── */
   .ho-shimmer-card {
@@ -1937,7 +1891,9 @@ export default function HomeOnline() {
       .finally(() => setForYouLoading(false));
   }, [user?.id]); // eslint-disable-line
 
-  // The downloaded list to show — always from downloadedSongs, never the queue
+  // The pool of local/persisted songs used to seed Smart Radio.
+  // (Not "downloaded" in any offline/native sense — just whatever's
+  // currently loaded into the queue or already stored in downloadedSongs.)
   const dlSongs = (downloadedSongs && downloadedSongs.length > 0) ? downloadedSongs : songs.filter(s => !s.youtube);
 
   /* ── "Top Picks for You" hero row — built entirely from data already
@@ -1992,7 +1948,7 @@ export default function HomeOnline() {
   }, []);
 
   /* ─────────────────────────────────────────────────────────────────────
-     DETAIL VIEW (Downloaded / future album tiles)
+     DETAIL VIEW (Radio / future album / mood-mix tiles)
   ───────────────────────────────────────────────────────── */
   const renderDetail = () => {
     if (!selectedItem) return null;
@@ -2446,96 +2402,29 @@ export default function HomeOnline() {
               );
             })}
 
-            {/* ── DOWNLOADED SECTION ── */}
-            <section style={{ marginBottom:32 }}>
-              <div className="ho-section-head">
-                <div className="ho-section-title">
-                  <span className="ho-section-dot" style={{ background:'rgba(29,185,84,0.6)' }} />
-                  <h2>Downloaded</h2>
-                  {dlSongs.length > 0 && (
-                    <span style={{ fontSize:12, color:'var(--lb-text-3)', fontWeight:500 }}>{dlSongs.length}</span>
-                  )}
+            {/* ── SMART RADIO ──
+                Downloaded/offline section removed (impractical for a web
+                app with no persistent local storage yet). Smart Radio is
+                kept as its own standalone shelf — it still needs a song
+                pool to seed from (dlSongs), which is unrelated to actual
+                offline downloads. When real download support is built,
+                this is where that song pool naturally plugs back in. ── */}
+            {dlSongs.length > 0 && (
+              <section style={{ marginBottom:32 }}>
+                <div className="ho-section-head">
+                  <div className="ho-section-title">
+                    <span className="ho-section-dot" style={{ background:'rgba(29,185,84,0.6)' }} />
+                    <h2>Smart Radio</h2>
+                  </div>
                 </div>
-                {dlSongs.length > 0 && (
-                  <button
-                    className="ho-see-all"
-                    aria-label="See all downloaded songs"
-                    onClick={() => openDetail({
-                      type:'downloaded', name:'Downloaded Songs',
-                      cover:dlSongs[0]?.cover, accent:'#1DB954',
-                      songCount:dlSongs.length, songs:dlSongs,
-                    })}
-                  >
-                    <FaChevronRight style={{ fontSize:10 }} />
-                  </button>
-                )}
-              </div>
-
-              {dlSongs.length > 0 ? (
                 <div className="ho-shelf">
-                  {/* Smart Radio tile — always first in the Downloaded shelf */}
                   <RadioTile
                     songs={dlSongs}
                     onShowDetail={() => openDetail({ type: 'radio' })}
                   />
-
-                  {/* Summary mosaic tile */}
-                  <div className="ho-dl-tile" onClick={() => openDetail({
-                    type:'downloaded', name:'Downloaded Songs',
-                    cover:dlSongs[0]?.cover, accent:'#1DB954',
-                    songCount:dlSongs.length, songs:dlSongs,
-                  })}>
-                    <div className="ho-dl-mosaic">
-                      {[0,1,2,3].map(i => (
-                        <img key={i}
-                          src={dlSongs[i]?.cover ?? dlSongs[0]?.cover ?? '/default-cover.png'}
-                          alt=""
-                          onError={e => { e.target.src='/default-cover.png'; }}
-                        />
-                      ))}
-                    </div>
-                    <div className="ho-dl-info">
-                      <p className="ho-dl-name">Downloaded</p>
-                      <p className="ho-dl-count">{dlSongs.length} songs</p>
-                    </div>
-                    <button className="ho-dl-play" onClick={e => {
-                      e.stopPropagation();
-                      setPlayerSongs(dlSongs, 0);
-                      setTimeout(() => setIsPlaying(true), 50);
-                    }}>
-                      <FaPlay style={{ color:'#fff', fontSize:12, marginLeft:2 }} />
-                    </button>
-                  </div>
-
-                  {/* Individual song tiles (first 8) */}
-                  {dlSongs.slice(0,8).map(song => {
-                    const isActive = activeSong?.id === song.id;
-                    return (
-                      <SongCard
-                        key={song.id}
-                        item={{ ...song, badge: null }}
-                        isActive={isActive}
-                        isPlaying={isPlaying}
-                        loadingId={loadingId}
-                        onPlay={() => {
-                          const idx = dlSongs.findIndex(s => s.id === song.id);
-                          if (idx !== -1) {
-                            setPlayerSongs(dlSongs, idx);
-                            setTimeout(() => setIsPlaying(true), 50);
-                          }
-                        }}
-                      />
-                    );
-                  })}
                 </div>
-              ) : (
-                <div style={{ margin:'0 28px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:16, padding:'40px 24px', textAlign:'center' }}>
-                  <FontAwesomeIcon icon={faCircleArrowDown} style={{ fontSize:28, color:'var(--lb-text-3)', marginBottom:12, display:'block', margin:'0 auto 12px' }} />
-                  <p style={{ fontSize:15, color:'var(--lb-text-2)', marginBottom:4 }}>No downloads yet</p>
-                  <p style={{ fontSize:13, color:'var(--lb-text-3)' }}>Download songs for offline listening</p>
-                </div>
-              )}
-            </section>
+              </section>
+            )}
           </div>
         )}
 
