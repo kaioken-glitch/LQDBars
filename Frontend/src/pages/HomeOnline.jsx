@@ -2175,7 +2175,7 @@ export default function HomeOnline() {
           <div className="ho-scroll-all">
 
             {/* ── HEADER: big bold greeting + search icon + own-avatar ── */}
-            <div className="ho-hero">
+            <div className="ho-hero pt-safe">
               <div className="ho-hero-text">
                 <h1 className="ho-greeting">
                   {firstName ? <>{greeting}, {firstName}</> : greeting}
