@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   FaPlay, FaPause, FaStepBackward, FaStepForward,
   FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute,
-  FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic,
+  FaChevronDown, FaEllipsisH, FaHeart, FaList, FaTimes, FaMusic, FaMobileAlt,
 } from 'react-icons/fa';
 import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
 import { usePlayer } from '../context/PlayerContext';
+import DevicesPanel from './DevicesPanel';
 
 /* ═══════════════════════════════════════════════════════════════════
    INLINED: useLyrics hook + LyricsPanel component
@@ -207,77 +208,122 @@ function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
   );
 }
 
-/* ─── VideoAmbientBg — Spotify Canvas / Apple Music style ─────────────
-   Purely decorative, muted, looping YouTube embed shown behind the
-   Now Playing screens when the current song is backed by a real
-   YouTube video. Entirely separate from the hidden IFrame player in
-   PlayerContext that actually drives audio — this instance is always
-   muted and never touches playback state, so there's no double-audio
-   risk. Loops continuously regardless of pause state, matching how
-   Spotify's Canvas behaves (it doesn't freeze when you pause a track).
+/* ─── Ken Burns cover fallback (Apple Music style slow pan/zoom) ───
+   Used when the current song has no YouTube video to loop.
+   Falls all the way back to the iridescence shader if there's no
+   cover art either. ─────────────────────────────────────────────── */
+function KenBurnsBg({ src, accentRGB }) {
+  const [errored, setErrored] = useState(false);
+  useEffect(() => { setErrored(false); }, [src]);
 
-   Sized to always fill/crop its container the way `background-size:
-   cover` would, since a YouTube embed can't do that with CSS alone —
-   we measure the container via ResizeObserver and oversize the iframe
-   to a fixed 16:9 box, centered, so it always overflows in one axis
-   instead of letterboxing.
-───────────────────────────────────────────────────────────────────── */
-function VideoAmbientBg({ videoId }) {
-  const wrapRef = useRef(null);
-  const [box, setBox] = useState({ width: '100%', height: '100%' });
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const VIDEO_ASPECT = 16 / 9;
-
-    function resize() {
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      if (!w || !h) return;
-      if (w / h > VIDEO_ASPECT) {
-        // container is wider than 16:9 — fill width, let height overflow
-        setBox({ width: `${w}px`, height: `${w / VIDEO_ASPECT}px` });
-      } else {
-        // container is narrower/taller — fill height, let width overflow
-        setBox({ width: `${h * VIDEO_ASPECT}px`, height: `${h}px` });
-      }
-    }
-
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  if (!videoId) return null;
-
-  const src = `https://www.youtube.com/embed/${videoId}` +
-    `?autoplay=1&mute=1&loop=1&playlist=${videoId}` +
-    `&controls=0&disablekb=1&fs=0&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3`;
+  if (!src || errored) return <IridescenceBg accentRGB={accentRGB} />;
 
   return (
-    <div
-      ref={wrapRef}
-      aria-hidden="true"
-      style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        overflow: 'hidden', pointerEvents: 'none',
-        background: '#000',
-      }}
-    >
-      <iframe
-        key={videoId}
+    <div className="pc-kenburns-bg" aria-hidden="true">
+      <img
+        key={src}
         src={src}
-        title="Ambient video background"
-        allow="autoplay; encrypted-media"
-        style={{
-          position: 'absolute', top: '50%', left: '50%',
-          width: box.width, height: box.height,
-          transform: 'translate(-50%, -50%)',
-          border: 'none', pointerEvents: 'none',
-        }}
+        alt=""
+        className="pc-kenburns-img"
+        onError={() => setErrored(true)}
       />
+      <div className="pc-kenburns-wash" />
+    </div>
+  );
+}
+
+/* ─── Video loop background — Apple Music / Spotify style ──────────
+   Spins up a SECOND, independent, muted YouTube iframe player that
+   loops the same video the current song came from, purely as a
+   decorative backdrop. Completely separate from the hidden player
+   in PlayerContext that actually drives audio playback, so audio
+   timing is never affected by this.
+   Falls back to KenBurnsBg (→ IridescenceBg) when the song isn't a
+   YouTube track, or if the video player fails to initialise.
+──────────────────────────────────────────────────────────────────── */
+function VideoLoopBg({ song, accentRGB }) {
+  const mountRef   = useRef(null);
+  const playerRef  = useRef(null);
+  const [failed, setFailed] = useState(false);
+
+  const videoId = song?.youtubeId
+    || (song?.youtube && typeof song?.id === 'string' && song.id.startsWith('yt_')
+        ? song.id.replace('yt_', '')
+        : null);
+
+  useEffect(() => {
+    setFailed(false);
+    if (!videoId) return;
+
+    let destroyed = false;
+    let retryTimer = null;
+
+    const init = () => {
+      if (destroyed) return;
+      if (!window.YT || !window.YT.Player || !mountRef.current) {
+        retryTimer = setTimeout(init, 120);
+        return;
+      }
+      try {
+        playerRef.current = new window.YT.Player(mountRef.current, {
+          videoId,
+          playerVars: {
+            autoplay: 1,
+            mute: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            loop: 1,
+            playlist: videoId, // required by YT API for single-video looping
+          },
+          events: {
+            onReady: (e) => {
+              if (destroyed) return;
+              try {
+                e.target.mute();
+                e.target.playVideo();
+              } catch (_) {}
+            },
+            onStateChange: (e) => {
+              if (destroyed) return;
+              if (e.data === window.YT.PlayerState.ENDED) {
+                try { e.target.seekTo(0); e.target.playVideo(); } catch (_) {}
+              }
+            },
+            onError: () => {
+              if (!destroyed) setFailed(true);
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('[VideoLoopBg] init failed:', err);
+        if (!destroyed) setFailed(true);
+      }
+    };
+
+    init();
+
+    return () => {
+      destroyed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch (_) {}
+        playerRef.current = null;
+      }
+    };
+  }, [videoId]);
+
+  if (!videoId || failed) {
+    return <KenBurnsBg src={song?.cover} accentRGB={accentRGB} />;
+  }
+
+  return (
+    <div className="pc-video-bg" aria-hidden="true">
+      <div className="pc-video-bg-embed" ref={mountRef} />
     </div>
   );
 }
@@ -631,9 +677,6 @@ const CSS = `
   to   { background-position:   0% 0; }
 }
 
-/* Iridescence canvas fills the container div absolutely via JS — no extra CSS needed */
-/* Dark scrim overlays are handled by .pc-exp-dark-overlay / .pc-mob-dark-overlay / .pc-mob-lyrics-dark */
-
 /* ════ LYRICS PANEL ════ */
 .lp-root {
   display: flex; flex-direction: column;
@@ -681,6 +724,52 @@ const CSS = `
 }
 @keyframes lpShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
+/* ════ VIDEO LOOP BACKGROUND ════ */
+.pc-video-bg {
+  position: absolute; inset: 0; z-index: 0;
+  overflow: hidden; pointer-events: none;
+  background: #000;
+}
+.pc-video-bg-embed {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 100%; height: 100%;
+  min-width: 177.78vh;   /* keeps 16:9 video covering any aspect ratio */
+  min-height: 56.25vw;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.pc-video-bg-embed iframe {
+  width: 100%; height: 100%;
+  display: block;
+  pointer-events: none;
+  border: none;
+}
+
+/* ════ KEN BURNS COVER FALLBACK (no video available) ════ */
+.pc-kenburns-bg {
+  position: absolute; inset: 0; z-index: 0;
+  overflow: hidden; pointer-events: none;
+  background: #000;
+}
+.pc-kenburns-img {
+  position: absolute; inset: -6%;
+  width: 112%; height: 112%;
+  object-fit: cover;
+  filter: saturate(1.15) brightness(0.6) blur(1px);
+  animation: pcKenBurns 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes pcKenBurns {
+  0%   { transform: scale(1)     translate(0%, 0%); }
+  100% { transform: scale(1.16)  translate(-2.5%, -1.5%); }
+}
+.pc-kenburns-wash {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 100%);
+  pointer-events: none;
+}
+
 /* ════ PLAYER BASE ════ */
 :root {
   --pc-green:       #1DB954;
@@ -715,6 +804,9 @@ const CSS = `
 .pc-bar-fill { height: 100%; background: linear-gradient(to right, rgba(var(--pc-accent),0.9), var(--pc-green)); transition: width 0.1s linear, background 0.8s ease; border-radius: inherit; will-change: width; }
 .pc-bar-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
 .pc-bar-hovered .pc-bar-thumb { opacity: 1; }
+@media (hover: none), (max-width: 767px) {
+  .pc-bar-thumb { opacity: 1; }
+}
 .pc-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--pc-text-3); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .pc-bar-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; gap: 16px; max-width: 1600px; margin: 0 auto; }
 .pc-song-info { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; max-width: 320px; }
@@ -871,6 +963,13 @@ const CSS = `
 
 @keyframes slideInRight { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
 
+/* Devices panel — desktop floats top-right of expanded body; mobile sits inline */
+.pc-devices-desktop {
+  position: absolute; right: 24px; top: 20px; z-index: 6;
+  animation: slideInRight 0.28s cubic-bezier(0.22,1,0.36,1);
+}
+.pc-devices-mobile { margin-top: 16px; width: 100%; }
+
 /* Desktop compact lyrics drawer */
 .pc-lyrics-drawer { position: fixed; left: 0; right: 0; bottom: 73px; z-index: 39; height: 0; overflow: hidden; display: flex; flex-direction: column; background: rgba(6,6,10,0.96); backdrop-filter: blur(40px) saturate(180%); border-top: 1px solid rgba(255,255,255,0.08); box-shadow: 0 -8px 40px rgba(0,0,0,0.6); transition: height 0.42s cubic-bezier(0.22,1,0.36,1); }
 .pc-lyrics-drawer.open { height: 420px; }
@@ -896,7 +995,7 @@ const CSS = `
 .pc-mobile-next { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 16px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 /* ════ MOBILE EXPANDED ════ */
-.pc-mob-expanded { position: fixed; inset: 0; z-index: 55; display: flex; flex-direction: column; overflow: hidden; }
+.pc-mob-expanded { position: fixed; inset: 0; z-index: 62; display: flex; flex-direction: column; overflow: hidden; }
 .pc-mob-dark-overlay { position: absolute; inset: 0; z-index: 1; background: rgba(2,2,6,0.44); pointer-events: none; }
 .pc-mob-header { position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.16); backdrop-filter: blur(16px); }
 .pc-mob-header-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.38); }
@@ -906,7 +1005,12 @@ const CSS = `
 .pc-mob-art { display: block; width: min(72vw,300px); height: min(72vw,300px); border-radius: 22px; object-fit: cover; box-shadow: 0 32px 90px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08); }
 .pc-mob-art.playing { animation: artFloat 7s ease-in-out infinite; }
 .pc-mob-meta { text-align: center; width: 100%; padding: 0 8px; margin-bottom: 20px; }
-.pc-mob-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 4px; }
+.pc-mob-name {
+  font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: #fff;
+  letter-spacing: -0.03em; margin-bottom: 4px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.25;
+}
 .pc-mob-artist { font-size: 14px; color: rgba(255,255,255,0.48); }
 .pc-mob-progress { width: 100%; margin-bottom: 24px; }
 .pc-mob-ctrl-row { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-bottom: 20px; }
@@ -916,10 +1020,48 @@ const CSS = `
 .pc-mob-play-btn { width: 68px; height: 68px; border-radius: 50%; background: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 24px; box-shadow: 0 8px 36px rgba(0,0,0,0.5); transition: transform 0.18s, background 0.2s; }
 .pc-mob-play-btn:active { transform: scale(0.92); }
 .pc-mob-extras { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 8px; }
-.pc-mob-vol { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pc-text-2); cursor: pointer; background: none; border: none; }
+.pc-mob-vol { display: flex; align-items: center; gap: 8px; width: 128px; flex-shrink: 0; }
+.pc-mob-vol-icon { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 4px; }
 .pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
-.pc-mob-queue { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; max-height: 240px; overflow-y: auto; }
-.pc-mob-queue-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+
+.pc-mob-queue {
+  margin-top: 24px;
+  width: 100%;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.pc-mob-queue-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 6px;
+}
+.pc-mob-queue .pc-queue-item {
+  align-items: center;
+  padding: 12px 4px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pc-mob-queue .pc-queue-item:last-child { border-bottom: none; }
+.pc-mob-queue .pc-queue-item.active { background: rgba(29,185,84,0.08); }
+.pc-mob-queue .pc-queue-thumb { width: 44px; height: 44px; margin-top: 0; }
+.pc-mob-queue .pc-queue-name {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+.pc-mob-queue .pc-queue-artist {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
+}
+.pc-mob-queue .pc-queue-active-dot { margin-top: 0; }
 
 /* ════ MOBILE FULLSCREEN LYRICS ════ */
 .pc-mob-lyrics-fs {
@@ -988,11 +1130,13 @@ export default function PlayerControls() {
   const [showQueue,     setShowQueue]     = useState(false);
   const [showLyrics,    setShowLyrics]    = useState(false);
   const [showMobLyrics, setShowMobLyrics] = useState(false);
+  const [showDevices,   setShowDevices]   = useState(false);
   const [liked,         setLiked]         = useState(false);
   const prevCoverRef = useRef(null);
 
-  const openQueue  = () => { setShowQueue(true);  setShowLyrics(false); };
-  const openLyrics = () => { setShowLyrics(true); setShowQueue(false);  };
+  const openQueue   = () => { setShowQueue(true);  setShowLyrics(false); setShowDevices(false); };
+  const openLyrics  = () => { setShowLyrics(true); setShowQueue(false);  setShowDevices(false); };
+  const openDevices = () => { setShowDevices(true); setShowQueue(false); setShowLyrics(false); };
 
   useEffect(() => {
     const cover = currentSong?.cover;
@@ -1019,18 +1163,10 @@ export default function PlayerControls() {
 
   const accent = `rgb(${accentRGB})`;
 
-  // Real YouTube video behind this track → use it as the ambient loop
-  // background in the two "Now Playing" expanded views. Anything else
-  // (local files, missing/invalid id) falls back to the iridescence
-  // shader exactly as before.
-  const ambientVideoId = /^[A-Za-z0-9_-]{11}$/.test(currentSong.youtubeId || '')
-    ? currentSong.youtubeId
-    : null;
-
   /* ── desktop expanded — full-screen lyrics, controls at bottom ── */
   const desktopExpanded = showBackgroundDetail && (
     <div className="pc-expanded pc-desktop-bar" style={accentStyle}>
-      {ambientVideoId ? <VideoAmbientBg videoId={ambientVideoId} /> : <IridescenceBg accentRGB={accentRGB} />}
+      <VideoLoopBg song={currentSong} accentRGB={accentRGB} />
       <div className="pc-exp-dark-overlay" />
 
       {/* Top nav strip */}
@@ -1040,6 +1176,12 @@ export default function PlayerControls() {
         </button>
         <span className="pc-exp-header-title">Now Playing</span>
         <div className="pc-exp-header-btns">
+          <button
+            className="pc-icon-btn"
+            style={{ color: showDevices ? 'var(--pc-green-bright)' : undefined }}
+            onClick={() => showDevices ? setShowDevices(false) : openDevices()}
+            title="Devices"
+          ><FaMobileAlt /></button>
           <button
             className="pc-icon-btn"
             style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }}
@@ -1066,6 +1208,13 @@ export default function PlayerControls() {
             onSelect={setCurrentIndex}
             onClose={() => setShowQueue(false)}
           />
+        )}
+
+        {/* Devices overlay */}
+        {showDevices && (
+          <div className="pc-devices-desktop">
+            <DevicesPanel onClose={() => setShowDevices(false)} />
+          </div>
         )}
       </div>
 
@@ -1191,7 +1340,7 @@ export default function PlayerControls() {
   /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
     <div className="pc-mob-expanded" style={accentStyle}>
-      <IridescenceBg accentRGB={accentRGB} />
+      <VideoLoopBg song={currentSong} accentRGB={accentRGB} />
       <div className="pc-mob-dark-overlay" />
       <div className="pc-mob-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
@@ -1222,19 +1371,40 @@ export default function PlayerControls() {
           </button>
         </div>
         <div className="pc-mob-extras">
-          <button className="pc-mob-vol" onClick={toggleMute}>
-            {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
-            <span style={{ marginLeft: 6 }}>{isMuted ? '0' : Math.round(volume * 100)}%</span>
-          </button>
+          <div className="pc-mob-vol">
+            <button className="pc-mob-vol-icon" onClick={toggleMute} aria-label={isMuted ? 'Unmute' : 'Mute'}>
+              {isMuted || volume === 0 ? <FaVolumeMute /> : <FaVolumeUp />}
+            </button>
+            <div className="pc-vol-track">
+              <div className="pc-vol-fill" style={{ width: `${isMuted ? 0 : volume * 100}%` }} />
+              <input
+                type="range" min="0" max="1" step="0.01"
+                value={isMuted ? 0 : volume}
+                onChange={e => {
+                  const v = parseFloat(e.target.value);
+                  setVolume(v);
+                  if (isMuted && v > 0) toggleMute();
+                }}
+                className="pc-vol-input"
+                aria-label="Volume"
+              />
+            </div>
+          </div>
           <span className="pc-mob-count">{currentIndex + 1} / {songs.length}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button className="pc-icon-btn" style={{ color: showMobLyrics ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowMobLyrics(true)} aria-label="Show lyrics"><FaMusic /></button>
+            <button className="pc-icon-btn" style={{ color: showDevices ? 'var(--pc-green-bright)' : undefined }} onClick={() => showDevices ? setShowDevices(false) : openDevices()} aria-label="Devices"><FaMobileAlt /></button>
             <button className="pc-icon-btn" style={{ color: showQueue ? 'var(--pc-green-bright)' : undefined }} onClick={() => setShowQueue(q => !q)} aria-label="Queue"><FaList /></button>
           </div>
         </div>
+        {showDevices && (
+          <div className="pc-devices-mobile">
+            <DevicesPanel onClose={() => setShowDevices(false)} />
+          </div>
+        )}
         {showQueue && (
           <div className="pc-mob-queue">
-            <div className="pc-mob-queue-title">Queue</div>
+            <div className="pc-mob-queue-title">Queue · {songs.length}</div>
             {songs.map((song, idx) => (
               <div key={song.id || idx} className={`pc-queue-item ${idx === currentIndex ? 'active' : ''}`} onClick={() => setCurrentIndex(idx)}>
                 <img src={song.cover || FALLBACK_COVER} alt={song.name} className="pc-queue-thumb" onError={e => { e.target.src = FALLBACK_COVER; }} />
@@ -1251,7 +1421,7 @@ export default function PlayerControls() {
   /* ── mobile fullscreen lyrics ── */
   const mobileLyricsFs = (
     <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
-      <IridescenceBg accentRGB={accentRGB} />
+      <VideoLoopBg song={currentSong} accentRGB={accentRGB} />
       <div className="pc-mob-lyrics-dark" />
       <div className="pc-mob-lyrics-header">
         <div className="pc-mob-lyrics-header-info">
