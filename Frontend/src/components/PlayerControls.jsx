@@ -207,127 +207,6 @@ function IridescenceBg({ accentRGB, speed = 0.8, amplitude = 0.12 }) {
     />
   );
 }
-
-/* ─── Ken Burns cover fallback (Apple Music style slow pan/zoom) ───
-   Used when the current song has no YouTube video to loop.
-   Falls all the way back to the iridescence shader if there's no
-   cover art either. ─────────────────────────────────────────────── */
-function KenBurnsBg({ src, accentRGB }) {
-  const [errored, setErrored] = useState(false);
-  useEffect(() => { setErrored(false); }, [src]);
-
-  if (!src || errored) return <IridescenceBg accentRGB={accentRGB} />;
-
-  return (
-    <div className="pc-kenburns-bg" aria-hidden="true">
-      <img
-        key={src}
-        src={src}
-        alt=""
-        className="pc-kenburns-img"
-        onError={() => setErrored(true)}
-      />
-      <div className="pc-kenburns-wash" />
-    </div>
-  );
-}
-
-/* ─── Video loop background — Apple Music / Spotify style ──────────
-   Spins up a SECOND, independent, muted YouTube iframe player that
-   loops the same video the current song came from, purely as a
-   decorative backdrop. Completely separate from the hidden player
-   in PlayerContext that actually drives audio playback, so audio
-   timing is never affected by this.
-   Falls back to KenBurnsBg (→ IridescenceBg) when the song isn't a
-   YouTube track, or if the video player fails to initialise.
-──────────────────────────────────────────────────────────────────── */
-function VideoLoopBg({ song, accentRGB }) {
-  const mountRef   = useRef(null);
-  const playerRef  = useRef(null);
-  const [failed, setFailed] = useState(false);
-
-  const videoId = song?.youtubeId
-    || (song?.youtube && typeof song?.id === 'string' && song.id.startsWith('yt_')
-        ? song.id.replace('yt_', '')
-        : null);
-
-  useEffect(() => {
-    setFailed(false);
-    if (!videoId) return;
-
-    let destroyed = false;
-    let retryTimer = null;
-
-    const init = () => {
-      if (destroyed) return;
-      if (!window.YT || !window.YT.Player || !mountRef.current) {
-        retryTimer = setTimeout(init, 120);
-        return;
-      }
-      try {
-        playerRef.current = new window.YT.Player(mountRef.current, {
-          videoId,
-          playerVars: {
-            autoplay: 1,
-            mute: 1,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            iv_load_policy: 3,
-            modestbranding: 1,
-            playsinline: 1,
-            rel: 0,
-            loop: 1,
-            playlist: videoId, // required by YT API for single-video looping
-          },
-          events: {
-            onReady: (e) => {
-              if (destroyed) return;
-              try {
-                e.target.mute();
-                e.target.playVideo();
-              } catch (_) {}
-            },
-            onStateChange: (e) => {
-              if (destroyed) return;
-              if (e.data === window.YT.PlayerState.ENDED) {
-                try { e.target.seekTo(0); e.target.playVideo(); } catch (_) {}
-              }
-            },
-            onError: () => {
-              if (!destroyed) setFailed(true);
-            },
-          },
-        });
-      } catch (err) {
-        console.warn('[VideoLoopBg] init failed:', err);
-        if (!destroyed) setFailed(true);
-      }
-    };
-
-    init();
-
-    return () => {
-      destroyed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch (_) {}
-        playerRef.current = null;
-      }
-    };
-  }, [videoId]);
-
-  if (!videoId || failed) {
-    return <KenBurnsBg src={song?.cover} accentRGB={accentRGB} />;
-  }
-
-  return (
-    <div className="pc-video-bg" aria-hidden="true">
-      <div className="pc-video-bg-embed" ref={mountRef} />
-    </div>
-  );
-}
-
 /* ─── Shimmer ────────────────────────────────────────────────────── */
 const WIDTHS = ['68%','52%','78%','44%','72%','58%','82%','48%','65%','74%'];
 function LpShimmer() {
@@ -724,52 +603,6 @@ const CSS = `
 }
 @keyframes lpShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
-/* ════ VIDEO LOOP BACKGROUND ════ */
-.pc-video-bg {
-  position: absolute; inset: 0; z-index: 0;
-  overflow: hidden; pointer-events: none;
-  background: #000;
-}
-.pc-video-bg-embed {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 100%; height: 100%;
-  min-width: 177.78vh;   /* keeps 16:9 video covering any aspect ratio */
-  min-height: 56.25vw;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.pc-video-bg-embed iframe {
-  width: 100%; height: 100%;
-  display: block;
-  pointer-events: none;
-  border: none;
-}
-
-/* ════ KEN BURNS COVER FALLBACK (no video available) ════ */
-.pc-kenburns-bg {
-  position: absolute; inset: 0; z-index: 0;
-  overflow: hidden; pointer-events: none;
-  background: #000;
-}
-.pc-kenburns-img {
-  position: absolute; inset: -6%;
-  width: 112%; height: 112%;
-  object-fit: cover;
-  filter: saturate(1.15) brightness(0.6) blur(1px);
-  animation: pcKenBurns 24s ease-in-out infinite alternate;
-  will-change: transform;
-}
-@keyframes pcKenBurns {
-  0%   { transform: scale(1)     translate(0%, 0%); }
-  100% { transform: scale(1.16)  translate(-2.5%, -1.5%); }
-}
-.pc-kenburns-wash {
-  position: absolute; inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 100%);
-  pointer-events: none;
-}
-
 /* ════ PLAYER BASE ════ */
 :root {
   --pc-green:       #1DB954;
@@ -1024,6 +857,12 @@ const CSS = `
 .pc-mob-vol-icon { background: none; border: none; cursor: pointer; color: var(--pc-text-2); font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 4px; }
 .pc-mob-count { font-size: 12px; color: var(--pc-text-3); }
 
+/* FIX: queue was a boxed card (background/border/border-radius/padding)
+   with its own max-height + overflow-y: auto, creating a scroll-inside-
+   scroll that squeezed the list down to ~1.5 visible rows. Now it flows
+   flat into the page (no card, no inner scrollbox) and .pc-mob-body's
+   existing overflow-y:auto scrolls the whole Now Playing screen instead,
+   matching the flat, undecorated list styling used elsewhere in the app. */
 .pc-mob-queue {
   margin-top: 24px;
   width: 100%;
@@ -1166,7 +1005,7 @@ export default function PlayerControls() {
   /* ── desktop expanded — full-screen lyrics, controls at bottom ── */
   const desktopExpanded = showBackgroundDetail && (
     <div className="pc-expanded pc-desktop-bar" style={accentStyle}>
-      <VideoLoopBg song={currentSong} accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-exp-dark-overlay" />
 
       {/* Top nav strip */}
@@ -1340,7 +1179,7 @@ export default function PlayerControls() {
   /* ── mobile expanded (Now Playing) ── */
   const mobileExpanded = showBackgroundDetail && (
     <div className="pc-mob-expanded" style={accentStyle}>
-      <VideoLoopBg song={currentSong} accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-mob-dark-overlay" />
       <div className="pc-mob-header">
         <button className="pc-icon-btn" onClick={() => setShowBackgroundDetail(false)}><FaChevronDown style={{ fontSize: 18 }} /></button>
@@ -1421,7 +1260,7 @@ export default function PlayerControls() {
   /* ── mobile fullscreen lyrics ── */
   const mobileLyricsFs = (
     <div className={`pc-mob-lyrics-fs ${showMobLyrics ? 'open' : ''}`} style={accentStyle}>
-      <VideoLoopBg song={currentSong} accentRGB={accentRGB} />
+      <IridescenceBg accentRGB={accentRGB} />
       <div className="pc-mob-lyrics-dark" />
       <div className="pc-mob-lyrics-header">
         <div className="pc-mob-lyrics-header-info">

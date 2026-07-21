@@ -167,6 +167,12 @@ export function PlayerProvider({ children }) {
               autoplay: isPlaying ? 1 : 0,
               controls: 0, disablekb: 1, fs: 0,
               iv_load_policy: 3, modestbranding: 1, rel: 0,
+              // Without this, iOS Safari treats the embed as wanting native
+              // fullscreen video playback, which silently blocks/breaks
+              // programmatic playVideo() calls outside of a fullscreen
+              // context. This is the single biggest fix for "song won't
+              // play on mobile" when the song is a YouTube-sourced track.
+              playsinline: 1,
             },
             events: {
               onReady: (event) => {
