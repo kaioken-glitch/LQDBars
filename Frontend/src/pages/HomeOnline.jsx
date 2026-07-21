@@ -11,7 +11,7 @@ import {
   faChevronLeft, faEllipsisH,
   faCompactDisc, faBolt,
 } from '@fortawesome/free-solid-svg-icons';
-import { fetchSongs, patchSong as apiPatchSong } from '../services/api';
+import { patchSong as apiPatchSong } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import PlayerControls from '../components/PlayerControls';
@@ -1500,6 +1500,11 @@ export default function HomeOnline() {
   });
   const [showCompactTransient, setShowCompactTransient] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth <= 640));
+  // First-visit nudge for users with no resume session yet — dismiss is
+  // session-local (no localStorage): once they actually play something,
+  // hasResumedSession will be true on their next visit and this banner
+  // won't have a reason to show again anyway.
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   const { show: showToast } = useToast();
   const { user, profile: authProfile } = useAuth();
@@ -1522,6 +1527,7 @@ export default function HomeOnline() {
     setVolume,
     downloadedSongs,
     currentSong,
+    hasResumedSession,
   } = usePlayer();
 
   const playProfilePlaylist = useCallback((songs) => {
@@ -1539,9 +1545,6 @@ export default function HomeOnline() {
   const greeting  = useMemo(() => getGreeting(), []);
   const firstName = useMemo(() => getFirstName(authProfile, user), [authProfile, user]);
   const avatarInitial = (firstName || authProfile?.username || user?.email || '?')[0]?.toUpperCase() || '?';
-
-  /* ── Initial load ── */
-  useEffect(() => { if (volume === 1) setVolume(0.2); }, []); // eslint-disable-line
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1657,19 +1660,13 @@ export default function HomeOnline() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    if (songs.length > 0) { setLoading(false); return; }
-    fetchSongs()
-      .then(data => {
-        const all = Array.isArray(data) ? data : (data?.songs ?? []);
-        setPlayerSongs(all);
-      })
-      .catch(() => {
-        setPlayerSongs(downloadedSongs ?? []);
-        setErrorMsg('Offline mode — showing downloaded songs only.');
-      })
-      .finally(() => setLoading(false));
-  }, []); // eslint-disable-line
+  // Queue is no longer force-populated from the static song.json library on
+  // mount. PlayerContext handles hydrating songs/currentIndex from a saved
+  // session (see hasResumedSession); if there's no resume data, the queue
+  // just stays empty until the user picks something — Home.jsx's offline
+  // fallback UI is a separate concern, revisited once there's a native
+  // shell (Home.jsx untouched for now).
+  useEffect(() => { setLoading(false); }, []);
 
   /* ── Debounce ── */
   useEffect(() => {
@@ -2228,6 +2225,43 @@ export default function HomeOnline() {
                 <FontAwesomeIcon icon={faBolt} style={{ fontSize:12 }} />
                 {errorMsg}
               </div>
+            )}
+
+            {/* ── FIRST-VISIT NUDGE ──
+                Shown only when there's genuinely no resume data yet (new
+                user, or a session that expired past the 72h TTL in
+                PlayerContext). Dismiss is session-local, not persisted —
+                see the nudgeDismissed state comment above. ── */}
+            {!currentSong && !hasResumedSession && !nudgeDismissed && (
+              <section
+                style={{
+                  margin: '0 28px 20px',
+                  padding: '14px 16px',
+                  borderRadius: 14,
+                  background: 'rgba(29,185,84,0.06)',
+                  border: '1px solid rgba(29,185,84,0.16)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(29,185,84,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FaPlay style={{ fontSize: 11, color: 'var(--lb-green)', marginLeft: 1 }} />
+                  </div>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+                    Tap any song below — we'll remember where you left off next time.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setNudgeDismissed(true)}
+                  aria-label="Dismiss"
+                  style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  <FaTimes style={{ fontSize: 12 }} />
+                </button>
+              </section>
             )}
 
             {/* ── PEOPLE TO FOLLOW ── */}
