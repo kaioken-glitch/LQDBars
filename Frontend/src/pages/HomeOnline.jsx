@@ -1532,8 +1532,8 @@ export default function HomeOnline() {
 
   const playProfilePlaylist = useCallback((songs) => {
     if (!songs?.length) return;
-    setPlayerSongs(songs, 0);
-    setTimeout(() => setIsPlaying(true), 50);
+    setPlayerSongs(songs, idx);
+    setIsPlaying(true);
     setOpenProfileId(null);
   }, [setPlayerSongs, setIsPlaying]);
 

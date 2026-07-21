@@ -951,7 +951,7 @@ export default function Playlists() {
         if (adjustedIdx === -1) adjustedIdx = 0;
       }
       setPlayerSongs(validSongs, adjustedIdx);
-      setTimeout(() => setIsPlaying(true), 100);
+      setIsPlaying(true);
     } catch (err) {
       console.error('Error playing songs:', err);
     }
