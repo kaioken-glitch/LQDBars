@@ -204,7 +204,7 @@ export default function Library() {
     // Defer setIsPlaying so PlayerContext's song-change useEffect loads the new src first.
     // (Same pattern used in Playlists.jsx to avoid playing stale/empty src.)
     setPlayerSongs(songs, startIdx);
-    setIsPlaying(true);
+    setTimeout(() => setIsPlaying(true), 80);
   }, [setPlayerSongs, setIsPlaying]);
 
   const playSong = useCallback((song, songs) => {

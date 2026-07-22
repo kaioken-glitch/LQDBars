@@ -167,12 +167,6 @@ export function PlayerProvider({ children }) {
               autoplay: isPlaying ? 1 : 0,
               controls: 0, disablekb: 1, fs: 0,
               iv_load_policy: 3, modestbranding: 1, rel: 0,
-              // Without this, iOS Safari treats the embed as wanting native
-              // fullscreen video playback, which silently blocks/breaks
-              // programmatic playVideo() calls outside of a fullscreen
-              // context. This is the single biggest fix for "song won't
-              // play on mobile" when the song is a YouTube-sourced track.
-              playsinline: 1,
             },
             events: {
               onReady: (event) => {
@@ -427,12 +421,24 @@ export function PlayerProvider({ children }) {
      element or YT player) rather than the `currentTime` state, since
      that state can lag slightly behind (YT position is only polled
      once a second).
+
+     `currentTime` itself is mirrored into a ref rather than read as a
+     direct dependency of buildSessionSnapshot/persistSession — it's only
+     used as a last-resort fallback below. If it were a real dependency,
+     buildSessionSnapshot (and therefore persistSession) would get a new
+     identity every single second while a song plays, which would tear
+     down and rebuild the "throttled save every 8s" interval effect below
+     on every tick — meaning that interval would never actually survive
+     long enough to fire.
   ───────────────────────────────────────────────────────────────────── */
+  const currentTimeRef = useRef(0);
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+
   const buildSessionSnapshot = useCallback(() => {
     if (!songs.length) return null;
     const livePosition = playerTypeRef.current === 'youtube'
-      ? (youtubePlayerRef.current?.getCurrentTime?.() ?? currentTime)
-      : (audioRef.current?.currentTime ?? currentTime);
+      ? (youtubePlayerRef.current?.getCurrentTime?.() ?? currentTimeRef.current)
+      : (audioRef.current?.currentTime ?? currentTimeRef.current);
     return {
       songs,
       currentIndex,
@@ -442,7 +448,7 @@ export function PlayerProvider({ children }) {
       repeatMode,
       ts: Date.now(),
     };
-  }, [songs, currentIndex, currentTime, volume, shuffle, repeatMode]);
+  }, [songs, currentIndex, volume, shuffle, repeatMode]);
 
   const persistSession = useCallback(() => {
     const snap = buildSessionSnapshot();

@@ -1532,7 +1532,7 @@ export default function HomeOnline() {
 
   const playProfilePlaylist = useCallback((songs) => {
     if (!songs?.length) return;
-    setPlayerSongs(songs, idx);
+    setPlayerSongs(songs, 0);
     setIsPlaying(true);
     setOpenProfileId(null);
   }, [setPlayerSongs, setIsPlaying]);
@@ -1708,7 +1708,15 @@ export default function HomeOnline() {
     }
   }, [setPlayerSongs]);
 
-  /* ── Play YouTube video (direct, no backend call) ── */
+  /* ── Play YouTube video (direct, no backend call) ──
+     setIsPlaying fires in the same tick as setPlayerSongs (React batches
+     both into one render) rather than after a setTimeout. On mobile,
+     this matters: this is now often the very first play attempt of the
+     session (queue starts empty), and an intervening setTimeout — even
+     50-80ms — is enough for iOS Safari / Android Chrome to no longer
+     treat the resulting playVideo()/play() call as tied to the user's
+     tap, so it gets silently dropped. Keeping it synchronous preserves
+     the gesture. ── */
   const playYoutubeVideo = useCallback((video, itemId) => {
     setLoadingId(itemId ?? video.id);
     try {
@@ -1716,7 +1724,8 @@ export default function HomeOnline() {
       ytSongRef.current = ytSong;
       const updatedQueue = [ytSong, ...(downloadedSongs && downloadedSongs.length > 0 ? downloadedSongs : songs).filter(s => !s.youtube)];
       setPlayerSongs(updatedQueue, 0);
-      setTimeout(() => { setIsPlaying(true); setLoadingId(null); }, 80);
+      setIsPlaying(true);
+      setLoadingId(null);
     } catch (err) {
       console.error('playYoutubeVideo failed:', err);
       setErrorMsg(`Couldn't play "${video.title}". Try another track.`);
@@ -1976,12 +1985,12 @@ export default function HomeOnline() {
     const playFromStart = () => {
       if (!songList.length) return;
       setPlayerSongs(songList, 0);
-      setTimeout(() => setIsPlaying(true), 50);
+      setIsPlaying(true);
     };
     const shuffleList = () => {
       if (!songList.length) return;
       setPlayerSongs([...songList].sort(() => Math.random() - 0.5), 0);
-      setTimeout(() => setIsPlaying(true), 50);
+      setIsPlaying(true);
     };
 
     return (
@@ -2053,7 +2062,7 @@ export default function HomeOnline() {
                   isActive={isActive} isPlaying={isPlaying}
                   isFav={ts.fav ?? song.favorite ?? false}
                   isLiked={ts.liked ?? song.liked ?? false}
-                  onPlay={() => { if (globalIdx !== -1) { setCurrentIndex(globalIdx); setTimeout(() => setIsPlaying(true), 50); } }}
+                  onPlay={() => { if (globalIdx !== -1) { setCurrentIndex(globalIdx); setIsPlaying(true); } }}
                   onFav={() => toggleFav(sId, ts.fav ?? song.favorite ?? false)}
                   onLike={() => toggleLiked(sId, ts.liked ?? song.liked ?? false)}
                 />
@@ -2108,7 +2117,7 @@ export default function HomeOnline() {
                   const idx = baseList.findIndex(s => s.id === song.id);
                   if (idx !== -1) {
                     setPlayerSongs(baseList, idx);
-                    setTimeout(() => setIsPlaying(true), 50);
+                    setIsPlaying(true);
                   }
                   closeSearch();
                 }}>
