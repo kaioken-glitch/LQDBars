@@ -1,531 +1,475 @@
-// src/context/PlayerContext.jsx
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import React, {
+  createContext, useContext,
+  useState, useRef, useEffect, useCallback,
+} from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { useRemoteControl } from '../hooks/useRemoteControl';
 
 const PlayerContext = createContext();
 
-/* ─────────────────────────────────────────────────────────────────────────
-   SESSION RESUME
-   ─────────────────────────────────────────────────────────────────────────
-   Persists just enough state to make the player feel like a continuous
-   session across reloads: the queue, current index, scrub position, and
-   volume/shuffle/repeat. Restored on mount — but isPlaying is NEVER
-   restored to true. Browsers block un-gestured autoplay anyway, so the
-   honest UX is: song loaded, scrub bar at the last position, paused,
-   waiting for a tap.
-
-   Expiry: sessions older than SESSION_TTL are treated as if they don't
-   exist (falls back to the "no resume data" empty state + nudge banner
-   in HomeOnline). 72h is a starting point — bump this if it feels too
-   aggressive/lenient in practice.
-───────────────────────────────────────────────────────────────────────── */
-const SESSION_KEY = 'lb:playerSession';
-const SESSION_TTL = 72 * 60 * 60 * 1000; // 72 hours
-const SESSION_SAVE_INTERVAL = 8000; // throttle while playing
-
-function loadSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || !Array.isArray(data.songs) || !data.songs.length) return null;
-    if (Date.now() - (data.ts || 0) > SESSION_TTL) return null;
-    return data;
-  } catch (_) {
-    return null;
-  }
-}
-
-function saveSession(data) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); }
-  catch (_) { /* localStorage full/unavailable — non-critical, skip */ }
-}
-
 export function PlayerProvider({ children }) {
-  // Read any existing session exactly once, before the first render's
-  // state initializers run. `undefined` sentinel guards against re-reading
-  // localStorage on every render (a plain useRef(loadSession()) would call
-  // loadSession() on every render even though only the first value sticks).
-  const initialSessionRef = useRef(undefined);
-  if (initialSessionRef.current === undefined) {
-    initialSessionRef.current = loadSession();
-  }
-  const initialSession = initialSessionRef.current;
-  const hasResumedSession = !!initialSession;
 
-  const [songs, setSongs] = useState(() => initialSession?.songs ?? []);
-  const [currentIndex, setCurrentIndex] = useState(() => initialSession?.currentIndex ?? 0);
-  const [isPlaying, setIsPlaying] = useState(false); // NEVER restored to true
-  const [volume, setVolume] = useState(() => initialSession?.volume ?? 0.7);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [downloadedSongs, setDownloadedSongs] = useState([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const [shuffle, setShuffle] = useState(() => initialSession?.shuffle ?? false);
-  const [repeatMode, setRepeatMode] = useState(() => initialSession?.repeatMode ?? 'off');
-  const [shuffledOrder, setShuffledOrder] = useState([]);
+  /* ── State ──────────────────────────────────────────────────────── */
+  const [songs,                setSongs]                = useState([]);
+  const [currentIndex,         setCurrentIndex]         = useState(0);
+  const [isPlaying,            setIsPlaying]            = useState(false);
+  const [volume,               setVolume]               = useState(0.7);
+  const [currentTime,          setCurrentTime]          = useState(0);
+  const [duration,             setDuration]             = useState(0);
+  const [downloadedSongs,      setDownloadedSongs]      = useState([]);
+  const [isMuted,              setIsMuted]              = useState(false);
+  const [shuffle,              setShuffle]              = useState(false);
+  const [repeatMode,           setRepeatMode]           = useState('off');
+  const [shuffledOrder,        setShuffledOrder]        = useState([]);
   const [showBackgroundDetail, setShowBackgroundDetail] = useState(false);
 
-  const audioRef           = useRef(new Audio());
-  const youtubePlayerRef   = useRef(null);
-  const playerTypeRef      = useRef('audio');
-  const timeUpdateInterval = useRef(null);
+  /* ── Refs ───────────────────────────────────────────────────────── */
+  const audioRef      = useRef(new Audio());
+  const ytRef         = useRef(null);     // single YT player, lives for page lifetime
+  const ytReadyRef    = useRef(false);
+  const playerType    = useRef('audio');
+  const timerRef      = useRef(null);
+  const mountedRef    = useRef(true);
 
-  // The scrub position to apply once the *first* resumed song has actually
-  // loaded — applied exactly once, then cleared. Every song change after
-  // that behaves normally (starts at 0).
-  const pendingResumeTimeRef = useRef(initialSession?.currentTime ?? null);
-  const hasAppliedResumeRef  = useRef(false);
+  // ── Mirror refs ─────────────────────────────────────────────────────
+  // YT callbacks close over these at creation time and never update.
+  // We keep refs in sync so they always read current values.
+  const songsRef    = useRef([]);
+  const idxRef      = useRef(0);
+  const repeatRef   = useRef('off');
+  const shuffleRef  = useRef(false);
+  const shuffledRef = useRef([]);
+
+  useEffect(() => { mountedRef.current  = true; return () => { mountedRef.current = false; }; }, []);
+  useEffect(() => { songsRef.current    = songs;        }, [songs]);
+  useEffect(() => { idxRef.current      = currentIndex; }, [currentIndex]);
+  useEffect(() => { repeatRef.current   = repeatMode;   }, [repeatMode]);
+  useEffect(() => { shuffleRef.current  = shuffle;      }, [shuffle]);
+  useEffect(() => { shuffledRef.current = shuffledOrder;}, [shuffledOrder]);
+
+  // ── Loading guard ────────────────────────────────────────────────────
+  // TRUE from the moment we start loading a new song until it actually
+  // starts playing (or fails). Prevents the audio 'error' event that fires
+  // when reassigning .src, and the YT PAUSED buffering artifact, from
+  // calling advanceNext() and cycling through the list.
+  const loadingRef = useRef(false);
+  const advancingRef = useRef(false);
 
   const currentSong = songs[currentIndex];
 
-  const toggleBackgroundDetail = useCallback(() => {
-    setShowBackgroundDetail(prev => !prev);
-  }, []);
+  /* ── Tiny helpers ───────────────────────────────────────────────── */
+  const needsYT = (song) =>
+    !!(song && (song.source === 'youtube' ||
+       (song.youtubeId && /^[A-Za-z0-9_-]+$/.test(song.youtubeId))));
 
-  const needsYouTubePlayer = useCallback((song) => {
-    if (!song) return false;
-    const hasYtId = song.youtubeId && /^[A-Za-z0-9_-]{1,}$/.test(song.youtubeId);
-    return song.source === 'youtube' || hasYtId;
-  }, []);
-
-  const extractYouTubeId = useCallback((url) => {
-    if (!url) return null;
-    const patterns = [
-      /youtube\.com\/watch\?v=([^&]+)/,
-      /youtu\.be\/([^?]+)/,
-      /youtube\.com\/embed\/([^?]+)/,
-    ];
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return match[1];
+  const getVideoId = (song) => {
+    if (song.youtubeId && /^[A-Za-z0-9_-]{11}$/.test(song.youtubeId)) return song.youtubeId;
+    for (const field of [song.audio, song.streamUrl, song.url, song.src]) {
+      if (!field) continue;
+      const m = field.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/);
+      if (m) return m[1];
     }
     return null;
+  };
+
+  /* ── Time tracking ──────────────────────────────────────────────── */
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      if (!mountedRef.current) return;
+      try {
+        const p = ytRef.current;
+        if (!p?.getCurrentTime) return;
+        const t = p.getCurrentTime();
+        if (!isNaN(t)) setCurrentTime(t);
+        const d = p.getDuration?.() || 0;
+        if (d > 0) setDuration(d);
+      } catch (_) {}
+    }, 500);
   }, []);
 
-  // Load YouTube IFrame API
-  useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    }
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
-  const cleanupYouTube = useCallback(() => {
-    if (timeUpdateInterval.current) {
-      clearInterval(timeUpdateInterval.current);
-      timeUpdateInterval.current = null;
-    }
-    if (youtubePlayerRef.current) {
-      try { youtubePlayerRef.current.destroy(); } catch (e) { console.warn('YT destroy:', e); }
-      youtubePlayerRef.current = null;
-    }
-  }, []);
+  /* ── advanceNext / advancePrev ──────────────────────────────────────
+     Read refs only — safe to call from inside YT callbacks which are
+     stale closures that never see updated state.
+  ────────────────────────────────────────────────────────────────── */
+  const advanceNext = useCallback(() => {
+    if (!mountedRef.current) return;
+    // Guard against rapid successive calls
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setTimeout(() => { advancingRef.current = false; }, 100);
 
-  // Song change effect — switch between audio and YouTube player
-  useEffect(() => {
-    if (!currentSong) {
-      if (playerTypeRef.current === 'youtube') cleanupYouTube();
-      else { audioRef.current.pause(); audioRef.current.src = ''; }
+    const s   = songsRef.current;
+    const ci  = idxRef.current;
+    const rm  = repeatRef.current;
+    const sh  = shuffleRef.current;
+    const sho = shuffledRef.current;
+    if (!s.length) return;
+
+    if (rm === 'one') {
+      if (playerType.current === 'youtube') {
+        try { ytRef.current?.seekTo(0, true); ytRef.current?.playVideo(); } catch (_) {}
+      } else {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      }
       return;
     }
 
-    const useYouTube = needsYouTubePlayer(currentSong);
-    playerTypeRef.current = useYouTube ? 'youtube' : 'audio';
+    let next;
+    if (sh && sho.length) {
+      const i = sho.indexOf(ci);
+      next = i < sho.length - 1 ? sho[i + 1] : (rm === 'all' ? sho[0] : null);
+    } else {
+      next = ci < s.length - 1 ? ci + 1 : (rm === 'all' ? 0 : null);
+    }
+    if (next === null) { setIsPlaying(false); return; }
+    setCurrentIndex(next);
+    // isPlaying stays true — song-change effect handles playback
+  }, []); // empty — reads refs
 
-    if (useYouTube) {
-      const videoId = currentSong.youtubeId ||
-                      extractYouTubeId(currentSong.streamUrl) ||
-                      extractYouTubeId(currentSong.audio);
+  const advancePrev = useCallback(() => {
+    if (!mountedRef.current) return;
+    // Guard against rapid successive calls
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setTimeout(() => { advancingRef.current = false; }, 100);
 
-      if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
-        console.error('Invalid or missing YouTube video ID:', videoId, 'for song:', currentSong?.name);
-        setIsPlaying(false);
+    const s   = songsRef.current;
+    const ci  = idxRef.current;
+    const rm  = repeatRef.current;
+    const sh  = shuffleRef.current;
+    const sho = shuffledRef.current;
+    if (!s.length) return;
+
+    if (playerType.current === 'audio' && audioRef.current.currentTime > 3) {
+      audioRef.current.currentTime = 0; return;
+    }
+    if (playerType.current === 'youtube') {
+      try { if ((ytRef.current?.getCurrentTime?.() || 0) > 3) { ytRef.current.seekTo(0, true); return; } } catch (_) {}
+    }
+
+    let prev;
+    if (sh && sho.length) {
+      const i = sho.indexOf(ci);
+      prev = i > 0 ? sho[i - 1] : (rm === 'all' ? sho[sho.length - 1] : 0);
+    } else {
+      prev = ci > 0 ? ci - 1 : (rm === 'all' ? s.length - 1 : 0);
+    }
+    setCurrentIndex(prev);
+  }, []); // empty — reads refs
+
+  /* ── Single YT player — created once on mount ───────────────────────
+     Song changes use loadVideoById() — never destroys the player.
+     This is the only reliable approach for iOS Safari: the player must
+     exist before a user gesture to preserve the autoplay permission.
+  ────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!document.getElementById('yt-api-script')) {
+      const s = document.createElement('script');
+      s.id  = 'yt-api-script';
+      s.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+    }
+
+    // Tiny off-screen div. NOT display:none — iOS won't play audio from hidden elements.
+    if (!document.getElementById('yt-anchor')) {
+      const d = document.createElement('div');
+      d.id = 'yt-anchor';
+      d.style.cssText =
+        'position:fixed;top:-4px;left:-4px;width:2px;height:2px;' +
+        'opacity:0.01;pointer-events:none;z-index:-1;';
+      document.body.appendChild(d);
+    }
+
+    const build = () => {
+      if (ytReadyRef.current || !window.YT?.Player) return;
+      ytRef.current = new window.YT.Player('yt-anchor', {
+        width: '2', height: '2',
+        playerVars: {
+          autoplay: 0, controls: 0, disablekb: 1, fs: 0,
+          iv_load_policy: 3, modestbranding: 1, rel: 0,
+          playsinline: 1, origin: window.location.origin,
+        },
+        events: {
+          onReady: () => {
+            ytReadyRef.current = true;
+            startTimer();
+          },
+          onStateChange: (e) => {
+            if (!mountedRef.current) return;
+            const S = window.YT?.PlayerState;
+            if (!S) return;
+            if (e.data === S.PLAYING) {
+              try { setDuration(e.target.getDuration() || 0); } catch (_) {}
+              // Video is genuinely playing — clear the load guard
+              loadingRef.current = false;
+              setIsPlaying(true);
+            } else if (e.data === S.PAUSED) {
+              // Ignore PAUSED while loading — loadVideoById fires PAUSED as
+              // a buffering artifact before the video actually starts.
+              if (!loadingRef.current) setIsPlaying(false);
+            } else if (e.data === S.ENDED) {
+              if (!loadingRef.current) advanceNext();
+            }
+          },
+          onError: () => {
+            loadingRef.current = false;
+            if (mountedRef.current) advanceNext();
+          },
+        },
+      });
+    };
+
+    if (window.YT?.Player) build();
+    else {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); build(); };
+    }
+
+    return stopTimer;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Song-change effect ──────────────────────────────────────────────
+     Deps: [currentSong?.id, currentIndex]
+     isPlaying is NOT here — every play/pause toggle must not re-run this.
+     songs is NOT here — we only care that the song identity changed.
+  ────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!currentSong) {
+      loadingRef.current = false;
+      stopTimer();
+      try { ytRef.current?.pauseVideo(); } catch (_) {}
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      setIsPlaying(false);
+      return;
+    }
+
+    // Raise guard FIRST — before any async work or src changes
+    loadingRef.current = true;
+
+    if (needsYT(currentSong)) {
+      playerType.current = 'youtube';
+
+      const videoId = getVideoId(currentSong);
+      if (!videoId) {
+        console.error('[Player] bad videoId for:', currentSong.name);
+        loadingRef.current = false;
+        advanceNext();
         return;
       }
 
-      cleanupYouTube();
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      setCurrentTime(0);
+      setDuration(0);
 
-      let container = document.getElementById('youtube-player-container');
-      if (!container) {
-        container = document.createElement('div');
-        container.id = 'youtube-player-container';
-        container.style.display = 'none';
-        document.body.appendChild(container);
+      const load = () => {
+        if (!ytReadyRef.current || !ytRef.current) { setTimeout(load, 80); return; }
+        try {
+          // loadVideoById auto-plays AND keeps the iOS gesture chain alive.
+          // loadingRef stays TRUE until onStateChange PLAYING fires above.
+          ytRef.current.loadVideoById({ videoId, startSeconds: 0 });
+        } catch (err) {
+          console.error('[YT] loadVideoById:', err);
+          loadingRef.current = false;
+          advanceNext();
+        }
+      };
+      load();
+
+    } else {
+      playerType.current = 'audio';
+      stopTimer();
+      try { ytRef.current?.pauseVideo(); } catch (_) {}
+
+      const src =
+        currentSong.audio || currentSong.url ||
+        currentSong.audioUrl || currentSong.src;
+
+      if (!src) {
+        console.error('[Player] no src for:', currentSong.name);
+        loadingRef.current = false;
+        return;
       }
 
-      const initPlayer = () => {
-        if (!window.YT || !window.YT.Player) { setTimeout(initPlayer, 100); return; }
-        try {
-          youtubePlayerRef.current = new window.YT.Player('youtube-player-container', {
-            height: '0', width: '0',
-            videoId,
-            playerVars: {
-              autoplay: isPlaying ? 1 : 0,
-              controls: 0, disablekb: 1, fs: 0,
-              iv_load_policy: 3, modestbranding: 1, rel: 0,
-            },
-            events: {
-              onReady: (event) => {
-                setDuration(event.target.getDuration());
-                // Apply the resumed scrub position exactly once, on the
-                // very first song this session — never on later songs.
-                if (!hasAppliedResumeRef.current && pendingResumeTimeRef.current) {
-                  const t = pendingResumeTimeRef.current;
-                  hasAppliedResumeRef.current = true;
-                  pendingResumeTimeRef.current = null;
-                  event.target.seekTo(t, true);
-                  setCurrentTime(t);
-                }
-                if (isPlaying) event.target.playVideo();
-              },
-              onStateChange: (event) => {
-                if (event.data === window.YT.PlayerState.ENDED) {
-                  if (currentIndex < songs.length - 1) setCurrentIndex(prev => prev + 1);
-                  else setIsPlaying(false);
-                } else if (event.data === window.YT.PlayerState.PLAYING) {
-                  setIsPlaying(true);
-                } else if (event.data === window.YT.PlayerState.PAUSED) {
-                  setIsPlaying(false);
-                }
-              },
-              onError: (event) => {
-                console.error('YouTube player error:', event.data);
-                if (songs.length > 0 && currentIndex < songs.length - 1) setCurrentIndex(prev => prev + 1);
-                else setIsPlaying(false);
-              },
-            },
-          });
-        } catch (ytErr) {
-          console.error('YT.Player init failed:', ytErr);
-          setIsPlaying(false);
-          return;
-        }
-
-        if (timeUpdateInterval.current) clearInterval(timeUpdateInterval.current);
-        timeUpdateInterval.current = setInterval(() => {
-          if (youtubePlayerRef.current?.getCurrentTime) {
-            const time = youtubePlayerRef.current.getCurrentTime();
-            if (!isNaN(time)) setCurrentTime(time);
-          }
-        }, 1000);
-      };
-
-      initPlayer();
-    } else {
-      cleanupYouTube();
-      const src = currentSong.audio || currentSong.url || currentSong.audioUrl || currentSong.src;
-      if (!src) { console.error('No audio source for song:', currentSong); return; }
+      // loadingRef is already TRUE here, so the 'error' event that browsers
+      // fire when .src is reassigned on an element with a blob URL is silenced.
+      audioRef.current.pause();
       audioRef.current.src = src;
       audioRef.current.load();
 
-      // Apply the resumed scrub position exactly once, on the very first
-      // song this session — never on later songs.
-      if (!hasAppliedResumeRef.current && pendingResumeTimeRef.current) {
-        const t = pendingResumeTimeRef.current;
-        hasAppliedResumeRef.current = true;
-        pendingResumeTimeRef.current = null;
-        const applyOnce = () => {
-          audioRef.current.currentTime = t;
-          setCurrentTime(t);
-          audioRef.current.removeEventListener('loadedmetadata', applyOnce);
-        };
-        audioRef.current.addEventListener('loadedmetadata', applyOnce);
-      }
-
-      if (isPlaying) {
-        audioRef.current.play().catch(err => {
-          console.error('Audio play error:', err);
-          setIsPlaying(false);
+      audioRef.current
+        .play()
+        .then(() => {
+          loadingRef.current = false;
+          if (mountedRef.current) setIsPlaying(true);
+        })
+        .catch(() => {
+          // Autoplay blocked — user must tap play manually
+          loadingRef.current = false;
+          if (mountedRef.current) setIsPlaying(false);
         });
-      }
     }
-  }, [currentSong, currentIndex, songs.length, needsYouTubePlayer, extractYouTubeId, cleanupYouTube, isPlaying]);
+  }, [currentSong?.id, currentIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Play/pause effect
+  /* ── Play / pause effect ─────────────────────────────────────────────
+     Responds only to isPlaying flipping. Never loads a song.
+     Skips while loadingRef is true — the song-change effect handles
+     initial playback as part of the load sequence.
+  ────────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!currentSong) return;
-    if (playerTypeRef.current === 'youtube') {
-      if (youtubePlayerRef.current?.playVideo) {
-        if (isPlaying) youtubePlayerRef.current.playVideo();
-        else           youtubePlayerRef.current.pauseVideo();
-      }
+    if (!currentSong || loadingRef.current) return;
+    if (playerType.current === 'youtube') {
+      try {
+        if (isPlaying) ytRef.current?.playVideo();
+        else           ytRef.current?.pauseVideo();
+      } catch (_) {}
     } else {
-      if (audioRef.current) {
-        if (isPlaying) audioRef.current.play().catch(err => { console.error('Play error:', err); setIsPlaying(false); });
-        else           audioRef.current.pause();
-      }
+      if (isPlaying) audioRef.current.play().catch(() => setIsPlaying(false));
+      else           audioRef.current.pause();
     }
-  }, [isPlaying, currentSong]);
+  }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Record play to Supabase listening_history ──────────────────────────────
-  const { user } = useAuth();
+  /* ── Volume / mute ──────────────────────────────────────────────── */
   useEffect(() => {
-    if (!currentSong?.youtubeId || !user) return;
-    supabase.from('listening_history').insert({
-      user_id:    user.id,
-      youtube_id: currentSong.youtubeId,
-      name:       currentSong.name   || null,
-      artist:     currentSong.artist || null,
-      genre:      currentSong.genre  || null,
-    }).then(({ error }) => {
-      if (error) console.warn('[history] insert failed:', error.message);
-    });
-  }, [currentSong?.id]); // fires once per song change, not on play/pause
-  // ──────────────────────────────────────────────────────────────────────────
-
-  // Volume effect
-  useEffect(() => {
-    if (playerTypeRef.current === 'youtube') {
-      if (youtubePlayerRef.current?.setVolume) youtubePlayerRef.current.setVolume(volume * 100);
-    } else {
-      if (audioRef.current) audioRef.current.volume = volume;
-    }
-  }, [volume]);
+    const v = isMuted ? 0 : volume;
+    audioRef.current.volume = v;
+    try { ytRef.current?.setVolume(v * 100); } catch (_) {}
+  }, [volume, isMuted]);
 
   const toggleMute = useCallback(() => {
-    if (playerTypeRef.current === 'youtube') {
-      if (youtubePlayerRef.current?.isMuted) {
-        const muted = youtubePlayerRef.current.isMuted();
-        youtubePlayerRef.current[muted ? 'unMute' : 'mute']();
-        setIsMuted(!muted);
-      }
-    } else {
-      if (audioRef.current) {
-        audioRef.current.muted = !audioRef.current.muted;
-        setIsMuted(audioRef.current.muted);
-      }
-    }
+    setIsMuted(m => {
+      const next = !m;
+      audioRef.current.muted = next;
+      try { next ? ytRef.current?.mute() : ytRef.current?.unMute(); } catch (_) {}
+      return next;
+    });
   }, []);
 
-  // Shuffle order
+  /* ── Audio element events ────────────────────────────────────────────
+     Attached ONCE (empty deps). Handlers read loadingRef so spurious
+     'error' events during src reassignment don't advance the song.
+  ────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const a = audioRef.current;
+    const onTime  = () => setCurrentTime(a.currentTime);
+    const onDur   = () => { if (a.duration > 0) setDuration(a.duration); };
+    const onEnded = () => { if (!loadingRef.current) advanceNext(); };
+    const onError = () => { if (!loadingRef.current) advanceNext(); };
+    a.addEventListener('timeupdate',     onTime);
+    a.addEventListener('durationchange', onDur);
+    a.addEventListener('ended',          onEnded);
+    a.addEventListener('error',          onError);
+    return () => {
+      a.removeEventListener('timeupdate',     onTime);
+      a.removeEventListener('durationchange', onDur);
+      a.removeEventListener('ended',          onEnded);
+      a.removeEventListener('error',          onError);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Supabase history ───────────────────────────────────────────── */
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!currentSong?.youtubeId || !user?.id) return;
+    supabase.from('listening_history').insert({
+      user_id: user.id, youtube_id: currentSong.youtubeId,
+      name: currentSong.name || null, artist: currentSong.artist || null,
+      genre: currentSong.genre || null,
+    }).then(({ error }) => { if (error) console.warn('[history]', error.message); });
+  }, [currentSong?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Shuffle ────────────────────────────────────────────────────── */
   useEffect(() => {
     if (shuffle && songs.length > 1) {
-      const indices = songs.map((_, i) => i);
-      for (let i = indices.length - 1; i > 0; i--) {
+      const idx = songs.map((_, i) => i);
+      for (let i = idx.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [indices[i], indices[j]] = [indices[j], indices[i]];
+        [idx[i], idx[j]] = [idx[j], idx[i]];
       }
-      const currentIdx = indices.indexOf(currentIndex);
-      if (currentIdx > 0) [indices[0], indices[currentIdx]] = [indices[currentIdx], indices[0]];
-      setShuffledOrder(indices);
+      const ci = idx.indexOf(currentIndex);
+      if (ci > 0) [idx[0], idx[ci]] = [idx[ci], idx[0]];
+      setShuffledOrder(idx);
     } else {
       setShuffledOrder([]);
     }
-  }, [shuffle, songs, currentIndex]);
+  }, [shuffle, songs.length, currentIndex]);
 
-  const playNext = useCallback(() => {
-    if (!songs.length) return;
-    if (repeatMode === 'one') {
-      if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(console.error); }
-      return;
-    }
-    let nextIndex;
-    if (shuffle && shuffledOrder.length) {
-      const idx = shuffledOrder.indexOf(currentIndex);
-      if (idx < shuffledOrder.length - 1) nextIndex = shuffledOrder[idx + 1];
-      else if (repeatMode === 'all') nextIndex = shuffledOrder[0];
-      else { setIsPlaying(false); return; }
+  /* ── Seek ───────────────────────────────────────────────────────── */
+  const seekTo = useCallback((t) => {
+    if (playerType.current === 'youtube') {
+      try { ytRef.current?.seekTo(t, true); } catch (_) {}
     } else {
-      if (currentIndex < songs.length - 1) nextIndex = currentIndex + 1;
-      else if (repeatMode === 'all') nextIndex = 0;
-      else { setIsPlaying(false); return; }
+      audioRef.current.currentTime = t;
     }
-    setCurrentIndex(nextIndex);
-  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode]);
-
-  const playPrev = useCallback(() => {
-    if (!songs.length) return;
-    if (audioRef.current && audioRef.current.currentTime > 3) {
-      audioRef.current.currentTime = 0;
-      return;
-    }
-    let prevIndex;
-    if (shuffle && shuffledOrder.length) {
-      const idx = shuffledOrder.indexOf(currentIndex);
-      if (idx > 0) prevIndex = shuffledOrder[idx - 1];
-      else if (repeatMode === 'all') prevIndex = shuffledOrder[shuffledOrder.length - 1];
-      else prevIndex = 0;
-    } else {
-      if (currentIndex > 0) prevIndex = currentIndex - 1;
-      else if (repeatMode === 'all') prevIndex = songs.length - 1;
-      else prevIndex = 0;
-    }
-    setCurrentIndex(prevIndex);
-  }, [songs, currentIndex, shuffle, shuffledOrder, repeatMode]);
-
-  const toggleShuffle     = useCallback(() => setShuffle(prev => !prev), []);
-  const toggleRepeatMode  = useCallback(() => {
-    setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
+    setCurrentTime(t);
   }, []);
 
-  // seekTo — works for both audio and YouTube player
-  // Exported in context value so LyricsPanel can seek on line click
-  const seekTo = useCallback((time) => {
-    if (playerTypeRef.current === 'youtube') {
-      if (youtubePlayerRef.current?.seekTo) {
-        youtubePlayerRef.current.seekTo(time, true);
-        setCurrentTime(time);
-      }
+  /* ── setPlayerSongs ──────────────────────────────────────────────────
+     ALWAYS pass startIndex here — never call setCurrentIndex separately
+     after this. Calling both separately causes a double state update
+     that can skip the song-change effect on browsers that batch updates.
+  ────────────────────────────────────────────────────────────────── */
+  const setPlayerSongs = useCallback((updaterOrArray, startIndex = 0) => {
+    if (typeof updaterOrArray === 'function') {
+      // Functional form used by radio — appends songs, doesn't change index
+      setSongs(updaterOrArray);
     } else {
-      if (audioRef.current) {
-        audioRef.current.currentTime = time;
-        setCurrentTime(time);
-      }
+      setSongs(updaterOrArray);
+      setCurrentIndex(startIndex);
     }
   }, []);
 
-  const setPlayerSongs = useCallback((newSongs, startIndex = 0) => {
-    setSongs(newSongs);
-    setCurrentIndex(startIndex);
-  }, []);
+  /* ── Misc toggles ───────────────────────────────────────────────── */
+  const toggleBackgroundDetail = useCallback(() => setShowBackgroundDetail(p => !p), []);
+  const toggleShuffle          = useCallback(() => setShuffle(p => !p), []);
+  const toggleRepeatMode       = useCallback(() =>
+    setRepeatMode(p => p === 'off' ? 'all' : p === 'all' ? 'one' : 'off'), []);
 
-  // Audio element event listeners
-  useEffect(() => {
-    const audio = audioRef.current;
+  // ── Remote control — cross-device transport commands ───────────────────────
+  // Only needs currentSong/isPlaying/volume to broadcast, and the setters/
+  // advanceNext/advancePrev/seekTo already defined above to apply incoming
+  // commands. advanceNext/advancePrev are the same functions exported below
+  // as playNext/playPrev — just referenced directly here by their local names.
+  const remote = useRemoteControl(
+    user?.id,
+    { currentSong, isPlaying, volume },
+    { setIsPlaying, setVolume, seekTo, playNext: advanceNext, playPrev: advancePrev },
+  );
+  // ─────────────────────────────────────────────────────────────────────────
 
-    const handleTimeUpdate     = () => setCurrentTime(audio.currentTime);
-    const handleDurationChange = () => setDuration(audio.duration);
-    const handleEnded          = () => {
-      if (currentIndex < songs.length - 1) setCurrentIndex(prev => prev + 1);
-      else setIsPlaying(false);
-    };
-    const handleError = () => {
-      console.error('Audio error:', audio.error);
-      if (songs.length > 0 && currentIndex < songs.length - 1) setCurrentIndex(prev => prev + 1);
-      else setIsPlaying(false);
-    };
-
-    audio.addEventListener('timeupdate',     handleTimeUpdate);
-    audio.addEventListener('durationchange', handleDurationChange);
-    audio.addEventListener('ended',          handleEnded);
-    audio.addEventListener('error',          handleError);
-
-    return () => {
-      audio.removeEventListener('timeupdate',     handleTimeUpdate);
-      audio.removeEventListener('durationchange', handleDurationChange);
-      audio.removeEventListener('ended',          handleEnded);
-      audio.removeEventListener('error',          handleError);
-    };
-  }, [songs.length, currentIndex]);
-
-  /* ─────────────────────────────────────────────────────────────────────
-     SESSION PERSISTENCE
-     ─────────────────────────────────────────────────────────────────────
-     Builds a snapshot of {songs, currentIndex, currentTime, volume,
-     shuffle, repeatMode, ts} and writes it to localStorage. Pulls the
-     live playback position directly from the active player (audio
-     element or YT player) rather than the `currentTime` state, since
-     that state can lag slightly behind (YT position is only polled
-     once a second).
-
-     `currentTime` itself is mirrored into a ref rather than read as a
-     direct dependency of buildSessionSnapshot/persistSession — it's only
-     used as a last-resort fallback below. If it were a real dependency,
-     buildSessionSnapshot (and therefore persistSession) would get a new
-     identity every single second while a song plays, which would tear
-     down and rebuild the "throttled save every 8s" interval effect below
-     on every tick — meaning that interval would never actually survive
-     long enough to fire.
-  ───────────────────────────────────────────────────────────────────── */
-  const currentTimeRef = useRef(0);
-  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
-
-  const buildSessionSnapshot = useCallback(() => {
-    if (!songs.length) return null;
-    const livePosition = playerTypeRef.current === 'youtube'
-      ? (youtubePlayerRef.current?.getCurrentTime?.() ?? currentTimeRef.current)
-      : (audioRef.current?.currentTime ?? currentTimeRef.current);
-    return {
-      songs,
-      currentIndex,
-      currentTime: Number.isFinite(livePosition) ? livePosition : 0,
-      volume,
-      shuffle,
-      repeatMode,
-      ts: Date.now(),
-    };
-  }, [songs, currentIndex, volume, shuffle, repeatMode]);
-
-  const persistSession = useCallback(() => {
-    const snap = buildSessionSnapshot();
-    if (snap) saveSession(snap);
-  }, [buildSessionSnapshot]);
-
-  // Save immediately whenever the current song changes (new song picked,
-  // skip forward/back, queue replaced, etc).
-  useEffect(() => {
-    if (!currentSong) return;
-    persistSession();
-  }, [currentSong?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Throttled save while actively playing — captures scrub progress
-  // without hammering localStorage on every timeupdate tick.
-  useEffect(() => {
-    if (!isPlaying) return;
-    const id = setInterval(persistSession, SESSION_SAVE_INTERVAL);
-    return () => clearInterval(id);
-  }, [isPlaying, persistSession]);
-
-  // Save on pause (catches "listened partway, then paused and walked away").
-  useEffect(() => {
-    if (!isPlaying) persistSession();
-  }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Save on tab hide / app backgrounding / actual close — the last-resort
-  // catches for closing the tab without pausing first.
-  useEffect(() => {
-    const handler = () => persistSession();
-    document.addEventListener('visibilitychange', handler);
-    window.addEventListener('beforeunload', handler);
-    return () => {
-      document.removeEventListener('visibilitychange', handler);
-      window.removeEventListener('beforeunload', handler);
-    };
-  }, [persistSession]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cleanupYouTube();
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
-    };
-  }, [cleanupYouTube]);
-
+  /* ── Context value ──────────────────────────────────────────────── */
   const value = {
-    songs,
-    setPlayerSongs,
-    currentIndex,
-    setCurrentIndex,
-    isPlaying,
-    setIsPlaying,
-    volume,
-    setVolume,
-    currentTime,
-    setCurrentTime,
-    duration,
-    setDuration,
+    songs, setPlayerSongs,
+    currentIndex, setCurrentIndex,
+    isPlaying, setIsPlaying,
+    volume, setVolume,
+    currentTime, setCurrentTime,
+    duration, setDuration,
     audioRef,
     currentSong,
-    downloadedSongs,
-    setDownloadedSongs,
-    seekTo,                    // ← used by LyricsPanel for click-to-seek
-    playerType: playerTypeRef.current,
-    playNext,
-    playPrev,
-    shuffle,
-    toggleShuffle,
-    repeatMode,
-    toggleRepeatMode,
-    toggleMute,
-    isMuted,
-    showBackgroundDetail,
-    setShowBackgroundDetail,
-    toggleBackgroundDetail,
-    hasResumedSession,          // ← lets HomeOnline know whether to show the nudge banner
+    downloadedSongs, setDownloadedSongs,
+    seekTo,
+    playerType: playerType.current,
+    playNext:  advanceNext,
+    playPrev:  advancePrev,
+    shuffle, toggleShuffle,
+    repeatMode, toggleRepeatMode,
+    toggleMute, isMuted,
+    showBackgroundDetail, setShowBackgroundDetail, toggleBackgroundDetail,
+    // Remote control
+    remoteControlEnabled: remote.enabled,
+    devices: remote.devices,
+    controlDevice: remote.controlDevice,
+    thisDeviceId: remote.deviceId,
+    thisDeviceLabel: remote.deviceLabel,
   };
 
   return (
@@ -536,7 +480,7 @@ export function PlayerProvider({ children }) {
 }
 
 export function usePlayer() {
-  const context = useContext(PlayerContext);
-  if (!context) throw new Error('usePlayer must be used within PlayerProvider');
-  return context;
+  const ctx = useContext(PlayerContext);
+  if (!ctx) throw new Error('usePlayer must be used within PlayerProvider');
+  return ctx;
 }
